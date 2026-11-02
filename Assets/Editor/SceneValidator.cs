@@ -106,7 +106,24 @@ namespace Shooter.EditorTools
                     "HUD wave/score widgets are wired");
                 Check(hud.gameOverPanel != null && hud.gameOverScoreText != null && hud.hintText != null,
                     "HUD game-over widgets are wired");
+                Check(hud.toastText != null, "HUD toast text is wired");
             }
+
+            AmmoPickup[] pickups = Object.FindObjectsByType<AmmoPickup>(FindObjectsInactive.Exclude);
+            Check(pickups.Length >= 4, "arena contains ammo crates");
+
+            bool cratesWired = pickups.Length > 0;
+
+            foreach (AmmoPickup pickup in pickups)
+            {
+                if (pickup.weapon == null || pickup.player == null || pickup.hud == null)
+                {
+                    cratesWired = false;
+                    break;
+                }
+            }
+
+            Check(cratesWired, "every ammo crate is wired to weapon, player and HUD");
 
             if (damageFlash != null)
             {

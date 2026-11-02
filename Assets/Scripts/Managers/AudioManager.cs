@@ -20,6 +20,7 @@ namespace Shooter.Managers
         public AudioClip enemyDeath;
         public AudioClip enemyAttack;
         public AudioClip playerHurt;
+        public AudioClip ammoPickup;
         public AudioClip waveStart;
         public AudioClip waveComplete;
         public AudioClip gameOver;
@@ -60,6 +61,9 @@ namespace Shooter.Managers
 
         public void PlayPlayerHurt(Vector3 position) =>
             Play(playerHurt, position, 0.75f);
+
+        public void PlayAmmoPickup(Vector3 position) =>
+            Play(ammoPickup, position, 0.7f);
 
         public void PlayWaveStart() =>
             Play(waveStart, Vector3.zero, 0.8f);

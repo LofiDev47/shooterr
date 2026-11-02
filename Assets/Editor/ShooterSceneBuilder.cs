@@ -47,7 +47,8 @@ namespace Shooter.EditorTools
             PlayerRig rig = BuildPlayer(materials);
             List<Transform> spawnPoints = BuildSpawnPoints();
             ManagersRig managers = BuildManagers(enemyPrefab, rig, spawnPoints);
-            BuildHud(rig, managers);
+            HUDController hud = BuildHud(rig, managers);
+            BuildAmmoPickups(materials, rig, hud);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -73,6 +74,7 @@ namespace Shooter.EditorTools
             public Material Impact;
             public Material Muzzle;
             public Material Tracer;
+            public Material Ammo;
             public Material Skybox;
         }
 
@@ -91,6 +93,7 @@ namespace Shooter.EditorTools
                 Impact = GetOrCreateUnlitMaterial("Impact", new Color(0.03f, 0.03f, 0.03f)),
                 Muzzle = GetOrCreateUnlitMaterial("Muzzle", new Color(1f, 0.85f, 0.35f)),
                 Tracer = GetOrCreateUnlitMaterial("Tracer", new Color(1f, 0.92f, 0.55f)),
+                Ammo = GetOrCreateUnlitMaterial("Ammo", new Color(0.45f, 1f, 0.5f)),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -485,7 +488,7 @@ namespace Shooter.EditorTools
 
         // ---------------------------------------------------------------- HUD
 
-        private static void BuildHud(PlayerRig rig, ManagersRig managers)
+        private static HUDController BuildHud(PlayerRig rig, ManagersRig managers)
         {
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
@@ -570,6 +573,12 @@ namespace Shooter.EditorTools
             CreateCrosshairBar(crosshair, "Left", new Vector2(-9f, 0f), new Vector2(9f, 2f), crosshairColor);
             CreateCrosshairBar(crosshair, "Right", new Vector2(9f, 0f), new Vector2(9f, 2f), crosshairColor);
 
+            // Pickup toast (just above the crosshair, hidden until something happens).
+            Text toastText = CreateText(canvasObject.transform, "ToastText", string.Empty, 22,
+                new Color(0.65f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 72f), new Vector2(700f, 34f), font, FontStyle.Bold);
+            toastText.enabled = false;
+
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
                 "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   CTRL slide   ·   R reload   ·   ESC free cursor",
@@ -613,6 +622,7 @@ namespace Shooter.EditorTools
             hud.gameOverPanel = gameOverPanel.gameObject;
             hud.gameOverScoreText = gameOverScore;
             hud.hintText = hintText;
+            hud.toastText = toastText;
 
             DamageFlash flash = canvasObject.AddComponent<DamageFlash>();
             flash.playerHealth = rig.Health;
@@ -624,6 +634,52 @@ namespace Shooter.EditorTools
             _ = gameOverTitle;
             _ = gameOverHint;
             _ = healthBackground;
+
+            return hud;
+        }
+
+        // ---------------------------------------------------------------- pickups
+
+        /// <summary>
+        /// Places respawning ammo crates in open ground away from spawn points and cover,
+        /// so the run stays sustainable as waves get longer.
+        /// </summary>
+        private static void BuildAmmoPickups(ArenaMaterials materials, PlayerRig rig, HUDController hud)
+        {
+            var parent = new GameObject("Ammo Pickups");
+
+            Vector3[] positions =
+            {
+                new Vector3(0f, 0.55f, 0f),
+                new Vector3(9f, 0.55f, -12f),
+                new Vector3(-9f, 0.55f, 12f),
+                new Vector3(14f, 0.55f, 6f),
+                new Vector3(-14f, 0.55f, -6f),
+                new Vector3(0f, 0.55f, -7f),
+            };
+
+            foreach (Vector3 position in positions)
+            {
+                var crate = new GameObject("Ammo Crate");
+                crate.transform.SetParent(parent.transform, false);
+                crate.transform.position = position;
+
+                GameObject box = CreatePrimitive("Box", PrimitiveType.Cube, Vector3.zero,
+                    new Vector3(0.42f, 0.3f, 0.42f), materials.Ammo, crate.transform);
+                StripCollider(box);
+
+                GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
+                    new Vector3(0.3f, 0.3f, 0.3f), materials.Ammo, crate.transform,
+                    Quaternion.Euler(0f, 45f, 0f));
+                StripCollider(lid);
+
+                AmmoPickup pickup = crate.AddComponent<AmmoPickup>();
+                pickup.weapon = rig.Weapon;
+                pickup.player = rig.Controller;
+                pickup.hud = hud;
+            }
+
+            Debug.Log($"[Shooter] Placed {positions.Length} ammo crates.");
         }
 
         private static void CreateCrosshairBar(Transform parent, string name, Vector2 position, Vector2 size, Color color)

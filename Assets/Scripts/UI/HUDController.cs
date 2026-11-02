@@ -31,6 +31,9 @@ namespace Shooter.UI
         public Text gameOverScoreText;
         public Text hintText;
 
+        [Header("Toast (ammo pickups and similar)")]
+        public Text toastText;
+
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
 
@@ -42,6 +45,7 @@ namespace Shooter.UI
         private int lastScore = -1;
         private string lastStatus;
         private GameState lastState = (GameState)(-1);
+        private float toastUntil;
 
         private void Update()
         {
@@ -50,6 +54,41 @@ namespace Shooter.UI
             UpdateWave();
             UpdateScore();
             UpdateState();
+            UpdateToast();
+        }
+
+        /// <summary>Shows a short-lived message just above the crosshair.</summary>
+        public void ShowToast(string message)
+        {
+            toastUntil = Time.unscaledTime + 1.6f;
+
+            if (toastText != null)
+            {
+                toastText.text = message;
+            }
+        }
+
+        private void UpdateToast()
+        {
+            if (toastText == null)
+            {
+                return;
+            }
+
+            float remaining = toastUntil - Time.unscaledTime;
+            bool visible = remaining > 0f;
+
+            if (toastText.enabled != visible)
+            {
+                toastText.enabled = visible;
+            }
+
+            if (visible)
+            {
+                Color color = toastText.color;
+                color.a = Mathf.Clamp01(remaining);
+                toastText.color = color;
+            }
         }
 
         private void UpdateHealth()

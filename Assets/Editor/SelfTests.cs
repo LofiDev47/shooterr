@@ -25,6 +25,7 @@ namespace Shooter.EditorTools
             TestWeaponAmmoAndFireRate();
             TestWeaponReload();
             TestWeaponEmptyMagazine();
+            TestAmmoPickups();
             TestPlayerHealth();
             TestEnemyHealth();
 
@@ -84,6 +85,29 @@ namespace Shooter.EditorTools
             Check(!state.TryFire(0.2f), "weapon cannot fire with an empty magazine");
             Check(!state.TryStartReload(0.3f), "weapon cannot reload without reserve ammo");
             Check(state.AmmoInMagazine == 0, "magazine stays empty");
+        }
+
+        private static void TestAmmoPickups()
+        {
+            // Ammo crates add to the reserve and never push it past the cap.
+            var state = new WeaponState(30, 100, 0.1f, 1f, 300);
+            state.AddReserveAmmo(45);
+            Check(state.ReserveAmmo == 145, "ammo crate adds reserve ammo");
+
+            // Consume and reload so reserve drops, then top up again.
+            state.TryFire(0f);
+            state.TryStartReload(0.1f);
+            state.Tick(1.2f);
+            Check(state.ReserveAmmo < 145, "reloading spends reserve ammo");
+
+            state.AddReserveAmmo(500);
+            Check(state.ReserveAmmo == 300, "reserve ammo is capped at the maximum");
+
+            state.AddReserveAmmo(-20);
+            Check(state.ReserveAmmo == 300, "negative ammo is ignored");
+
+            var full = new WeaponState(30, 300, 0.1f, 1f, 300);
+            Check(full.ReserveAmmo == full.MaxReserve, "a full reserve reports as full");
         }
 
         private static void TestPlayerHealth()

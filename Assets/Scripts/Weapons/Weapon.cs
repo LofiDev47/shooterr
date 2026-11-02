@@ -65,6 +65,25 @@ namespace Shooter.Weapons
         public bool IsReloading => State != null && State.IsReloading;
         public float ReloadProgress01 => State != null ? State.ReloadProgress(Time.time) : 0f;
 
+        /// <summary>False when the reserve is already full, so pickups are not wasted.</summary>
+        public bool CanReceiveAmmo => State != null && State.ReserveAmmo < State.MaxReserve;
+
+        /// <summary>
+        /// Adds reserve ammo, e.g. from an ammo crate.
+        /// Returns how much was actually stored (zero if already full).
+        /// </summary>
+        public int AddAmmo(int amount)
+        {
+            if (State == null || amount <= 0)
+            {
+                return 0;
+            }
+
+            int before = State.ReserveAmmo;
+            State.AddReserveAmmo(amount);
+            return State.ReserveAmmo - before;
+        }
+
         private Vector3 restLocalPosition;
         private Quaternion restLocalRotation;
         private float muzzleFlashUntil;
