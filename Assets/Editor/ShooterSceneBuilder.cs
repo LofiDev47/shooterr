@@ -572,9 +572,9 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   R reload   ·   ESC free cursor",
+                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   CTRL slide   ·   R reload   ·   ESC free cursor",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1200f, 24f), font);
+                new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
             // Damage flash sits above the HUD but below the game-over screen.
             Image damageImage = CreateFullScreenImage(canvasObject.transform, "DamageFlash",

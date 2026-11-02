@@ -64,7 +64,8 @@ namespace Shooter.EditorTools
             Check(state.TryStartReload(0.2f), "reload starts with a partial magazine and reserve ammo");
             Check(!state.TryFire(0.3f), "cannot fire mid-reload");
             Check(!state.TryStartReload(0.4f), "cannot start a second reload while reloading");
-            Check(Mathf.Approximately(state.ReloadProgress(0.2f), 0f), "reload progress starts at 0");
+            // Queried at the start time (0.2) rather than 1.7, which is start + duration.
+            Check(state.ReloadProgress(0.2f) < 0.001f, "reload progress starts at 0");
             Check(state.ReloadProgress(0.95f) > 0.4f, "reload progress advances over time");
 
             Check(!state.Tick(1.0f), "reload does not finish early");

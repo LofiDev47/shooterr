@@ -5,25 +5,60 @@ namespace Shooter.Player
 {
     /// <summary>
     /// First-person controller built on <see cref="CharacterController"/>.
-    /// Handles WASD movement, sprint, jump, mouse look and camera recoil.
-    /// Input comes from the Input System package (the project is configured for it).
+    /// Handles WASD movement, sprint, jump (coyote time + input buffer + jump cut),
+    /// crouch-sliding, aim-down-sights, mouse look, recoil and camera feel (bob, FOV).
+    /// Input comes from the Input System package.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class PlayerController : MonoBehaviour
     {
-        [Header("Movement")]
-        [SerializeField] private float walkSpeed = 5f;
-        [SerializeField] private float sprintSpeed = 8.5f;
-        [SerializeField] private float groundAcceleration = 20f;
-        [SerializeField] private float airAcceleration = 6f;
-        [SerializeField] private float jumpHeight = 1.15f;
-        [SerializeField] private float gravity = -22f;
+        [Header("Speeds")]
+        [SerializeField] private float walkSpeed = 5.2f;
+        [SerializeField] private float sprintSpeed = 8.8f;
+        [Tooltip("Movement multiplier while aiming down sights.")]
+        [SerializeField] private float aimSpeedMultiplier = 0.65f;
+
+        [Header("Acceleration")]
+        [SerializeField] private float groundAcceleration = 55f;
+        [SerializeField] private float groundDeceleration = 70f;
+        [SerializeField] private float airAcceleration = 14f;
+
+        [Header("Jump")]
+        [SerializeField] private float jumpHeight = 1.2f;
+        [SerializeField] private float gravity = -24f;
         [SerializeField] private float coyoteTime = 0.12f;
+        [Tooltip("A jump pressed this long before landing still fires.")]
+        [SerializeField] private float jumpBufferTime = 0.12f;
+        [Tooltip("Vertical velocity multiplier when jump is released early.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float jumpCutMultiplier = 0.45f;
+
+        [Header("Slide")]
+        [SerializeField] private float slideSpeedMultiplier = 1.4f;
+        [SerializeField] private float slideFriction = 4.5f;
+        [SerializeField] private float slideDuration = 1.1f;
+        [SerializeField] private float slideCooldown = 0.6f;
+        [Tooltip("How quickly a slide can be steered, in degrees per second.")]
+        [SerializeField] private float slideSteerRate = 55f;
+        [SerializeField] private float slideHeight = 1.1f;
+        [SerializeField] private float standHeight = 1.8f;
 
         [Header("Mouse look")]
         [Tooltip("Degrees of rotation per pixel of mouse movement.")]
         [SerializeField] private float lookSensitivity = 0.12f;
+        [SerializeField] private float aimSensitivityMultiplier = 0.6f;
         [SerializeField] private float pitchLimit = 85f;
+
+        [Header("Field of view")]
+        [SerializeField] private float baseFov = 75f;
+        [SerializeField] private float sprintFov = 80f;
+        [SerializeField] private float aimFov = 55f;
+        [SerializeField] private float fovBlendSpeed = 10f;
+
+        [Header("Camera feel")]
+        [SerializeField] private float bobFrequency = 2.1f;
+        [SerializeField] private float bobAmplitude = 0.035f;
+        [SerializeField] private float landingDip = 0.09f;
 
         [Header("Recoil")]
         [Tooltip("Degrees per second the camera returns to its resting pitch after a shot.")]
@@ -33,11 +68,17 @@ namespace Shooter.Player
         public Transform cameraPivot;
         public Camera playerCamera;
 
-        /// <summary>When false the player cannot move, look or shoot (used on game over).</summary>
+        /// <summary>When false the player cannot move, look, aim or shoot (used on game over).</summary>
         public bool ControlsEnabled { get; set; } = true;
 
-        /// <summary>True while the player holds sprint and is moving forward.</summary>
+        /// <summary>True while sprinting at full speed on the ground.</summary>
         public bool IsSprinting { get; private set; }
+
+        /// <summary>True while the right mouse button is held and aiming is allowed.</summary>
+        public bool IsAiming { get; private set; }
+
+        /// <summary>True during a crouch-slide.</summary>
+        public bool IsSliding => isSliding;
 
         /// <summary>True when the cursor is locked and shooting is allowed.</summary>
         public bool CanFireNow =>
@@ -51,8 +92,21 @@ namespace Shooter.Player
         private float recoilPitch;
         private float recoilYaw;
         private float lastGroundedTime = -999f;
+        private float jumpBufferedUntil = -1f;
         private float suppressFireUntil;
         private bool cursorLocked;
+        private bool wasGrounded = true;
+
+        // Slide state.
+        private bool isSliding;
+        private Vector3 slideDirection;
+        private float slideSpeed;
+        private float slideEndTime;
+        private float lastSlideEndTime = -999f;
+
+        // Camera feel state.
+        private float bobTime;
+        private float landingOffset;
 
         private void Awake()
         {
@@ -77,14 +131,24 @@ namespace Shooter.Player
 
         private void Update()
         {
+            float deltaTime = Time.deltaTime;
+
             if (ControlsEnabled)
             {
                 HandleCursor();
+                ReadAim();
                 ReadLook();
-                ReadMovement();
+                ReadMovement(deltaTime);
+            }
+            else
+            {
+                IsAiming = false;
+                IsSprinting = false;
+                planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, groundDeceleration * deltaTime);
             }
 
             RecoverRecoil();
+            UpdateCameraRig(deltaTime);
         }
 
         /// <summary>Locks or releases the mouse cursor. Releasing also blocks firing briefly.</summary>
@@ -120,6 +184,17 @@ namespace Shooter.Player
             }
         }
 
+        private void ReadAim()
+        {
+            bool wantsAim = cursorLocked && Mouse.current != null && Mouse.current.rightButton.isPressed;
+            IsAiming = wantsAim && !isSliding;
+
+            if (IsAiming)
+            {
+                IsSprinting = false;
+            }
+        }
+
         private void ReadLook()
         {
             if (Mouse.current == null || !cursorLocked)
@@ -128,16 +203,19 @@ namespace Shooter.Player
             }
 
             Vector2 delta = Mouse.current.delta.ReadValue();
-            yaw += delta.x * lookSensitivity;
-            pitch = Mathf.Clamp(pitch - delta.y * lookSensitivity, -pitchLimit, pitchLimit);
+            float sensitivity = lookSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
+
+            yaw += delta.x * sensitivity;
+            pitch = Mathf.Clamp(pitch - delta.y * sensitivity, -pitchLimit, pitchLimit);
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-            ApplyCameraRotation();
         }
 
-        private void ReadMovement()
+        private void ReadMovement(float deltaTime)
         {
             Vector2 input = Vector2.zero;
+            bool sprintHeld = false;
+            bool crouchHeld = false;
 
             if (Keyboard.current != null)
             {
@@ -151,46 +229,183 @@ namespace Shooter.Player
                     input.Normalize();
                 }
 
-                IsSprinting = Keyboard.current.leftShiftKey.isPressed && input.y > 0.1f;
+                sprintHeld = Keyboard.current.leftShiftKey.isPressed;
+                crouchHeld = Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.cKey.isPressed;
 
                 if (Keyboard.current.spaceKey.wasPressedThisFrame)
                 {
-                    TryJump();
+                    jumpBufferedUntil = Time.time + jumpBufferTime;
+                }
+
+                if (Keyboard.current.spaceKey.wasReleasedThisFrame && verticalVelocity > 0f)
+                {
+                    verticalVelocity *= jumpCutMultiplier;
                 }
             }
 
-            float targetSpeed = IsSprinting ? sprintSpeed : walkSpeed;
-            Vector3 wishDirection = transform.right * input.x + transform.forward * input.y;
-            Vector3 targetVelocity = wishDirection * targetSpeed;
+            IsSprinting = sprintHeld && input.y > 0.1f && !IsAiming && !isSliding && controller.isGrounded;
 
-            float acceleration = controller.isGrounded ? groundAcceleration : airAcceleration;
-            planarVelocity = Vector3.MoveTowards(planarVelocity, targetVelocity, acceleration * Time.deltaTime);
+            TryStartSlide(input, crouchHeld);
 
+            if (isSliding)
+            {
+                UpdateSlide(input, crouchHeld, deltaTime);
+            }
+            else
+            {
+                UpdateWalk(input, deltaTime);
+            }
+
+            UpdateJump();
+
+            // Gravity and ground contact.
             if (controller.isGrounded)
             {
                 lastGroundedTime = Time.time;
 
                 if (verticalVelocity < 0f)
                 {
-                    verticalVelocity = -2f; // Small downward push keeps the controller glued to slopes.
+                    verticalVelocity = -2f; // Keeps the controller glued to slopes.
                 }
             }
 
-            verticalVelocity += gravity * Time.deltaTime;
+            float fallSpeed = verticalVelocity;
+            verticalVelocity += gravity * deltaTime;
 
             Vector3 motion = planarVelocity + Vector3.up * verticalVelocity;
-            controller.Move(motion * Time.deltaTime);
+            controller.Move(motion * deltaTime);
+
+            bool groundedNow = controller.isGrounded;
+
+            if (groundedNow && !wasGrounded && fallSpeed < -6f)
+            {
+                landingOffset = Mathf.Clamp(-fallSpeed * 0.012f, 0f, landingDip);
+            }
+
+            wasGrounded = groundedNow;
         }
 
-        private void TryJump()
+        private void UpdateWalk(Vector2 input, float deltaTime)
         {
-            if (Time.time - lastGroundedTime > coyoteTime)
+            float targetSpeed = IsAiming
+                ? walkSpeed * aimSpeedMultiplier
+                : (IsSprinting ? sprintSpeed : walkSpeed);
+
+            Vector3 wish = transform.right * input.x + transform.forward * input.y;
+
+            if (wish.sqrMagnitude > 1f)
+            {
+                wish.Normalize();
+            }
+
+            Vector3 targetVelocity = wish * targetSpeed;
+
+            float acceleration = controller.isGrounded
+                ? (targetVelocity.sqrMagnitude >= planarVelocity.sqrMagnitude
+                    ? groundAcceleration
+                    : groundDeceleration)
+                : airAcceleration;
+
+            planarVelocity = Vector3.MoveTowards(planarVelocity, targetVelocity, acceleration * deltaTime);
+        }
+
+        private void TryStartSlide(Vector2 input, bool crouchHeld)
+        {
+            if (isSliding || !crouchHeld || !controller.isGrounded || IsAiming)
             {
                 return;
             }
 
+            if (Time.time < lastSlideEndTime + slideCooldown)
+            {
+                return;
+            }
+
+            // Only slide with real momentum: either sprinting, or already moving fast.
+            bool hasMomentum = IsSprinting || planarVelocity.magnitude > walkSpeed * 1.05f;
+
+            if (!hasMomentum)
+            {
+                return;
+            }
+
+            Vector3 direction = planarVelocity.sqrMagnitude > 0.01f
+                ? planarVelocity
+                : transform.forward;
+            direction.y = 0f;
+
+            if (direction.sqrMagnitude < 0.01f)
+            {
+                direction = transform.forward;
+            }
+
+            slideDirection = direction.normalized;
+            slideSpeed = Mathf.Max(planarVelocity.magnitude, sprintSpeed) * slideSpeedMultiplier;
+            slideEndTime = Time.time + slideDuration;
+            isSliding = true;
+            IsSprinting = false;
+
+            _ = input; // Steering is read every slide frame, not just on start.
+        }
+
+        private void UpdateSlide(Vector2 input, bool crouchHeld, float deltaTime)
+        {
+            // Light steering keeps the slide committed but not rigid.
+            if (input.sqrMagnitude > 0.01f)
+            {
+                Vector3 side = transform.right * input.x;
+                Vector3 steerTarget = (slideDirection + side * 0.6f).normalized;
+                float maxRadians = slideSteerRate * Mathf.Deg2Rad * deltaTime;
+                slideDirection = Vector3.RotateTowards(slideDirection, steerTarget, maxRadians, 0f);
+            }
+
+            slideSpeed = Mathf.MoveTowards(slideSpeed, 0f, slideFriction * deltaTime);
+            planarVelocity = slideDirection * slideSpeed;
+
+            // Releasing crouch after a short commitment ends the slide early.
+            bool releasedCrouch = !crouchHeld && Time.time > slideEndTime - slideDuration + 0.15f;
+            bool spent = slideSpeed <= walkSpeed * 0.75f || Time.time >= slideEndTime;
+
+            if (releasedCrouch || spent)
+            {
+                EndSlide();
+            }
+        }
+
+        private void EndSlide()
+        {
+            if (!isSliding)
+            {
+                return;
+            }
+
+            isSliding = false;
+            lastSlideEndTime = Time.time;
+            // Momentum carries over: planarVelocity keeps the slide's direction and speed.
+        }
+
+        private void UpdateJump()
+        {
+            if (jumpBufferedUntil < 0f || Time.time > jumpBufferedUntil)
+            {
+                return;
+            }
+
+            bool canJump = Time.time - lastGroundedTime <= coyoteTime;
+
+            if (!canJump)
+            {
+                return;
+            }
+
+            if (isSliding)
+            {
+                EndSlide(); // Slide-jumping keeps the slide momentum.
+            }
+
             verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            lastGroundedTime = -999f; // Prevent a second jump from the same ground contact.
+            lastGroundedTime = -999f;
+            jumpBufferedUntil = -1f;
         }
 
         private void RecoverRecoil()
@@ -209,6 +424,64 @@ namespace Shooter.Player
 
             float totalPitch = Mathf.Clamp(pitch + recoilPitch, -pitchLimit, pitchLimit);
             cameraPivot.localRotation = Quaternion.Euler(totalPitch, recoilYaw, 0f);
+        }
+
+        private void UpdateCameraRig(float deltaTime)
+        {
+            // --- FOV: wider when sprinting or sliding, narrower when aiming.
+            if (playerCamera != null)
+            {
+                float targetFov = baseFov;
+
+                if (IsAiming)
+                {
+                    targetFov = aimFov;
+                }
+                else if (isSliding)
+                {
+                    targetFov = sprintFov + 4f;
+                }
+                else if (IsSprinting)
+                {
+                    targetFov = sprintFov;
+                }
+
+                float blend = 1f - Mathf.Exp(-fovBlendSpeed * deltaTime);
+                playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFov, blend);
+            }
+
+            // --- Crouch height while sliding.
+            float targetHeight = isSliding ? slideHeight : standHeight;
+
+            if (!Mathf.Approximately(controller.height, targetHeight))
+            {
+                controller.height = Mathf.MoveTowards(controller.height, targetHeight, 6f * deltaTime);
+                controller.center = new Vector3(0f, controller.height * 0.5f, 0f);
+            }
+
+            // --- Head bob: scaled by speed, damped while aiming or sliding.
+            float horizontalSpeed = new Vector2(planarVelocity.x, planarVelocity.z).magnitude;
+            float speedRatio = Mathf.Clamp01(horizontalSpeed / sprintSpeed);
+
+            bool bobbing = controller.isGrounded && speedRatio > 0.1f;
+            float damping = IsAiming ? 0.3f : (isSliding ? 0.4f : 1f);
+
+            if (bobbing)
+            {
+                bobTime += deltaTime * bobFrequency * Mathf.PI * 2f * Mathf.Lerp(0.75f, 1.35f, speedRatio);
+            }
+
+            float bobAmount = bobbing ? bobAmplitude * speedRatio * damping : 0f;
+            float bobX = Mathf.Cos(bobTime) * bobAmount * 0.6f;
+            float bobY = Mathf.Sin(bobTime * 2f) * bobAmount;
+
+            landingOffset = Mathf.MoveTowards(landingOffset, 0f, 1.4f * deltaTime);
+
+            if (cameraPivot != null)
+            {
+                float baseHeight = controller.height - 0.18f;
+                cameraPivot.localPosition = new Vector3(bobX, baseHeight + bobY - landingOffset, 0f);
+            }
         }
     }
 }

@@ -27,6 +27,18 @@ namespace Shooter.Weapons
         [Tooltip("Cone half-angle in degrees applied to each shot.")]
         [SerializeField] private float spreadDegrees = 0.9f;
 
+        [Header("Aim down sights")]
+        [Tooltip("Spread multiplier while aiming.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float aimSpreadMultiplier = 0.2f;
+        [Tooltip("Recoil multiplier while aiming.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float aimRecoilMultiplier = 0.45f;
+        [Tooltip("Local position the weapon moves to while aiming.")]
+        [SerializeField] private Vector3 aimLocalPosition = new Vector3(0f, -0.125f, 0.28f);
+        [SerializeField] private float hideWeaponBelowFov = 45f;
+        [SerializeField] private float sightBlendSpeed = 14f;
+
         [Header("Feel")]
         [SerializeField] private float recoilPitch = 1.1f;
         [SerializeField] private float recoilYaw = 0.25f;
@@ -58,6 +70,9 @@ namespace Shooter.Weapons
         private float muzzleFlashUntil;
         private float tracerUntil;
         private float kickback;
+        private float aimBlend; // 0 = hip fire, 1 = fully aimed.
+        private Renderer[] weaponRenderers;
+        private bool renderersVisible = true;
 
         private void Awake()
         {
@@ -74,6 +89,8 @@ namespace Shooter.Weapons
             {
                 player = GetComponentInParent<PlayerController>();
             }
+
+            weaponRenderers = GetComponentsInChildren<Renderer>(true);
 
             HideEffects();
         }
@@ -92,6 +109,7 @@ namespace Shooter.Weapons
             HandleFireInput(now);
             UpdateEffects(now);
             UpdatePose(now);
+            UpdateVisibility();
         }
 
         /// <summary>Starts a reload if possible (used by the R key and by auto-reload on empty).</summary>
@@ -154,9 +172,11 @@ namespace Shooter.Weapons
         {
             State.TryFire(now);
 
+            bool aiming = player != null && player.IsAiming;
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
             Vector3 direction = aimCamera != null ? aimCamera.transform.forward : transform.forward;
-            direction = ApplySpread(direction, spreadDegrees);
+            float currentSpread = spreadDegrees * (aiming ? aimSpreadMultiplier : 1f);
+            direction = ApplySpread(direction, currentSpread);
 
             Vector3 endPoint = origin + direction * range;
 
@@ -256,8 +276,9 @@ namespace Shooter.Weapons
 
             if (player != null)
             {
-                float yawKick = Random.Range(-recoilYaw, recoilYaw);
-                player.AddRecoil(recoilPitch, yawKick);
+                float multiplier = player.IsAiming ? aimRecoilMultiplier : 1f;
+                float yawKick = Random.Range(-recoilYaw, recoilYaw) * multiplier;
+                player.AddRecoil(recoilPitch * multiplier, yawKick);
             }
         }
 
@@ -287,7 +308,16 @@ namespace Shooter.Weapons
 
         private void UpdatePose(float now)
         {
-            // Simple reload dip + per-shot kickback, both applied to the weapon model only.
+            // Blend between hip-fire and aim-down-sights positions.
+            bool wantsAim = player != null && player.IsAiming;
+            float aimTarget = wantsAim ? 1f : 0f;
+            aimBlend = Mathf.MoveTowards(aimBlend, aimTarget, sightBlendSpeed * Time.deltaTime);
+            float eased = Mathf.SmoothStep(0f, 1f, aimBlend);
+
+            Vector3 hipPosition = Vector3.Lerp(restLocalPosition, aimLocalPosition, eased);
+            Quaternion hipRotation = Quaternion.Slerp(restLocalRotation, Quaternion.identity, eased);
+
+            // Simple reload dip + per-shot kickback, adapted so aiming still reads.
             float reloadDip = 0f;
             float reloadTilt = 0f;
 
@@ -301,12 +331,41 @@ namespace Shooter.Weapons
 
             kickback = Mathf.MoveTowards(kickback, 0f, 0.6f * Time.deltaTime);
 
-            Vector3 targetPosition = restLocalPosition + new Vector3(0f, reloadDip, -kickback);
-            Quaternion targetRotation = restLocalRotation * Quaternion.Euler(-kickback * 180f, 0f, reloadTilt);
+            Vector3 targetPosition = hipPosition + new Vector3(0f, reloadDip, -kickback * Mathf.Lerp(1f, 0.45f, eased));
+            Quaternion targetRotation = hipRotation * Quaternion.Euler(-kickback * 180f * Mathf.Lerp(1f, 0.4f, eased), 0f, reloadTilt);
 
             float blend = 1f - Mathf.Exp(-18f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);
             transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, blend);
+        }
+
+        /// <summary>
+        /// Hides the weapon model once the FOV is narrow enough that the gun would
+        /// block the view through the sights. Only toggles renderers on state change.
+        /// </summary>
+        private void UpdateVisibility()
+        {
+            if (aimCamera == null || weaponRenderers == null)
+            {
+                return;
+            }
+
+            bool shouldShow = aimCamera.fieldOfView > hideWeaponBelowFov;
+
+            if (shouldShow == renderersVisible)
+            {
+                return;
+            }
+
+            renderersVisible = shouldShow;
+
+            foreach (Renderer renderer in weaponRenderers)
+            {
+                if (renderer != null)
+                {
+                    renderer.enabled = shouldShow;
+                }
+            }
         }
 
         private void HideEffects()

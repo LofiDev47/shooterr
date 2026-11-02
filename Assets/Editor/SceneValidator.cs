@@ -34,14 +34,14 @@ namespace Shooter.EditorTools
 
             Scene scene = EditorSceneManager.OpenScene(ShooterSceneBuilder.ScenePath, OpenSceneMode.Single);
 
-            GameManager gameManager = Object.FindFirstObjectByType<GameManager>();
-            WaveSpawner waveSpawner = Object.FindFirstObjectByType<WaveSpawner>();
-            PlayerController player = Object.FindFirstObjectByType<PlayerController>();
-            PlayerHealth playerHealth = Object.FindFirstObjectByType<PlayerHealth>();
-            Weapon weapon = Object.FindFirstObjectByType<Weapon>();
-            HUDController hud = Object.FindFirstObjectByType<HUDController>();
-            DamageFlash damageFlash = Object.FindFirstObjectByType<DamageFlash>();
-            Camera camera = Object.FindFirstObjectByType<Camera>();
+            GameManager gameManager = Object.FindAnyObjectByType<GameManager>();
+            WaveSpawner waveSpawner = Object.FindAnyObjectByType<WaveSpawner>();
+            PlayerController player = Object.FindAnyObjectByType<PlayerController>();
+            PlayerHealth playerHealth = Object.FindAnyObjectByType<PlayerHealth>();
+            Weapon weapon = Object.FindAnyObjectByType<Weapon>();
+            HUDController hud = Object.FindAnyObjectByType<HUDController>();
+            DamageFlash damageFlash = Object.FindAnyObjectByType<DamageFlash>();
+            Camera camera = Object.FindAnyObjectByType<Camera>();
 
             Check(scene.IsValid(), "arena scene opens");
             Check(gameManager != null, "scene contains a GameManager");
@@ -74,6 +74,8 @@ namespace Shooter.EditorTools
                 Check(player.gameObject.layer == 2, "player is on the Ignore Raycast layer");
                 Check(player.cameraPivot != null, "player camera pivot is wired");
                 Check(player.playerCamera != null, "player camera is wired");
+                Check(!player.IsSliding, "player starts not sliding");
+                Check(!player.IsAiming, "player starts not aiming");
             }
 
             if (camera != null)
