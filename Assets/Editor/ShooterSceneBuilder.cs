@@ -28,7 +28,6 @@ namespace Shooter.EditorTools
 
         private const float ArenaHalfSize = 22f;
         private const float WallHeight = 6f;
-        private const float SpawnRadius = 16.5f;
 
         [MenuItem("Shooter/Rebuild Arena Scene")]
         public static void Build()
@@ -72,6 +71,7 @@ namespace Shooter.EditorTools
         private sealed class ArenaMaterials
         {
             public Material Floor;
+            public Material Pad;
             public Material Wall;
             public Material Cover;
             public Material CoverAlt;
@@ -95,6 +95,7 @@ namespace Shooter.EditorTools
             return new ArenaMaterials
             {
                 Floor = GetOrCreateLitMaterial("Floor", new Color(0.17f, 0.18f, 0.21f), 0.15f, 0f),
+                Pad = GetOrCreateLitMaterial("Pad", new Color(0.21f, 0.24f, 0.29f), 0.35f, 0.1f),
                 Wall = GetOrCreateLitMaterial("Wall", new Color(0.30f, 0.33f, 0.39f), 0.2f, 0f),
                 Cover = GetOrCreateLitMaterial("Cover", new Color(0.48f, 0.31f, 0.16f), 0.25f, 0f),
                 CoverAlt = GetOrCreateLitMaterial("CoverAlt", new Color(0.20f, 0.36f, 0.28f), 0.25f, 0f),
@@ -262,59 +263,8 @@ namespace Shooter.EditorTools
             CreatePrimitive("Wall West", PrimitiveType.Cube, new Vector3(-ArenaHalfSize + 0.3f, WallHeight * 0.5f, 0f),
                 new Vector3(0.6f, WallHeight, ArenaHalfSize * 2f), materials.Wall, arena.transform);
 
-            // Cover layout is fixed so every rebuild produces the same arena.
-            Vector3[] coverPositions =
-            {
-                new Vector3(6f, 0.6f, -4f),
-                new Vector3(-7f, 0.6f, 3f),
-                new Vector3(0f, 0.75f, 7f),
-                new Vector3(9f, 0.5f, 7f),
-                new Vector3(-9f, 0.5f, -6f),
-                new Vector3(4f, 0.4f, 12f),
-                new Vector3(-5f, 0.4f, 13f),
-                new Vector3(12f, 0.5f, -9f),
-                new Vector3(-13f, 0.5f, -10f),
-            };
-
-            Vector3[] coverScales =
-            {
-                new Vector3(2f, 1.2f, 2f),
-                new Vector3(2.4f, 1.2f, 2.4f),
-                new Vector3(3f, 1.5f, 1.2f),
-                new Vector3(4f, 1f, 0.6f),
-                new Vector3(4f, 1f, 0.6f),
-                new Vector3(1.5f, 0.8f, 1.5f),
-                new Vector3(1.5f, 0.8f, 1.5f),
-                new Vector3(2f, 1f, 2f),
-                new Vector3(2f, 1f, 2f),
-            };
-
-            float[] coverAngles = { 0f, 20f, 0f, 20f, -15f, 45f, -45f, 0f, 30f };
-
-            for (int i = 0; i < coverPositions.Length; i++)
-            {
-                Material material = i % 3 == 1 ? materials.CoverAlt : materials.Cover;
-                CreatePrimitive($"Cover {i + 1:00}", PrimitiveType.Cube, coverPositions[i], coverScales[i], material,
-                    arena.transform, Quaternion.Euler(0f, coverAngles[i], 0f));
-            }
-
-            // Corner pillars give the arena a readable silhouette.
-            Vector3[] pillarPositions =
-            {
-                new Vector3(13f, 2f, 13f),
-                new Vector3(-13f, 2f, 13f),
-                new Vector3(13f, 2f, -13f),
-                new Vector3(-13f, 2f, -13f),
-            };
-
-            foreach (Vector3 position in pillarPositions)
-            {
-                CreatePrimitive("Pillar", PrimitiveType.Cube, position, new Vector3(1.2f, 4f, 1.2f),
-                    materials.Wall, arena.transform);
-            }
-
-            // Emissive trim: a strip along each wall base and a cap on every pillar.
-            // Paired with the bloom in BuildPostProcessing these glow.
+            // Emissive trim along the wall base: with the bloom in BuildPostProcessing
+            // these glow and give the arena a clear boundary.
             CreatePrimitive("Trim North", PrimitiveType.Cube, new Vector3(0f, 0.28f, ArenaHalfSize - 0.68f),
                 new Vector3(ArenaHalfSize * 2f - 2f, 0.12f, 0.06f), materials.Accent, arena.transform);
             CreatePrimitive("Trim South", PrimitiveType.Cube, new Vector3(0f, 0.28f, -ArenaHalfSize + 0.68f),
@@ -324,41 +274,247 @@ namespace Shooter.EditorTools
             CreatePrimitive("Trim West", PrimitiveType.Cube, new Vector3(-ArenaHalfSize + 0.68f, 0.28f, 0f),
                 new Vector3(0.06f, 0.12f, ArenaHalfSize * 2f - 2f), materials.Accent, arena.transform);
 
-            foreach (Vector3 pillar in pillarPositions)
+            BuildCentralPad(materials, arena.transform);
+            BuildCornerPlatforms(materials, arena.transform);
+            BuildInnerPillars(materials, arena.transform);
+            BuildCoverClusters(materials, arena.transform);
+            BuildBarrels(materials, arena.transform);
+            BuildFloorGuides(materials, arena.transform);
+
+            ground.isStatic = true;
+        }
+
+        /// <summary>
+        /// The raised centre pad: an open 12x12 duelling floor ringed by glowing trim.
+        /// It is only 12 cm high, well under the controller step height, so nobody
+        /// stumbles on the way in.
+        /// </summary>
+        private static void BuildCentralPad(ArenaMaterials materials, Transform parent)
+        {
+            CreatePrimitive("Central Pad", PrimitiveType.Cube, new Vector3(0f, 0.06f, 0f),
+                new Vector3(12f, 0.12f, 12f), materials.Pad, parent);
+
+            GameObject[] trims =
             {
-                CreatePrimitive("Pillar Cap", PrimitiveType.Cube, pillar + new Vector3(0f, 2.06f, 0f),
-                    new Vector3(1.34f, 0.12f, 1.34f), materials.Accent, arena.transform);
+                CreatePrimitive("Pad Trim North", PrimitiveType.Cube, new Vector3(0f, 0.13f, 5.94f),
+                    new Vector3(12f, 0.02f, 0.12f), materials.Accent, parent),
+                CreatePrimitive("Pad Trim South", PrimitiveType.Cube, new Vector3(0f, 0.13f, -5.94f),
+                    new Vector3(12f, 0.02f, 0.12f), materials.Accent, parent),
+                CreatePrimitive("Pad Trim East", PrimitiveType.Cube, new Vector3(5.94f, 0.13f, 0f),
+                    new Vector3(0.12f, 0.02f, 12f), materials.Accent, parent),
+                CreatePrimitive("Pad Trim West", PrimitiveType.Cube, new Vector3(-5.94f, 0.13f, 0f),
+                    new Vector3(0.12f, 0.02f, 12f), materials.Accent, parent),
+            };
+
+            foreach (GameObject trim in trims)
+            {
+                StripCollider(trim);
+            }
+        }
+
+        /// <summary>
+        /// Four raised corner platforms, each reached by a ramp from the mid lanes.
+        /// They give the player high ground and break up the skyline.
+        /// </summary>
+        private static void BuildCornerPlatforms(ArenaMaterials materials, Transform parent)
+        {
+            const float platformSize = 8f;
+            const float platformHeight = 2f;
+            const float rampRun = 6f;
+            const float rampWidth = 3f;
+            const float rampThickness = 0.4f;
+
+            Vector3[] centers =
+            {
+                new Vector3(15.5f, 0f, 15.5f),
+                new Vector3(-15.5f, 0f, 15.5f),
+                new Vector3(15.5f, 0f, -15.5f),
+                new Vector3(-15.5f, 0f, -15.5f),
+            };
+
+            float rampAngle = Mathf.Atan2(platformHeight, rampRun) * Mathf.Rad2Deg;
+            float slopeLength = Mathf.Sqrt(rampRun * rampRun + platformHeight * platformHeight);
+
+            foreach (Vector3 center in centers)
+            {
+                string side = center.x > 0f ? "East" : "West";
+
+                CreatePrimitive($"Platform {side} {(center.z > 0f ? "North" : "South")}", PrimitiveType.Cube,
+                    new Vector3(center.x, platformHeight * 0.5f, center.z),
+                    new Vector3(platformSize, platformHeight, platformSize), materials.Wall, parent);
+
+                // Glowing lip around the platform top.
+                float lip = platformSize * 0.5f - 0.06f;
+
+                foreach (int axis in new[] { 0, 1 })
+                {
+                    for (int side2 = -1; side2 <= 1; side2 += 2)
+                    {
+                        Vector3 position = axis == 0
+                            ? new Vector3(center.x, platformHeight + 0.02f, center.z + side2 * lip)
+                            : new Vector3(center.x + side2 * lip, platformHeight + 0.02f, center.z);
+
+                        Vector3 scale = axis == 0
+                            ? new Vector3(platformSize, 0.04f, 0.12f)
+                            : new Vector3(0.12f, 0.04f, platformSize);
+
+                        GameObject trim = CreatePrimitive("Edge Trim", PrimitiveType.Cube, position, scale,
+                            materials.Accent, parent);
+                        StripCollider(trim);
+                    }
+                }
+
+                // Ramp: rises from the arena floor up to the platform edge. The cube is
+                // rotated so its top face lands exactly on the slope line.
+                bool eastSide = center.x > 0f;
+                float rampX = eastSide ? 8.5f : -8.5f;
+                float rampCenterY = platformHeight * 0.5f - 0.21f;
+
+                CreatePrimitive($"Ramp {side} {(center.z > 0f ? "North" : "South")}", PrimitiveType.Cube,
+                    new Vector3(rampX, rampCenterY, center.z),
+                    new Vector3(slopeLength, rampThickness, rampWidth), materials.CoverAlt, parent,
+                    Quaternion.Euler(0f, 0f, eastSide ? rampAngle : -rampAngle));
+            }
+        }
+
+        /// <summary>Four pillars framing the central pad; they break long sight lines.</summary>
+        private static void BuildInnerPillars(ArenaMaterials materials, Transform parent)
+        {
+            Vector3[] positions =
+            {
+                new Vector3(8.5f, 1.7f, 8.5f),
+                new Vector3(-8.5f, 1.7f, 8.5f),
+                new Vector3(8.5f, 1.7f, -8.5f),
+                new Vector3(-8.5f, 1.7f, -8.5f),
+            };
+
+            foreach (Vector3 position in positions)
+            {
+                CreatePrimitive("Pillar", PrimitiveType.Cube, position, new Vector3(1.4f, 3.4f, 1.4f),
+                    materials.Wall, parent);
+
+                CreatePrimitive("Pillar Cap", PrimitiveType.Cube, position + new Vector3(0f, 1.76f, 0f),
+                    new Vector3(1.54f, 0.12f, 1.54f), materials.Accent, parent);
+            }
+        }
+
+        /// <summary>
+        /// Cover grouped into readable clusters: stacked containers in the east and west
+        /// lanes, L-shaped walls in the north and south lanes, and loose barriers around
+        /// the outer ring.
+        /// </summary>
+        private static void BuildCoverClusters(ArenaMaterials materials, Transform parent)
+        {
+            // Stacked containers: full cover in the side lanes.
+            foreach (float side in new[] { 1f, -1f })
+            {
+                CreatePrimitive("Container", PrimitiveType.Cube, new Vector3(13.5f * side, 0.8f, 0f),
+                    new Vector3(2.2f, 1.6f, 4.2f), materials.Cover, parent,
+                    Quaternion.Euler(0f, 8f * side, 0f));
+
+                CreatePrimitive("Container Top", PrimitiveType.Cube, new Vector3(13.5f * side, 2.05f, 0f),
+                    new Vector3(1.6f, 0.9f, 2.6f), materials.CoverAlt, parent,
+                    Quaternion.Euler(0f, -18f * side, 0f));
             }
 
-            // Barrel props: cheap cover that reads as "industrial", with an emissive
-            // hazard ring so they stand out from the crates. The barrel keeps its
-            // collider for cover; the ring is visual only.
+            // L-shaped walls facing the centre. They sit inboard of the ramp corridors
+            // so they never block the way up to a platform.
+            CreateLWall(materials, parent, new Vector3(2.6f, 0f, 11.6f), -14f);
+            CreateLWall(materials, parent, new Vector3(-2.6f, 0f, 11.6f), 14f);
+            CreateLWall(materials, parent, new Vector3(2.6f, 0f, -11.6f), 14f);
+            CreateLWall(materials, parent, new Vector3(-2.6f, 0f, -11.6f), -14f);
+
+            // Loose barriers around the outer ring.
+            Vector3[] barrierPositions =
+            {
+                new Vector3(18.2f, 0f, 6.5f),
+                new Vector3(18.2f, 0f, -6.5f),
+                new Vector3(-18.2f, 0f, 6.5f),
+                new Vector3(-18.2f, 0f, -6.5f),
+                new Vector3(7.2f, 0f, 18.6f),
+                new Vector3(-7.2f, 0f, 18.6f),
+                new Vector3(7.2f, 0f, -18.6f),
+                new Vector3(-7.2f, 0f, -18.6f),
+            };
+
+            float[] barrierAngles = { 25f, -25f, -25f, 25f, 65f, -65f, -65f, 65f };
+
+            for (int i = 0; i < barrierPositions.Length; i++)
+            {
+                Vector3 position = barrierPositions[i];
+                CreatePrimitive("Barrier", PrimitiveType.Cube, new Vector3(position.x, 0.65f, position.z),
+                    new Vector3(3.4f, 1.3f, 0.7f), materials.Cover, parent,
+                    Quaternion.Euler(0f, barrierAngles[i], 0f));
+            }
+        }
+
+        /// <summary>Two boxes at right angles: a wall with a short return.</summary>
+        private static void CreateLWall(ArenaMaterials materials, Transform parent, Vector3 position, float angle)
+        {
+            Quaternion rotation = Quaternion.Euler(0f, angle, 0f);
+
+            CreatePrimitive("L Wall", PrimitiveType.Cube, new Vector3(position.x, 0.8f, position.z),
+                new Vector3(3.6f, 1.6f, 0.8f), materials.Cover, parent, rotation);
+
+            Vector3 offset = rotation * new Vector3(1.4f, 0f, 1.4f);
+            CreatePrimitive("L Wall Return", PrimitiveType.Cube,
+                new Vector3(position.x + offset.x, 0.8f, position.z + offset.z),
+                new Vector3(0.8f, 1.6f, 3.2f), materials.Cover, parent, rotation);
+        }
+
+        /// <summary>
+        /// Barrel props: cheap cover that reads as "industrial", with an emissive
+        /// hazard ring so they stand out from the crates. The barrel keeps its
+        /// collider for cover; the ring is visual only.
+        /// </summary>
+        private static void BuildBarrels(ArenaMaterials materials, Transform parent)
+        {
             Vector3[] barrelPositions =
             {
-                new Vector3(5.5f, 0.45f, 4.2f),
-                new Vector3(6.6f, 0.45f, 4.9f),
-                new Vector3(-4.8f, 0.45f, -8.2f),
-                new Vector3(-5.9f, 0.45f, -8.9f),
-                new Vector3(-5.2f, 0.45f, -7.3f),
-                new Vector3(11.5f, 0.45f, 2.5f),
-                new Vector3(-12f, 0.45f, 6.5f),
-                new Vector3(2f, 0.45f, -14.5f),
+                new Vector3(11.3f, 0.45f, 2.9f),
+                new Vector3(12.7f, 0.45f, 3.7f),
+                new Vector3(-11.3f, 0.45f, -2.9f),
+                new Vector3(-12.7f, 0.45f, -3.7f),
+                new Vector3(2.6f, 0.45f, 10.8f),
+                new Vector3(3.9f, 0.45f, 11.4f),
+                new Vector3(-2.6f, 0.45f, -10.8f),
+                new Vector3(-3.9f, 0.45f, -11.4f),
             };
 
             foreach (Vector3 position in barrelPositions)
             {
                 GameObject barrel = CreatePrimitive("Barrel", PrimitiveType.Cylinder, position,
-                    new Vector3(0.72f, 0.45f, 0.72f), materials.Cover, arena.transform);
+                    new Vector3(0.72f, 0.45f, 0.72f), materials.Cover, parent);
                 barrel.isStatic = true;
 
                 GameObject ring = CreatePrimitive("Barrel Ring", PrimitiveType.Cylinder,
                     position + new Vector3(0f, 0.18f, 0f), new Vector3(0.78f, 0.08f, 0.78f),
-                    materials.Accent, arena.transform);
+                    materials.Accent, parent);
                 StripCollider(ring);
                 ring.isStatic = true;
             }
+        }
 
-            ground.isStatic = true;
+        /// <summary>Glowing floor strips that lead from the central pad out to the lanes.</summary>
+        private static void BuildFloorGuides(ArenaMaterials materials, Transform parent)
+        {
+            Vector3[] positions =
+            {
+                new Vector3(8.2f, 0.02f, 0f),
+                new Vector3(-8.2f, 0.02f, 0f),
+                new Vector3(0f, 0.02f, 8.2f),
+                new Vector3(0f, 0.02f, -8.2f),
+            };
+
+            foreach (Vector3 position in positions)
+            {
+                GameObject guide = CreatePrimitive("Floor Guide", PrimitiveType.Cube, position,
+                    Mathf.Abs(position.x) > Mathf.Abs(position.z)
+                        ? new Vector3(4f, 0.02f, 0.3f)
+                        : new Vector3(0.3f, 0.02f, 4f),
+                    materials.Accent, parent);
+                StripCollider(guide);
+            }
         }
 
         // ---------------------------------------------------------------- post processing
@@ -428,15 +584,30 @@ namespace Shooter.EditorTools
             var parent = new GameObject("Spawn Points");
             var points = new List<Transform>();
 
-            for (int i = 0; i < 8; i++)
+            // Enemies come in from the four lanes and the wall centres rather than a
+            // plain ring, so they push in from several directions at once. Every point
+            // sits in open ground, clear of cover, ramps and platforms.
+            Vector3[] positions =
             {
-                float angle = i * 45f * Mathf.Deg2Rad;
+                new Vector3(17f, 0f, -3.5f),
+                new Vector3(17f, 0f, 3.5f),
+                new Vector3(-17f, 0f, 3.5f),
+                new Vector3(-17f, 0f, -3.5f),
+                new Vector3(3.5f, 0f, 17f),
+                new Vector3(-3.5f, 0f, 17f),
+                new Vector3(3.5f, 0f, -17f),
+                new Vector3(-3.5f, 0f, -17f),
+                new Vector3(0f, 0f, 19.5f),
+                new Vector3(0f, 0f, -19.5f),
+                new Vector3(19.5f, 0f, 0f),
+                new Vector3(-19.5f, 0f, 0f),
+            };
+
+            for (int i = 0; i < positions.Length; i++)
+            {
                 var point = new GameObject($"Spawn {i + 1:00}");
                 point.transform.SetParent(parent.transform, false);
-                point.transform.position = new Vector3(
-                    Mathf.Cos(angle) * SpawnRadius,
-                    0f,
-                    Mathf.Sin(angle) * SpawnRadius);
+                point.transform.position = positions[i];
                 points.Add(point.transform);
             }
 
@@ -458,7 +629,7 @@ namespace Shooter.EditorTools
         {
             var player = new GameObject("Player");
             player.layer = 2; // "Ignore Raycast": the player's own weapon ray must never hit it.
-            player.transform.position = new Vector3(0f, 0.2f, -12f);
+            player.transform.position = new Vector3(0f, 0.4f, 0f);
 
             CharacterController controller = player.AddComponent<CharacterController>();
             controller.height = 1.8f;
@@ -948,12 +1119,12 @@ namespace Shooter.EditorTools
 
             Vector3[] positions =
             {
-                new Vector3(0f, 0.55f, 0f),
-                new Vector3(9f, 0.55f, -12f),
-                new Vector3(-9f, 0.55f, 12f),
-                new Vector3(14f, 0.55f, 6f),
-                new Vector3(-14f, 0.55f, -6f),
-                new Vector3(0f, 0.55f, -7f),
+                new Vector3(8.2f, 0.55f, 0f),
+                new Vector3(-8.2f, 0.55f, 0f),
+                new Vector3(0f, 0.55f, 8.2f),
+                new Vector3(0f, 0.55f, -8.2f),
+                new Vector3(15.5f, 2.3f, 15.5f),
+                new Vector3(-15.5f, 2.3f, -15.5f),
             };
 
             foreach (Vector3 position in positions)

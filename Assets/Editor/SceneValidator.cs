@@ -67,8 +67,8 @@ namespace Shooter.EditorTools
             {
                 Check(waveSpawner.enemyPrefab != null, "WaveSpawner has an enemy prefab");
                 Check(waveSpawner.playerTarget != null, "WaveSpawner has a player target");
-                Check(waveSpawner.spawnPoints != null && waveSpawner.spawnPoints.Length == 8,
-                    "WaveSpawner has eight spawn points");
+                Check(waveSpawner.spawnPoints != null && waveSpawner.spawnPoints.Length >= 10,
+                    "WaveSpawner has at least ten spawn points");
             }
 
             if (player != null)
@@ -189,12 +189,70 @@ namespace Shooter.EditorTools
                     "weapon model has a charge strip");
             }
 
+            // --- arena layout ------------------------------------------------------
+            GameObject[] platforms = FindArenaObjects("Platform ", false);
+            GameObject[] ramps = FindArenaObjects("Ramp ", false);
+            GameObject[] pad = FindArenaObjects("Central Pad", true);
+            GameObject[] pillars = FindArenaObjects("Pillar", true);
+            GameObject[] walls = FindArenaObjects("Wall ", false);
+
+            Check(platforms.Length == 4, "arena has four raised corner platforms");
+            Check(ramps.Length == 4, "arena has four platform ramps");
+            Check(pad.Length == 1, "arena has a central pad");
+            Check(pillars.Length == 4, "arena has four inner pillars");
+            Check(walls.Length == 4, "arena has four perimeter walls");
+
+            // Spawn points must be in open ground: not inside a wall or a platform.
+            if (waveSpawner != null && waveSpawner.spawnPoints != null)
+            {
+                Check(waveSpawner.spawnPoints.Length >= 10, "arena has at least ten spawn points");
+
+                bool allClear = true;
+
+                foreach (Transform point in waveSpawner.spawnPoints)
+                {
+                    if (point == null)
+                    {
+                        allClear = false;
+                        continue;
+                    }
+
+                    foreach (GameObject platform in platforms)
+                    {
+                        Vector3 delta = point.position - platform.transform.position;
+
+                        if (Mathf.Abs(delta.x) < 4.2f && Mathf.Abs(delta.z) < 4.2f)
+                        {
+                            allClear = false;
+                        }
+                    }
+
+                    if (Mathf.Abs(point.position.x) > 21f || Mathf.Abs(point.position.z) > 21f)
+                    {
+                        allClear = false;
+                    }
+                }
+
+                Check(allClear, "every spawn point sits in open ground");
+            }
+
             EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes;
             Check(buildScenes.Length > 0 && buildScenes[0].path == ShooterSceneBuilder.ScenePath,
                 "arena is the first scene in build settings");
 
             Debug.Log($"[Validate] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
             Exit(failures == 0 ? 0 : 1);
+        }
+
+        /// <summary>
+        /// Finds scene objects by exact name or by name prefix.
+        /// </summary>
+        private static GameObject[] FindArenaObjects(string nameOrPrefix, bool exact)
+        {
+            return Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include)
+                .Where(gameObject => gameObject != null &&
+                    (exact ? gameObject.name == nameOrPrefix : gameObject.name.StartsWith(nameOrPrefix)))
+                .ToArray();
         }
 
         private static void Check(bool condition, string description)
