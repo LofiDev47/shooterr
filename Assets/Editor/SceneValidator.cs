@@ -137,6 +137,22 @@ namespace Shooter.EditorTools
             if (hud != null)
             {
                 Check(hud.hitMarkerGroup != null, "HUD hit marker is wired");
+                Check(hud.player != null, "HUD is wired to the player controller");
+
+                bool crosshairWired = hud.crosshairBars != null && hud.crosshairBars.Length == 4;
+
+                if (crosshairWired)
+                {
+                    foreach (RectTransform bar in hud.crosshairBars)
+                    {
+                        if (bar == null)
+                        {
+                            crosshairWired = false;
+                        }
+                    }
+                }
+
+                Check(crosshairWired, "HUD crosshair bars are wired for spread animation");
             }
 
             Volume volume = Object.FindAnyObjectByType<Volume>();

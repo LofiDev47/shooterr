@@ -1016,15 +1016,15 @@ namespace Shooter.EditorTools
                 TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-36f, -24f),
                 new Vector2(420f, 36f), font, FontStyle.Bold);
 
-            // Crosshair (center).
+            // Crosshair (center). The bars are captured so the HUD can animate their
+            // spread while firing and moving.
             RectTransform crosshair = CreateRect("Crosshair", canvasObject.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
             Color crosshairColor = new Color(1f, 1f, 1f, 0.85f);
-            CreateCrosshairBar(crosshair, "Top", new Vector2(0f, 9f), new Vector2(2f, 9f), crosshairColor);
-            CreateCrosshairBar(crosshair, "Bottom", new Vector2(0f, -9f), new Vector2(2f, 9f), crosshairColor);
-            CreateCrosshairBar(crosshair, "Left", new Vector2(-9f, 0f), new Vector2(9f, 2f), crosshairColor);
-            CreateCrosshairBar(crosshair, "Right", new Vector2(9f, 0f), new Vector2(9f, 2f), crosshairColor);
-
+            RectTransform crosshairTop = CreateCrosshairBar(crosshair, "Top", new Vector2(0f, 9f), new Vector2(2f, 9f), crosshairColor);
+            RectTransform crosshairBottom = CreateCrosshairBar(crosshair, "Bottom", new Vector2(0f, -9f), new Vector2(2f, 9f), crosshairColor);
+            RectTransform crosshairLeft = CreateCrosshairBar(crosshair, "Left", new Vector2(-9f, 0f), new Vector2(9f, 2f), crosshairColor);
+            RectTransform crosshairRight = CreateCrosshairBar(crosshair, "Right", new Vector2(9f, 0f), new Vector2(9f, 2f), crosshairColor);
             // Hit marker: four diagonal ticks that flash when a shot lands on an enemy.
             RectTransform hitMarker = CreateRect("HitMarker", canvasObject.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
@@ -1092,6 +1092,8 @@ namespace Shooter.EditorTools
             hud.hintText = hintText;
             hud.toastText = toastText;
             hud.hitMarkerGroup = hitMarkerGroup;
+            hud.crosshairBars = new[] { crosshairTop, crosshairBottom, crosshairLeft, crosshairRight };
+            hud.player = rig.Controller;
 
             DamageFlash flash = canvasObject.AddComponent<DamageFlash>();
             flash.playerHealth = rig.Health;
@@ -1156,7 +1158,7 @@ namespace Shooter.EditorTools
             Debug.Log($"[Shooter] Placed {positions.Length} ammo crates.");
         }
 
-        private static void CreateCrosshairBar(Transform parent, string name, Vector2 position, Vector2 size,
+        private static RectTransform CreateCrosshairBar(Transform parent, string name, Vector2 position, Vector2 size,
             Color color, float rotation = 0f)
         {
             RectTransform rect = CreateRect(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -1168,6 +1170,7 @@ namespace Shooter.EditorTools
             }
 
             AddImage(rect, color);
+            return rect;
         }
 
         // ---------------------------------------------------------------- helpers

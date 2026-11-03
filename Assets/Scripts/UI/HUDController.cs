@@ -15,6 +15,7 @@ namespace Shooter.UI
     {
         [Header("Gameplay wiring (scene builder)")]
         public PlayerHealth playerHealth;
+        public PlayerController player;
         public Weapon weapon;
         public GameManager gameManager;
         public WaveSpawner waveSpawner;
@@ -39,6 +40,12 @@ namespace Shooter.UI
 
         [SerializeField] private float hitMarkerDuration = 0.18f;
 
+        [Header("Crosshair")]
+        public RectTransform[] crosshairBars;
+
+        [Tooltip("Pixels the crosshair opens at full spread.")]
+        [SerializeField] private float crosshairMaxSpread = 14f;
+
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
 
@@ -52,6 +59,25 @@ namespace Shooter.UI
         private GameState lastState = (GameState)(-1);
         private float toastUntil;
         private float hitMarkerUntil;
+        private float crosshairSpread;
+        private Vector2[] crosshairBasePositions;
+
+        private void Awake()
+        {
+            // Remember where the bars rest so spread can push them outward and back.
+            if (crosshairBars != null && crosshairBars.Length > 0)
+            {
+                crosshairBasePositions = new Vector2[crosshairBars.Length];
+
+                for (int i = 0; i < crosshairBars.Length; i++)
+                {
+                    if (crosshairBars[i] != null)
+                    {
+                        crosshairBasePositions[i] = crosshairBars[i].anchoredPosition;
+                    }
+                }
+            }
+        }
 
         private void Update()
         {
@@ -62,6 +88,7 @@ namespace Shooter.UI
             UpdateState();
             UpdateToast();
             UpdateHitMarker();
+            UpdateCrosshair();
         }
 
         /// <summary>Flashes the crosshair tick marks when a shot lands on an enemy.</summary>
@@ -79,6 +106,57 @@ namespace Shooter.UI
 
             float remaining = hitMarkerUntil - Time.unscaledTime;
             hitMarkerGroup.alpha = Mathf.Clamp01(remaining / hitMarkerDuration);
+        }
+
+        /// <summary>
+        /// The crosshair breathes with the gun: it opens while firing and while moving,
+        /// tightens while aiming, and eases between states instead of snapping.
+        /// </summary>
+        private void UpdateCrosshair()
+        {
+            if (crosshairBars == null || crosshairBasePositions == null || crosshairBars.Length == 0)
+            {
+                return;
+            }
+
+            float spread = 0f;
+
+            if (weapon != null)
+            {
+                // Firing bloom: full open right after a shot, closed again within half a second.
+                spread += Mathf.Clamp01(1f - weapon.TimeSinceLastShot / 0.45f) * 0.9f;
+            }
+
+            if (player != null)
+            {
+                Vector3 velocity = player.Velocity;
+                float speed = new Vector2(velocity.x, velocity.z).magnitude;
+                spread += Mathf.Clamp01(speed / Mathf.Max(1f, player.SprintSpeed)) * 0.35f;
+
+                if (player.IsAiming)
+                {
+                    spread *= 0.45f;
+                }
+            }
+
+            crosshairSpread = Mathf.Lerp(crosshairSpread, spread, 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
+            float offset = crosshairSpread * crosshairMaxSpread;
+
+            // Bars point outward from the centre: 0 = up, 1 = down, 2 = left, 3 = right.
+            Vector2[] directions =
+            {
+                Vector2.up, Vector2.down, Vector2.left, Vector2.right,
+            };
+
+            for (int i = 0; i < crosshairBars.Length && i < directions.Length; i++)
+            {
+                if (crosshairBars[i] == null || i >= crosshairBasePositions.Length)
+                {
+                    continue;
+                }
+
+                crosshairBars[i].anchoredPosition = crosshairBasePositions[i] + directions[i] * offset;
+            }
         }
 
         /// <summary>Shows a short-lived message just above the crosshair.</summary>

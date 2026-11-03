@@ -48,6 +48,25 @@ namespace Shooter.Weapons
         [SerializeField] private float tracerTime = 0.03f;
         [SerializeField] private float reloadDrop = 0.12f;
 
+        [Header("Kickback spring")]
+        [SerializeField] private float kickbackStiffness = 90f;
+        [SerializeField] private float kickbackSpringDamping = 11f;
+
+        [Header("Sway")]
+        [Tooltip("Metres the weapon drifts per pixel of mouse movement.")]
+        [SerializeField] private float swayPositionScale = 0.0012f;
+        [Tooltip("Degrees the weapon turns per pixel of mouse movement.")]
+        [SerializeField] private float swayRotationScale = 0.055f;
+        [Tooltip("How quickly sway settles, per second.")]
+        [SerializeField] private float swayDamping = 9f;
+        [SerializeField] private float swayMaxPosition = 0.05f;
+        [SerializeField] private float swayMaxRotation = 3.5f;
+        [Tooltip("Sideways weapon drift at full strafe speed, in metres.")]
+        [SerializeField] private float strafeSway = 0.028f;
+        [Tooltip("Metres of idle breathing sway.")]
+        [SerializeField] private float idleBreath = 0.004f;
+        [SerializeField] private float breathSpeed = 1.4f;
+
         [Header("References (wired by the scene builder)")]
         public Camera aimCamera;
         public PlayerController player;
@@ -92,10 +111,17 @@ namespace Shooter.Weapons
         private Quaternion restLocalRotation;
         private float muzzleFlashUntil;
         private float tracerUntil;
-        private float kickback;
+        private float kickback;              // spring offset: 0 at rest, pushed by each shot
+        private float kickbackVelocity;
+        private Vector3 swayPosition;        // smoothed sway offset (local space)
+        private Vector2 swayRotation;        // smoothed sway rotation in degrees (x, y)
+        private float lastFireTime = -999f;
         private float aimBlend; // 0 = hip fire, 1 = fully aimed.
         private Renderer[] weaponRenderers;
         private bool renderersVisible = true;
+
+        /// <summary>Seconds since the last shot; large when the gun has not fired yet.</summary>
+        public float TimeSinceLastShot => Time.time - lastFireTime;
 
         private void Awake()
         {
@@ -231,6 +257,8 @@ namespace Shooter.Weapons
             PlayTracer(endPoint);
             ApplyRecoil();
             PlayFireAudio();
+
+            lastFireTime = now;
         }
 
         private static Vector3 ApplySpread(Vector3 forward, float degrees)
@@ -307,7 +335,8 @@ namespace Shooter.Weapons
 
         private void ApplyRecoil()
         {
-            kickback = 0.07f;
+            // Spring impulse: the kick strength comes from the velocity we inject.
+            kickbackVelocity += 0.9f;
 
             if (player != null)
             {
@@ -344,10 +373,11 @@ namespace Shooter.Weapons
 
         private void UpdatePose(float now)
         {
-            // Blend between hip-fire and aim-down-sights positions.
+            // Blend between hip-fire and aim-down-sights positions. Exponential blend so
+            // the transition eases out instead of arriving at a constant clip.
             bool wantsAim = player != null && player.IsAiming;
             float aimTarget = wantsAim ? 1f : 0f;
-            aimBlend = Mathf.MoveTowards(aimBlend, aimTarget, sightBlendSpeed * Time.deltaTime);
+            aimBlend = Mathf.Lerp(aimBlend, aimTarget, 1f - Mathf.Exp(-sightBlendSpeed * Time.deltaTime));
             float eased = Mathf.SmoothStep(0f, 1f, aimBlend);
 
             Vector3 hipPosition = Vector3.Lerp(restLocalPosition, aimLocalPosition, eased);
@@ -365,14 +395,58 @@ namespace Shooter.Weapons
                 reloadTilt = 25f * curve;
             }
 
-            kickback = Mathf.MoveTowards(kickback, 0f, 0.6f * Time.deltaTime);
+            // Kickback spring: the shot pushes the gun back and the spring pulls it home,
+            // with a slight overshoot that reads as recoil settling.
+            float springAccel = -kickbackStiffness * kickback - kickbackSpringDamping * kickbackVelocity;
+            kickbackVelocity += springAccel * Time.deltaTime;
+            kickback = Mathf.Clamp(kickback + kickbackVelocity * Time.deltaTime, -0.2f, 0.8f);
 
-            Vector3 targetPosition = hipPosition + new Vector3(0f, reloadDip, -kickback * Mathf.Lerp(1f, 0.45f, eased));
-            Quaternion targetRotation = hipRotation * Quaternion.Euler(-kickback * 180f * Mathf.Lerp(1f, 0.4f, eased), 0f, reloadTilt);
+            UpdateSway(eased);
 
-            float blend = 1f - Mathf.Exp(-18f * Time.deltaTime);
+            Vector3 targetPosition = hipPosition
+                + new Vector3(0f, reloadDip, -kickback * 0.8f * Mathf.Lerp(1f, 0.45f, eased))
+                + swayPosition;
+
+            float kickAngle = kickback * 130f * Mathf.Lerp(1f, 0.4f, eased);
+            Quaternion targetRotation = hipRotation
+                * Quaternion.Euler(-kickAngle, 0f, reloadTilt)
+                * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f);
+
+            float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);
             transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, blend);
+        }
+
+        /// <summary>
+        /// Weapon lag: the gun trails the mouse a touch, drifts against strafes and
+        /// breathes when idle. All offsets are smoothed, so they never snap.
+        /// </summary>
+        private void UpdateSway(float aimEased)
+        {
+            Vector2 look = player != null ? player.SmoothedLookDelta : Vector2.zero;
+            Vector3 velocity = player != null ? player.Velocity : Vector3.zero;
+
+            Vector3 targetPosition = new Vector3(
+                Mathf.Clamp(-look.x * swayPositionScale, -swayMaxPosition, swayMaxPosition),
+                Mathf.Clamp(look.y * swayPositionScale * 0.6f, -swayMaxPosition, swayMaxPosition),
+                0f);
+
+            // Strafing drags the weapon slightly against the motion.
+            float lateralSpeed = Vector3.Dot(velocity, transform.right);
+            float referenceSpeed = player != null ? Mathf.Max(1f, player.SprintSpeed) : 8.8f;
+            targetPosition.x -= lateralSpeed * (strafeSway / referenceSpeed) * (1f - aimEased * 0.7f);
+
+            // Idle breathing, mostly gone while aiming.
+            float breathing = Mathf.Sin(Time.time * breathSpeed) * idleBreath * (1f - aimEased * 0.75f);
+            targetPosition.y += breathing;
+
+            Vector2 targetRotation = new Vector2(
+                Mathf.Clamp(-look.y * swayRotationScale, -swayMaxRotation, swayMaxRotation),
+                Mathf.Clamp(-look.x * swayRotationScale, -swayMaxRotation, swayMaxRotation));
+
+            float blend = 1f - Mathf.Exp(-swayDamping * Time.deltaTime);
+            swayPosition = Vector3.Lerp(swayPosition, targetPosition, blend);
+            swayRotation = Vector2.Lerp(swayRotation, targetRotation, blend);
         }
 
         /// <summary>

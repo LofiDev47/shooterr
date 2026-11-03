@@ -60,6 +60,19 @@ namespace Shooter.Player
         [SerializeField] private float bobAmplitude = 0.035f;
         [SerializeField] private float landingDip = 0.09f;
 
+        [Header("Camera roll")]
+        [Tooltip("Degrees the camera tilts into a strafe at full speed.")]
+        [SerializeField] private float strafeRoll = 1.4f;
+        [Tooltip("Degrees of roll per pixel of mouse turn, used for a subtle lean.")]
+        [SerializeField] private float turnRollScale = 0.006f;
+        [Tooltip("How quickly the roll settles, per second.")]
+        [SerializeField] private float rollDamping = 9f;
+        [SerializeField] private float maxRoll = 2.5f;
+
+        [Header("Landing spring")]
+        [SerializeField] private float landingStiffness = 140f;
+        [SerializeField] private float landingSpringDamping = 12f;
+
         [Header("Recoil")]
         [Tooltip("Degrees per second the camera returns to its resting pitch after a shot.")]
         [SerializeField] private float recoilRecovery = 22f;
@@ -106,6 +119,14 @@ namespace Shooter.Player
         private bool cursorLocked;
         private bool wasGrounded = true;
 
+        // Camera feel state.
+        private float bobTime;
+        private float bobBlend;          // damped 0..1 multiplier so bob fades in and out
+        private float landingOffset;
+        private float landingVelocity;   // spring velocity for the landing dip
+        private float rollAmount;        // current camera roll in degrees
+        private Vector2 smoothedLookDelta; // damped mouse delta, also feeds weapon sway
+
         // Slide state.
         private bool isSliding;
         private Vector3 slideDirection;
@@ -113,9 +134,14 @@ namespace Shooter.Player
         private float slideEndTime;
         private float lastSlideEndTime = -999f;
 
-        // Camera feel state.
-        private float bobTime;
-        private float landingOffset;
+        /// <summary>Damped mouse movement in pixels per frame; the weapon sways with it.</summary>
+        public Vector2 SmoothedLookDelta => smoothedLookDelta;
+
+        /// <summary>Current planar velocity, exposed for weapon sway and HUD spread.</summary>
+        public Vector3 Velocity => planarVelocity;
+
+        /// <summary>Top sprint speed, used to normalise speed-based effects.</summary>
+        public float SprintSpeed => sprintSpeed;
 
         private void Awake()
         {
@@ -174,7 +200,7 @@ namespace Shooter.Player
             {
                 HandleCursor();
                 ReadAim();
-                ReadLook();
+                ReadLook(deltaTime);
                 ReadMovement(deltaTime);
             }
             else
@@ -182,6 +208,10 @@ namespace Shooter.Player
                 IsAiming = false;
                 IsSprinting = false;
                 planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, groundDeceleration * deltaTime);
+
+                // Let the mouse sway settle when the controls are off.
+                float settle = 1f - Mathf.Exp(-18f * deltaTime);
+                smoothedLookDelta = Vector2.Lerp(smoothedLookDelta, Vector2.zero, settle);
             }
 
             RecoverRecoil();
@@ -232,20 +262,26 @@ namespace Shooter.Player
             }
         }
 
-        private void ReadLook()
+        private void ReadLook(float deltaTime)
         {
-            if (Mouse.current == null || !cursorLocked)
+            Vector2 delta = Vector2.zero;
+
+            if (Mouse.current != null && cursorLocked)
             {
-                return;
+                delta = Mouse.current.delta.ReadValue();
+                float sensitivity = lookSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
+
+                yaw += delta.x * sensitivity;
+                pitch = Mathf.Clamp(pitch - delta.y * sensitivity, -pitchLimit, pitchLimit);
+
+                transform.rotation = Quaternion.Euler(0f, yaw, 0f);
             }
 
-            Vector2 delta = Mouse.current.delta.ReadValue();
-            float sensitivity = lookSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
-
-            yaw += delta.x * sensitivity;
-            pitch = Mathf.Clamp(pitch - delta.y * sensitivity, -pitchLimit, pitchLimit);
-
-            transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            // A damped copy of the raw delta: fast enough to never feel laggy, but with
+            // enough softness that the weapon sway and camera roll breathe instead of
+            // snapping. This decays to zero the moment the mouse stops.
+            float blend = 1f - Mathf.Exp(-18f * deltaTime);
+            smoothedLookDelta = Vector2.Lerp(smoothedLookDelta, delta, blend);
         }
 
         private void ReadMovement(float deltaTime)
@@ -316,7 +352,9 @@ namespace Shooter.Player
 
             if (groundedNow && !wasGrounded && fallSpeed < -6f)
             {
-                landingOffset = Mathf.Clamp(-fallSpeed * 0.012f, 0f, landingDip);
+                // A spring instead of a fixed offset: the camera dips and settles with a
+                // hint of bounce, scaled by how hard we hit the ground.
+                landingVelocity = fallSpeed * 0.09f;
             }
 
             wasGrounded = groundedNow;
@@ -447,10 +485,38 @@ namespace Shooter.Player
 
         private void RecoverRecoil()
         {
-            recoilPitch = Mathf.MoveTowards(recoilPitch, 0f, recoilRecovery * Time.deltaTime);
-            recoilYaw = Mathf.MoveTowards(recoilYaw, 0f, recoilRecovery * Time.deltaTime);
-            shakeAmount = Mathf.MoveTowards(shakeAmount, 0f, shakeDecay * Time.unscaledDeltaTime);
+            float deltaTime = Time.deltaTime;
+
+            // Exponential recovery: each frame the remaining recoil shrinks by a fixed
+            // fraction, which settles smoothly instead of at a constant clip.
+            float recovery = 1f - Mathf.Exp(-recoilRecovery * deltaTime);
+            recoilPitch = Mathf.Lerp(recoilPitch, 0f, recovery);
+            recoilYaw = Mathf.Lerp(recoilYaw, 0f, recovery);
+
+            float shakeRecovery = 1f - Mathf.Exp(-shakeDecay * 2f * Time.unscaledDeltaTime);
+            shakeAmount = Mathf.Lerp(shakeAmount, 0f, shakeRecovery);
+
+            UpdateRoll(deltaTime);
             ApplyCameraRotation();
+        }
+
+        /// <summary>
+        /// Tilts the camera into strafes and fast turns. Exponentially damped so the
+        /// lean eases in and out rather than snapping with velocity.
+        /// </summary>
+        private void UpdateRoll(float deltaTime)
+        {
+            float lateralSpeed = Vector3.Dot(planarVelocity, transform.right);
+            float speedRatio = Mathf.Clamp01(Mathf.Abs(lateralSpeed) / sprintSpeed);
+
+            float target = -Mathf.Sign(lateralSpeed) * speedRatio * strafeRoll * (IsAiming ? 0.4f : 1f);
+
+            // A fast mouse flick leans the camera a touch further.
+            target += Mathf.Clamp(-smoothedLookDelta.x * turnRollScale, -1.5f, 1.5f);
+            target = Mathf.Clamp(target, -maxRoll, maxRoll);
+
+            float blend = 1f - Mathf.Exp(-rollDamping * deltaTime);
+            rollAmount = Mathf.Lerp(rollAmount, target, blend);
         }
 
         private void ApplyCameraRotation()
@@ -461,7 +527,7 @@ namespace Shooter.Player
             }
 
             float totalPitch = Mathf.Clamp(pitch + recoilPitch, -pitchLimit, pitchLimit);
-            Quaternion look = Quaternion.Euler(totalPitch, recoilYaw, 0f);
+            Quaternion look = Quaternion.Euler(totalPitch, recoilYaw, rollAmount);
 
             if (shakeAmount > 0.001f)
             {
@@ -521,11 +587,20 @@ namespace Shooter.Player
                 bobTime += deltaTime * bobFrequency * Mathf.PI * 2f * Mathf.Lerp(0.75f, 1.35f, speedRatio);
             }
 
-            float bobAmount = bobbing ? bobAmplitude * speedRatio * damping : 0f;
+            // Fade the bob in and out instead of switching it off: stopping used to snap
+            // the camera back to centre in a single frame.
+            float bobTarget = bobbing ? 1f : 0f;
+            bobBlend = Mathf.Lerp(bobBlend, bobTarget, 1f - Mathf.Exp(-8f * deltaTime));
+
+            float bobAmount = bobAmplitude * speedRatio * damping * bobBlend;
             float bobX = Mathf.Cos(bobTime) * bobAmount * 0.6f;
             float bobY = Mathf.Sin(bobTime * 2f) * bobAmount;
 
-            landingOffset = Mathf.MoveTowards(landingOffset, 0f, 1.4f * deltaTime);
+            // Landing dip: an underdamped spring, so the camera dips, recovers and
+            // overshoots a hair before settling.
+            float springAccel = -landingStiffness * landingOffset - landingSpringDamping * landingVelocity;
+            landingVelocity += springAccel * deltaTime;
+            landingOffset = Mathf.Clamp(landingOffset + landingVelocity * deltaTime, -0.02f, landingDip);
 
             if (cameraPivot != null)
             {
