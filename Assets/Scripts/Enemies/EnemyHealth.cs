@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Shooter.Combat;
 using Shooter.Effects;
 using Shooter.Managers;
@@ -216,7 +217,10 @@ namespace Shooter.Enemies
         {
             if (renderers == null || renderers.Length == 0)
             {
+                // Visor/eye pieces keep their own glow: they are excluded from hit flashes
+                // and elite tints so a dark red enemy always shows the same bright eye.
                 renderers = GetComponentsInChildren<Renderer>();
+                renderers = renderers.Where(renderer => renderer != null && !renderer.name.Contains("Eye")).ToArray();
             }
 
             if (bodyCollider == null)

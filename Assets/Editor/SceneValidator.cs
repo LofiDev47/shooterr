@@ -3,6 +3,7 @@ using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
 using Shooter.Weapons;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -157,6 +158,26 @@ namespace Shooter.EditorTools
                 Check(prefab.GetComponent<EnemyAI>() != null, "enemy prefab has EnemyAI");
                 Check(prefab.GetComponent<EnemyHealth>() != null, "enemy prefab has EnemyHealth");
                 Check(prefab.GetComponent<CharacterController>() != null, "enemy prefab has a CharacterController");
+
+                Renderer[] prefabRenderers = prefab.GetComponentsInChildren<Renderer>();
+                Check(prefabRenderers.Length >= 8, "enemy prefab has a detailed multi-part model");
+
+                // Visual pieces must not carry colliders; only the CharacterController should.
+                bool visualColliders = prefab.GetComponentsInChildren<Collider>()
+                    .Any(collider => !ReferenceEquals(collider, prefab.GetComponent<CharacterController>()));
+                Check(!visualColliders, "enemy visual pieces are collider-free");
+            }
+
+            Weapon sceneWeapon = Object.FindAnyObjectByType<Weapon>();
+
+            if (sceneWeapon != null)
+            {
+                Transform weaponModel = sceneWeapon.transform.Find("Model");
+                Check(weaponModel != null, "weapon has a detailed model group");
+                Check(weaponModel != null && weaponModel.transform.Find("MuzzleBrake") != null,
+                    "weapon model has muzzle detail");
+                Check(weaponModel != null && weaponModel.transform.Find("StatusGlow") != null,
+                    "weapon model has a charge strip");
             }
 
             EditorBuildSettingsScene[] buildScenes = EditorBuildSettings.scenes;

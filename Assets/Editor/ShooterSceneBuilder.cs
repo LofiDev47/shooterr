@@ -326,6 +326,34 @@ namespace Shooter.EditorTools
                     new Vector3(1.34f, 0.12f, 1.34f), materials.Accent, arena.transform);
             }
 
+            // Barrel props: cheap cover that reads as "industrial", with an emissive
+            // hazard ring so they stand out from the crates. The barrel keeps its
+            // collider for cover; the ring is visual only.
+            Vector3[] barrelPositions =
+            {
+                new Vector3(5.5f, 0.45f, 4.2f),
+                new Vector3(6.6f, 0.45f, 4.9f),
+                new Vector3(-4.8f, 0.45f, -8.2f),
+                new Vector3(-5.9f, 0.45f, -8.9f),
+                new Vector3(-5.2f, 0.45f, -7.3f),
+                new Vector3(11.5f, 0.45f, 2.5f),
+                new Vector3(-12f, 0.45f, 6.5f),
+                new Vector3(2f, 0.45f, -14.5f),
+            };
+
+            foreach (Vector3 position in barrelPositions)
+            {
+                GameObject barrel = CreatePrimitive("Barrel", PrimitiveType.Cylinder, position,
+                    new Vector3(0.72f, 0.45f, 0.72f), materials.Cover, arena.transform);
+                barrel.isStatic = true;
+
+                GameObject ring = CreatePrimitive("Barrel Ring", PrimitiveType.Cylinder,
+                    position + new Vector3(0f, 0.18f, 0f), new Vector3(0.78f, 0.08f, 0.78f),
+                    materials.Accent, arena.transform);
+                StripCollider(ring);
+                ring.isStatic = true;
+            }
+
             ground.isStatic = true;
         }
 
@@ -475,14 +503,61 @@ namespace Shooter.EditorTools
             weaponObject.transform.SetParent(cameraTransform, false);
             weaponObject.transform.localPosition = new Vector3(0.22f, -0.16f, 0.35f);
 
-            // Simple 3-cube gun model.
-            CreatePrimitive("Body", PrimitiveType.Cube, new Vector3(0f, 0f, 0.18f),
-                new Vector3(0.10f, 0.12f, 0.42f), materials.Gun, weaponObject.transform);
-            CreatePrimitive("Barrel", PrimitiveType.Cube, new Vector3(0f, 0.02f, 0.48f),
-                new Vector3(0.05f, 0.06f, 0.32f), materials.GunAccent, weaponObject.transform);
-            CreatePrimitive("Grip", PrimitiveType.Cube, new Vector3(0f, -0.1f, 0.06f),
-                new Vector3(0.06f, 0.16f, 0.1f), materials.Gun, weaponObject.transform,
-                Quaternion.Euler(12f, 0f, 0f));
+            // Rifle model: receiver, rail, barrel and muzzle brake, open sights, angled
+            // magazine and grip, stock with butt pad, plus an emissive charge strip.
+            // Every piece is collider-free and on the Ignore Raycast layer so the weapon
+            // can never eat its own shots.
+            var model = new GameObject("Model");
+            model.transform.SetParent(weaponObject.transform, false);
+
+            CreatePrimitive("Receiver", PrimitiveType.Cube, new Vector3(0f, 0f, 0.2f),
+                new Vector3(0.1f, 0.12f, 0.4f), materials.Gun, model.transform);
+            CreatePrimitive("Rail", PrimitiveType.Cube, new Vector3(0f, 0.074f, 0.24f),
+                new Vector3(0.05f, 0.018f, 0.44f), materials.GunAccent, model.transform);
+            CreatePrimitive("ChargingHandle", PrimitiveType.Cube, new Vector3(0.062f, 0.03f, 0.1f),
+                new Vector3(0.02f, 0.03f, 0.07f), materials.GunAccent, model.transform);
+
+            // Barrel: cylinder rotated so its axis runs down the barrel (Z).
+            GameObject barrel = CreatePrimitive("Barrel", PrimitiveType.Cylinder, new Vector3(0f, 0.02f, 0.53f),
+                new Vector3(0.05f, 0.13f, 0.05f), materials.GunAccent, model.transform,
+                Quaternion.Euler(90f, 0f, 0f));
+            CreatePrimitive("MuzzleBrake", PrimitiveType.Cube, new Vector3(0f, 0.02f, 0.68f),
+                new Vector3(0.065f, 0.065f, 0.07f), materials.Gun, model.transform);
+
+            // Open sights at both ends of the rail.
+            CreatePrimitive("FrontSight", PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.62f),
+                new Vector3(0.012f, 0.05f, 0.02f), materials.GunAccent, model.transform);
+            CreatePrimitive("RearSight", PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.06f),
+                new Vector3(0.05f, 0.04f, 0.015f), materials.GunAccent, model.transform);
+
+            // Magazine and grip, both raked for a natural silhouette.
+            CreatePrimitive("Magazine", PrimitiveType.Cube, new Vector3(0f, -0.13f, 0.26f),
+                new Vector3(0.07f, 0.2f, 0.1f), materials.Gun, model.transform,
+                Quaternion.Euler(-8f, 0f, 0f));
+            CreatePrimitive("MagazineBase", PrimitiveType.Cube, new Vector3(0f, -0.227f, 0.27f),
+                new Vector3(0.075f, 0.02f, 0.105f), materials.GunAccent, model.transform,
+                Quaternion.Euler(-8f, 0f, 0f));
+            CreatePrimitive("Grip", PrimitiveType.Cube, new Vector3(0f, -0.13f, 0.04f),
+                new Vector3(0.06f, 0.17f, 0.09f), materials.Gun, model.transform,
+                Quaternion.Euler(14f, 0f, 0f));
+            CreatePrimitive("TriggerGuard", PrimitiveType.Cube, new Vector3(0f, -0.075f, 0.14f),
+                new Vector3(0.04f, 0.012f, 0.09f), materials.GunAccent, model.transform);
+
+            // Stock reaching back with a butt pad.
+            CreatePrimitive("Stock", PrimitiveType.Cube, new Vector3(0f, -0.005f, -0.11f),
+                new Vector3(0.075f, 0.1f, 0.2f), materials.Gun, model.transform);
+            CreatePrimitive("ButtPad", PrimitiveType.Cube, new Vector3(0f, -0.005f, -0.225f),
+                new Vector3(0.085f, 0.12f, 0.03f), materials.GunAccent, model.transform);
+
+            // Emissive charge strip on the left cheek: the weapon's one glowing detail.
+            CreatePrimitive("StatusGlow", PrimitiveType.Cube, new Vector3(-0.053f, 0.015f, 0.26f),
+                new Vector3(0.006f, 0.026f, 0.14f), materials.Ammo, model.transform);
+
+            foreach (Transform piece in model.transform)
+            {
+                StripCollider(piece.gameObject);
+                piece.gameObject.layer = 2; // Ignore Raycast, matching the player rig.
+            }
 
             var muzzle = new GameObject("Muzzle");
             muzzle.transform.SetParent(weaponObject.transform, false);
@@ -549,13 +624,71 @@ namespace Shooter.EditorTools
             controller.slopeLimit = 45f;
             controller.stepOffset = 0.3f;
 
-            var body = CreatePrimitive("Body", PrimitiveType.Capsule, new Vector3(0f, 0.9f, 0f),
-                new Vector3(0.8f, 0.9f, 0.8f), materials.Enemy, root.transform);
-            StripCollider(body);
+            // All visuals live under one child so the CharacterController defines the physics
+            // shape and the parts never contribute colliders. Roughly 0.06..1.77 in height.
+            var model = new GameObject("Model");
+            model.transform.SetParent(root.transform, false);
 
-            GameObject eye = CreatePrimitive("Eye", PrimitiveType.Cube, new Vector3(0f, 1.45f, 0.33f),
-                new Vector3(0.42f, 0.12f, 0.08f), materials.EnemyEye, root.transform);
-            StripCollider(eye);
+            // Hips and lower torso.
+            CreatePrimitive("Hips", PrimitiveType.Cube, new Vector3(0f, 0.72f, 0f),
+                new Vector3(0.5f, 0.26f, 0.34f), materials.Enemy, model.transform);
+            CreatePrimitive("Spine Pack", PrimitiveType.Cube, new Vector3(0f, 1.18f, -0.24f),
+                new Vector3(0.4f, 0.5f, 0.18f), materials.GunAccent, model.transform);
+
+            // Chest: tapered capsule with an armour plate over it.
+            CreatePrimitive("Torso", PrimitiveType.Capsule, new Vector3(0f, 1.1f, 0f),
+                new Vector3(0.72f, 0.32f, 0.5f), materials.Enemy, model.transform);
+            CreatePrimitive("Chest Plate", PrimitiveType.Cube, new Vector3(0f, 1.12f, 0.24f),
+                new Vector3(0.6f, 0.44f, 0.16f), materials.Enemy, model.transform);
+            CreatePrimitive("Chest Core", PrimitiveType.Cube, new Vector3(0f, 1.1f, 0.33f),
+                new Vector3(0.22f, 0.16f, 0.03f), materials.EnemyEye, model.transform);
+
+            // Shoulder pads push the silhouette wider than the capsule collider.
+            CreatePrimitive("Shoulder L", PrimitiveType.Cube, new Vector3(-0.5f, 1.32f, 0f),
+                new Vector3(0.26f, 0.2f, 0.36f), materials.Enemy, model.transform,
+                Quaternion.Euler(0f, 0f, 10f));
+            CreatePrimitive("Shoulder R", PrimitiveType.Cube, new Vector3(0.5f, 1.32f, 0f),
+                new Vector3(0.26f, 0.2f, 0.36f), materials.Enemy, model.transform,
+                Quaternion.Euler(0f, 0f, -10f));
+
+            // Arms hang and angle outward, ending in claw pieces.
+            CreatePrimitive("Arm L", PrimitiveType.Capsule, new Vector3(-0.56f, 0.92f, 0.04f),
+                new Vector3(0.24f, 0.28f, 0.24f), materials.Enemy, model.transform,
+                Quaternion.Euler(6f, 0f, 10f));
+            CreatePrimitive("Arm R", PrimitiveType.Capsule, new Vector3(0.56f, 0.92f, 0.04f),
+                new Vector3(0.24f, 0.28f, 0.24f), materials.Enemy, model.transform,
+                Quaternion.Euler(6f, 0f, -10f));
+            CreatePrimitive("Claw L", PrimitiveType.Cube, new Vector3(-0.62f, 0.6f, 0.12f),
+                new Vector3(0.16f, 0.2f, 0.2f), materials.GunAccent, model.transform,
+                Quaternion.Euler(0f, 0f, 20f));
+            CreatePrimitive("Claw R", PrimitiveType.Cube, new Vector3(0.62f, 0.6f, 0.12f),
+                new Vector3(0.16f, 0.2f, 0.2f), materials.GunAccent, model.transform,
+                Quaternion.Euler(0f, 0f, -20f));
+
+            // Legs slightly apart, with forward-extending feet for a planted stance.
+            CreatePrimitive("Leg L", PrimitiveType.Capsule, new Vector3(-0.19f, 0.42f, 0f),
+                new Vector3(0.28f, 0.26f, 0.28f), materials.Enemy, model.transform);
+            CreatePrimitive("Leg R", PrimitiveType.Capsule, new Vector3(0.19f, 0.42f, 0f),
+                new Vector3(0.28f, 0.26f, 0.28f), materials.Enemy, model.transform);
+            CreatePrimitive("Foot L", PrimitiveType.Cube, new Vector3(-0.2f, 0.06f, 0.06f),
+                new Vector3(0.28f, 0.12f, 0.42f), materials.GunAccent, model.transform);
+            CreatePrimitive("Foot R", PrimitiveType.Cube, new Vector3(0.2f, 0.06f, 0.06f),
+                new Vector3(0.28f, 0.12f, 0.42f), materials.GunAccent, model.transform);
+
+            // Helmet perched on a short neck, with an emissive visor strip.
+            CreatePrimitive("Neck", PrimitiveType.Cube, new Vector3(0f, 1.44f, 0f),
+                new Vector3(0.22f, 0.14f, 0.22f), materials.GunAccent, model.transform);
+            CreatePrimitive("Head", PrimitiveType.Cube, new Vector3(0f, 1.61f, 0f),
+                new Vector3(0.36f, 0.32f, 0.34f), materials.Enemy, model.transform);
+            CreatePrimitive("EyeVisor", PrimitiveType.Cube, new Vector3(0f, 1.62f, 0.19f),
+                new Vector3(0.34f, 0.1f, 0.05f), materials.EnemyEye, model.transform);
+            CreatePrimitive("Crest", PrimitiveType.Cube, new Vector3(0f, 1.78f, -0.04f),
+                new Vector3(0.08f, 0.1f, 0.3f), materials.Enemy, model.transform);
+
+            foreach (Transform visual in model.transform)
+            {
+                StripCollider(visual.gameObject);
+            }
 
             EnemyHealth enemyHealth = root.AddComponent<EnemyHealth>();
             enemyHealth.debrisMaterial = materials.EnemyDebris;
@@ -800,6 +933,11 @@ namespace Shooter.EditorTools
                     new Vector3(0.3f, 0.3f, 0.3f), materials.Ammo, crate.transform,
                     Quaternion.Euler(0f, 45f, 0f));
                 StripCollider(lid);
+
+                // Emissive beacon cube so crates read at a distance even in fog.
+                GameObject beacon = CreatePrimitive("Beacon", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                    new Vector3(0.12f, 0.07f, 0.12f), materials.Ammo, crate.transform);
+                StripCollider(beacon);
 
                 AmmoPickup pickup = crate.AddComponent<AmmoPickup>();
                 pickup.weapon = rig.Weapon;
