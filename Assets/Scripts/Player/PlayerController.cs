@@ -267,7 +267,7 @@ namespace Shooter.Player
                 }
 
                 sprintHeld = Keyboard.current.leftShiftKey.isPressed;
-                crouchHeld = Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.cKey.isPressed;
+                crouchHeld = Keyboard.current.cKey.isPressed;
 
                 if (Keyboard.current.spaceKey.wasPressedThisFrame)
                 {

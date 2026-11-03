@@ -40,6 +40,7 @@ namespace Shooter.EditorTools
 
             ArenaMaterials materials = CreateMaterials();
             GameObject enemyPrefab = CreateEnemyPrefab(materials);
+            GameObject ammoCachePrefab = CreateAmmoCachePrefab(materials);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -48,7 +49,7 @@ namespace Shooter.EditorTools
             PlayerRig rig = BuildPlayer(materials);
             BuildPostProcessing(rig);
             List<Transform> spawnPoints = BuildSpawnPoints();
-            ManagersRig managers = BuildManagers(enemyPrefab, rig, spawnPoints);
+            ManagersRig managers = BuildManagers(enemyPrefab, ammoCachePrefab, rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
 
             // Wired after the HUD exists, so these components can raise UI feedback.
@@ -85,6 +86,7 @@ namespace Shooter.EditorTools
             public Material Spark;
             public Material EnemyDebris;
             public Material Accent;
+            public Material AmmoCache;
             public Material Skybox;
         }
 
@@ -108,6 +110,8 @@ namespace Shooter.EditorTools
                 EnemyDebris = GetOrCreateLitMaterial("EnemyDebris", new Color(0.42f, 0.09f, 0.11f), 0.3f, 0f),
                 Accent = GetOrCreateEmissiveMaterial("Accent", new Color(0.08f, 0.12f, 0.16f),
                     new Color(0.15f, 0.75f, 1f) * 1.6f),
+                AmmoCache = GetOrCreateEmissiveMaterial("AmmoCache", new Color(0.24f, 0.16f, 0.05f),
+                    new Color(1f, 0.68f, 0.2f) * 1.7f),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -702,8 +706,39 @@ namespace Shooter.EditorTools
             return prefab;
         }
 
-        // ---------------------------------------------------------------- managers
+        /// <summary>
+        /// Builds the ammo cache that elites drop. It is a one-shot pickup (it does not
+        /// respawn) and carries more rounds than the fixed arena crates.
+        /// </summary>
+        private static GameObject CreateAmmoCachePrefab(ArenaMaterials materials)
+        {
+            var root = new GameObject("AmmoCache");
 
+            GameObject crate = CreatePrimitive("Crate", PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
+                new Vector3(0.5f, 0.32f, 0.5f), materials.AmmoCache, root.transform);
+            StripCollider(crate);
+
+            GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
+                new Vector3(0.34f, 0.3f, 0.34f), materials.AmmoCache, root.transform,
+                Quaternion.Euler(0f, 45f, 0f));
+            StripCollider(lid);
+
+            GameObject beacon = CreatePrimitive("Beacon", PrimitiveType.Cube, new Vector3(0f, 0.44f, 0f),
+                new Vector3(0.16f, 0.09f, 0.16f), materials.AmmoCache, root.transform);
+            StripCollider(beacon);
+
+            AmmoPickup pickup = root.AddComponent<AmmoPickup>();
+            pickup.Configure(90, 1.9f, 0f, 90f, 0.12f);
+
+            string path = $"{PrefabsFolder}/AmmoCache.prefab";
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+
+            Debug.Log($"[Shooter] Ammo cache prefab saved to {path}.");
+            return prefab;
+        }
+
+        // ---------------------------------------------------------------- managers
         private sealed class ManagersRig
         {
             public GameManager Game;
@@ -711,7 +746,8 @@ namespace Shooter.EditorTools
             public AudioManager Audio;
         }
 
-        private static ManagersRig BuildManagers(GameObject enemyPrefab, PlayerRig rig, List<Transform> spawnPoints)
+        private static ManagersRig BuildManagers(GameObject enemyPrefab, GameObject ammoCachePrefab, PlayerRig rig,
+            List<Transform> spawnPoints)
         {
             var managers = new GameObject("Managers");
 
@@ -720,6 +756,7 @@ namespace Shooter.EditorTools
             AudioManager audioManager = managers.AddComponent<AudioManager>();
 
             waveSpawner.enemyPrefab = enemyPrefab;
+            waveSpawner.ammoCachePrefab = ammoCachePrefab;
             waveSpawner.playerTarget = rig.Health;
             waveSpawner.spawnPoints = spawnPoints.ToArray();
 
@@ -841,7 +878,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   CTRL slide   ·   R reload   ·   ESC free cursor",
+                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   C slide   ·   R reload   ·   ESC free cursor",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 

@@ -21,6 +21,8 @@ namespace Shooter.Weapons
         [Header("Ammo")]
         [SerializeField] private int ammoAmount = 45;
         [SerializeField] private float pickupRadius = 1.5f;
+
+        [Tooltip("Seconds before the crate comes back. Zero means it is used up for good.")]
         [SerializeField] private float respawnDelay = 20f;
 
         [Header("Motion")]
@@ -32,6 +34,32 @@ namespace Shooter.Weapons
         private Renderer[] renderers;
         private float respawnAt;
         private bool collected;
+        private bool referencesResolved;
+
+        /// <summary>Rounds added when the pickup is collected. Can be tuned per drop.</summary>
+        public int AmmoAmount
+        {
+            get => ammoAmount;
+            set => ammoAmount = Mathf.Max(0, value);
+        }
+
+        /// <summary>
+        /// Sets up a pickup. Used by the scene builder for the arena crates and by the
+        /// wave spawner for the caches elites drop.
+        /// </summary>
+        /// <param name="amount">Rounds handed over on pickup.</param>
+        /// <param name="radius">Pickup radius in metres.</param>
+        /// <param name="respawn">Seconds before it returns. Zero means one-shot.</param>
+        /// <param name="spin">Degrees per second of spin.</param>
+        /// <param name="bob">Bob height in metres.</param>
+        public void Configure(int amount, float radius, float respawn, float spin = 55f, float bob = 0.15f)
+        {
+            ammoAmount = Mathf.Max(0, amount);
+            pickupRadius = Mathf.Max(0.1f, radius);
+            respawnDelay = Mathf.Max(0f, respawn);
+            spinSpeed = spin;
+            bobHeight = bob;
+        }
 
         private void Awake()
         {
@@ -54,6 +82,8 @@ namespace Shooter.Weapons
 
                 return;
             }
+
+            ResolveReferences();
 
             if (weapon == null || player == null)
             {
@@ -91,7 +121,44 @@ namespace Shooter.Weapons
 
             AudioManager.Instance?.PlayAmmoPickup(transform.position);
             hud?.ShowToast($"+{added} AMMO");
+
+            if (respawnDelay <= 0f)
+            {
+                // One-shot drop (an elite's cache): take it and it is gone.
+                Destroy(gameObject);
+                return;
+            }
+
             SetCollected(true);
+        }
+
+        /// <summary>
+        /// Finds the weapon, player and HUD when the pickup was spawned at runtime and
+        /// therefore never got scene-builder wiring.
+        /// </summary>
+        private void ResolveReferences()
+        {
+            if (referencesResolved)
+            {
+                return;
+            }
+
+            if (weapon == null)
+            {
+                weapon = FindAnyObjectByType<Weapon>();
+            }
+
+            if (player == null)
+            {
+                player = FindAnyObjectByType<PlayerController>();
+            }
+
+            if (hud == null)
+            {
+                hud = FindAnyObjectByType<HUDController>();
+            }
+
+            referencesResolved = weapon != null && player != null;
         }
 
         private void SetCollected(bool value)

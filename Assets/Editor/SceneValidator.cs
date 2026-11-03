@@ -159,6 +159,15 @@ namespace Shooter.EditorTools
                 Check(prefab.GetComponent<EnemyHealth>() != null, "enemy prefab has EnemyHealth");
                 Check(prefab.GetComponent<CharacterController>() != null, "enemy prefab has a CharacterController");
 
+                Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
+
+                if (waveSpawner.ammoCachePrefab != null)
+                {
+                    AmmoPickup cache = waveSpawner.ammoCachePrefab.GetComponent<AmmoPickup>();
+                    Check(cache != null, "ammo cache prefab has an AmmoPickup");
+                    Check(cache != null && cache.AmmoAmount > 0, "ammo cache prefab carries ammo");
+                }
+
                 Renderer[] prefabRenderers = prefab.GetComponentsInChildren<Renderer>();
                 Check(prefabRenderers.Length >= 8, "enemy prefab has a detailed multi-part model");
 

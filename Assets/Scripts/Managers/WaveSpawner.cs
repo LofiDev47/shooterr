@@ -1,6 +1,7 @@
 using Shooter.Enemies;
 using Shooter.Player;
 using Shooter.UI;
+using Shooter.Weapons;
 using UnityEngine;
 
 namespace Shooter.Managers
@@ -22,6 +23,7 @@ namespace Shooter.Managers
     {
         [Header("Wiring (scene builder)")]
         public GameObject enemyPrefab;
+        public GameObject ammoCachePrefab;
         public PlayerHealth playerTarget;
         public Transform[] spawnPoints;
         public HUDController hud;
@@ -38,6 +40,10 @@ namespace Shooter.Managers
         [SerializeField] private float eliteDamageBonus = 6f;
         [SerializeField] private int eliteScoreValue = 25;
         [SerializeField] private Color eliteTint = new Color(1f, 0.5f, 0.12f);
+
+        [Header("Elite drops")]
+        [Tooltip("Ammo cache dropped when an elite dies. Null disables the drop.")]
+        [SerializeField] private int eliteDropAmmo = 90;
 
         [Header("Waves")]
         [SerializeField] private int startingEnemies = 3;
@@ -148,7 +154,7 @@ namespace Shooter.Managers
 
             if (health != null)
             {
-                health.Initialize(healthMultiplier, elite ? eliteScale : 1f, elite ? eliteTint : (Color?)null);
+                health.Initialize(healthMultiplier, elite ? eliteScale : 1f, elite ? eliteTint : (Color?)null, elite);
 
                 if (elite)
                 {
@@ -201,6 +207,37 @@ namespace Shooter.Managers
         {
             enemy.Died -= HandleEnemyDied;
             AliveCount = Mathf.Max(0, AliveCount - 1);
+
+            if (enemy.IsElite)
+            {
+                DropAmmoCache(enemy.transform.position);
+            }
+        }
+
+        /// <summary>
+        /// Spawns the elite's ammo cache where the elite fell. The cache is a one-shot
+        /// pickup: it stays on the ground until the player actually needs ammo.
+        /// </summary>
+        private void DropAmmoCache(Vector3 position)
+        {
+            if (ammoCachePrefab == null)
+            {
+                return;
+            }
+
+            Vector3 dropPosition = new Vector3(position.x, 0.55f, position.z);
+            GameObject cache = Instantiate(ammoCachePrefab, dropPosition, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+
+            AmmoPickup pickup = cache.GetComponent<AmmoPickup>();
+
+            if (pickup != null)
+            {
+                pickup.AmmoAmount = eliteDropAmmo;
+                pickup.weapon = null; // Resolved at runtime: the cache is spawned mid-wave.
+            }
+
+            hud?.ShowToast("ELITE DOWN  ·  AMMO CACHE DROPPED");
+            Debug.Log($"[Shooter] Elite dropped an ammo cache at {dropPosition}.");
         }
     }
 }
