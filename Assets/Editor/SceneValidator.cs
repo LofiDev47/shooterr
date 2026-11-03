@@ -6,6 +6,8 @@ using Shooter.Weapons;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace Shooter.EditorTools
@@ -130,6 +132,24 @@ namespace Shooter.EditorTools
                 Check(damageFlash.playerHealth != null, "damage flash is wired to player health");
                 Check(damageFlash.flashImage != null, "damage flash image is wired");
             }
+
+            if (hud != null)
+            {
+                Check(hud.hitMarkerGroup != null, "HUD hit marker is wired");
+            }
+
+            Volume volume = Object.FindAnyObjectByType<Volume>();
+            Check(volume != null && volume.sharedProfile != null, "post-processing volume has a profile");
+
+            Camera playerCamera = Object.FindAnyObjectByType<Camera>();
+
+            if (playerCamera != null)
+            {
+                Check(playerCamera.GetComponent<UniversalAdditionalCameraData>().renderPostProcessing,
+                    "player camera renders post-processing");
+            }
+
+            Debug.Log("[Validate] cooler-pass checks done.");
 
             if (waveSpawner != null && waveSpawner.enemyPrefab != null)
             {

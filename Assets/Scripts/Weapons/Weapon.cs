@@ -1,6 +1,8 @@
 using Shooter.Combat;
+using Shooter.Effects;
 using Shooter.Managers;
 using Shooter.Player;
+using Shooter.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -54,9 +56,11 @@ namespace Shooter.Weapons
         public Light muzzleLight;
         public LineRenderer tracer;
         public AudioSource audioSource;
+        public HUDController hud;
 
         [Header("Effects (wired by the scene builder)")]
         public Material impactMaterial;
+        public Material sparkMaterial;
 
         public WeaponState State { get; private set; }
 
@@ -208,7 +212,19 @@ namespace Shooter.Weapons
                 SpawnImpact(hit.point, hit.normal);
 
                 IDamageable target = hit.collider.GetComponentInParent<IDamageable>();
-                target?.TakeDamage(damage, hit.point);
+
+                if (target != null)
+                {
+                    target.TakeDamage(damage, hit.point);
+                    hud?.ShowHitMarker();
+                    AudioManager.Instance?.PlayWeaponHit(hit.point);
+                }
+                else if (sparkMaterial != null)
+                {
+                    // Ricochet sparks off geometry, thrown back along the reflected ray.
+                    DebrisBurst.Spawn(hit.point, Vector3.Reflect(direction, hit.normal), sparkMaterial,
+                        4, 3f, 0.035f, 0.6f);
+                }
             }
 
             PlayMuzzleFlash();
@@ -298,6 +314,7 @@ namespace Shooter.Weapons
                 float multiplier = player.IsAiming ? aimRecoilMultiplier : 1f;
                 float yawKick = Random.Range(-recoilYaw, recoilYaw) * multiplier;
                 player.AddRecoil(recoilPitch * multiplier, yawKick);
+                player.AddShake(0.3f * multiplier);
             }
         }
 

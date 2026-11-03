@@ -16,6 +16,7 @@ namespace Shooter.Managers
         public AudioClip weaponFire;
         public AudioClip weaponEmpty;
         public AudioClip weaponReload;
+        public AudioClip weaponHit;
         public AudioClip enemyHit;
         public AudioClip enemyDeath;
         public AudioClip enemyAttack;
@@ -46,6 +47,9 @@ namespace Shooter.Managers
 
         public void PlayWeaponEmpty(Vector3 position) =>
             Play(weaponEmpty, position, 0.5f);
+
+        public void PlayWeaponHit(Vector3 position) =>
+            Play(weaponHit, position, 0.5f);
 
         public void PlayWeaponReload(Vector3 position, AudioSource source) =>
             Play(weaponReload, position, 0.6f, source);

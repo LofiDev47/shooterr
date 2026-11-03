@@ -34,6 +34,11 @@ namespace Shooter.UI
         [Header("Toast (ammo pickups and similar)")]
         public Text toastText;
 
+        [Header("Hit marker")]
+        public CanvasGroup hitMarkerGroup;
+
+        [SerializeField] private float hitMarkerDuration = 0.18f;
+
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
 
@@ -46,6 +51,7 @@ namespace Shooter.UI
         private string lastStatus;
         private GameState lastState = (GameState)(-1);
         private float toastUntil;
+        private float hitMarkerUntil;
 
         private void Update()
         {
@@ -55,6 +61,24 @@ namespace Shooter.UI
             UpdateScore();
             UpdateState();
             UpdateToast();
+            UpdateHitMarker();
+        }
+
+        /// <summary>Flashes the crosshair tick marks when a shot lands on an enemy.</summary>
+        public void ShowHitMarker()
+        {
+            hitMarkerUntil = Time.unscaledTime + hitMarkerDuration;
+        }
+
+        private void UpdateHitMarker()
+        {
+            if (hitMarkerGroup == null)
+            {
+                return;
+            }
+
+            float remaining = hitMarkerUntil - Time.unscaledTime;
+            hitMarkerGroup.alpha = Mathf.Clamp01(remaining / hitMarkerDuration);
         }
 
         /// <summary>Shows a short-lived message just above the crosshair.</summary>

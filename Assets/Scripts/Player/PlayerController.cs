@@ -64,6 +64,13 @@ namespace Shooter.Player
         [Tooltip("Degrees per second the camera returns to its resting pitch after a shot.")]
         [SerializeField] private float recoilRecovery = 22f;
 
+        [Header("Screen shake")]
+        [Tooltip("Degrees per second the shake settles.")]
+        [SerializeField] private float shakeDecay = 4f;
+        [SerializeField] private float maxShake = 2.5f;
+        [Tooltip("Damage needed to produce a full-strength shake.")]
+        [SerializeField] private float damageShakeScale = 0.045f;
+
         [Header("References (wired by the scene builder)")]
         public Transform cameraPivot;
         public Camera playerCamera;
@@ -85,6 +92,8 @@ namespace Shooter.Player
             ControlsEnabled && cursorLocked && Time.time >= suppressFireUntil;
 
         private CharacterController controller;
+        private PlayerHealth health;
+        private float shakeAmount;
         private Vector3 planarVelocity;
         private float verticalVelocity;
         private float yaw;
@@ -111,6 +120,7 @@ namespace Shooter.Player
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
+            health = GetComponent<PlayerHealth>();
             yaw = transform.eulerAngles.y;
 
             if (playerCamera == null)
@@ -127,6 +137,33 @@ namespace Shooter.Player
         private void Start()
         {
             LockCursor(true);
+        }
+
+        private void OnEnable()
+        {
+            if (health != null)
+            {
+                health.Damaged += HandleDamaged;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (health != null)
+            {
+                health.Damaged -= HandleDamaged;
+            }
+        }
+
+        private void HandleDamaged(float amount)
+        {
+            AddShake(Mathf.Clamp(amount * damageShakeScale, 0.15f, 1.1f));
+        }
+
+        /// <summary>Adds a short camera shake. Strength is in degrees.</summary>
+        public void AddShake(float strength)
+        {
+            shakeAmount = Mathf.Min(maxShake, Mathf.Max(shakeAmount, strength));
         }
 
         private void Update()
@@ -412,6 +449,7 @@ namespace Shooter.Player
         {
             recoilPitch = Mathf.MoveTowards(recoilPitch, 0f, recoilRecovery * Time.deltaTime);
             recoilYaw = Mathf.MoveTowards(recoilYaw, 0f, recoilRecovery * Time.deltaTime);
+            shakeAmount = Mathf.MoveTowards(shakeAmount, 0f, shakeDecay * Time.unscaledDeltaTime);
             ApplyCameraRotation();
         }
 
@@ -423,7 +461,19 @@ namespace Shooter.Player
             }
 
             float totalPitch = Mathf.Clamp(pitch + recoilPitch, -pitchLimit, pitchLimit);
-            cameraPivot.localRotation = Quaternion.Euler(totalPitch, recoilYaw, 0f);
+            Quaternion look = Quaternion.Euler(totalPitch, recoilYaw, 0f);
+
+            if (shakeAmount > 0.001f)
+            {
+                // Perlin noise gives a smoother shake than raw random offsets.
+                float t = Time.unscaledTime * 24f;
+                float offsetX = (Mathf.PerlinNoise(t, 0.37f) * 2f - 1f) * shakeAmount;
+                float offsetY = (Mathf.PerlinNoise(t, 4.11f) * 2f - 1f) * shakeAmount;
+                float offsetZ = (Mathf.PerlinNoise(t, 7.53f) * 2f - 1f) * shakeAmount * 0.5f;
+                look *= Quaternion.Euler(offsetX, offsetY, offsetZ);
+            }
+
+            cameraPivot.localRotation = look;
         }
 
         private void UpdateCameraRig(float deltaTime)

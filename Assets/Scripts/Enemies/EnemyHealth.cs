@@ -1,5 +1,6 @@
 using System;
 using Shooter.Combat;
+using Shooter.Effects;
 using Shooter.Managers;
 using UnityEngine;
 
@@ -16,6 +17,12 @@ namespace Shooter.Enemies
         [SerializeField] private float flashDuration = 0.08f;
         [SerializeField] private float deathDuration = 0.35f;
 
+        [Header("Effects (wired by the scene builder)")]
+        public Material debrisMaterial;
+
+        [Tooltip("Debris pieces spawned on death, per unit of scale.")]
+        [SerializeField] private int debrisPerScale = 10;
+
         public float MaxHealth { get; private set; }
         public float CurrentHealth { get; private set; }
         public bool IsDead { get; private set; }
@@ -31,6 +38,8 @@ namespace Shooter.Enemies
         private float deathTimer = -1f;
         private Vector3 deathScale;
         private Collider bodyCollider;
+        private Color tintColor = Color.white;
+        private bool hasTint;
 
         private void Awake()
         {
@@ -41,9 +50,13 @@ namespace Shooter.Enemies
         }
 
         /// <summary>
-        /// Applies per-wave scaling. Called by the spawner right after instantiation.
+        /// Applies per-wave scaling, plus optional elite size and colour.
+        /// Called by the spawner right after instantiation.
         /// </summary>
-        public void Initialize(float healthMultiplier)
+        /// <param name="healthMultiplier">Per-wave health scaling.</param>
+        /// <param name="scale">Uniform size multiplier (CharacterController scales with it).</param>
+        /// <param name="tint">Optional body colour override used to mark elites.</param>
+        public void Initialize(float healthMultiplier, float scale = 1f, Color? tint = null)
         {
             CacheComponents();
 
@@ -51,12 +64,22 @@ namespace Shooter.Enemies
             CurrentHealth = MaxHealth;
             IsDead = false;
             deathTimer = -1f;
-            transform.localScale = Vector3.one;
+            transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
+
+            hasTint = tint.HasValue;
+            tintColor = tint ?? Color.white;
+            ApplyTint();
 
             if (bodyCollider != null)
             {
                 bodyCollider.enabled = true;
             }
+        }
+
+        /// <summary>Overrides the score awarded for killing this enemy.</summary>
+        public void SetScoreValue(int value)
+        {
+            scoreValue = Mathf.Max(0, value);
         }
 
         /// <inheritdoc />
@@ -109,6 +132,11 @@ namespace Shooter.Enemies
             }
 
             AudioManager.Instance?.PlayEnemyDeath(transform.position);
+
+            int pieces = Mathf.RoundToInt(debrisPerScale * Mathf.Max(1f, deathScale.y));
+            DebrisBurst.Spawn(transform.position + Vector3.up * deathScale.y * 0.9f, Vector3.up,
+                debrisMaterial, pieces, 4.5f, 0.11f, 1.2f);
+
             GameManager.Instance?.AddScore(scoreValue);
             Died?.Invoke(this);
         }
@@ -141,6 +169,13 @@ namespace Shooter.Enemies
         {
             flashUntil = 0f;
 
+            // Elites keep their tint; plain enemies fall back to the shared material colour.
+            if (hasTint)
+            {
+                ApplyTint();
+                return;
+            }
+
             if (renderers == null)
             {
                 return;
@@ -152,6 +187,28 @@ namespace Shooter.Enemies
                 {
                     renderer.SetPropertyBlock(null);
                 }
+            }
+        }
+
+        private void ApplyTint()
+        {
+            if (!hasTint || renderers == null || renderers.Length == 0)
+            {
+                return;
+            }
+
+            propertyBlock ??= new MaterialPropertyBlock();
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                renderer.GetPropertyBlock(propertyBlock);
+                propertyBlock.SetColor(BaseColorId, tintColor);
+                renderer.SetPropertyBlock(propertyBlock);
             }
         }
 

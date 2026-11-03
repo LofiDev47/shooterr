@@ -167,6 +167,8 @@ MonoBehaviour:
   scoreValue: 10
   flashDuration: 0.08
   deathDuration: 0.35
+  debrisMaterial: {fileID: 2100000, guid: 41d871853d4e84581a478bbe2f122f9d, type: 2}
+  debrisPerScale: 10
 --- !u!114 &7969085949318855614
 MonoBehaviour:
   m_ObjectHideFlags: 0

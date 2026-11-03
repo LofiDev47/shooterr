@@ -1,5 +1,6 @@
 using Shooter.Enemies;
 using Shooter.Player;
+using Shooter.UI;
 using UnityEngine;
 
 namespace Shooter.Managers
@@ -23,6 +24,20 @@ namespace Shooter.Managers
         public GameObject enemyPrefab;
         public PlayerHealth playerTarget;
         public Transform[] spawnPoints;
+        public HUDController hud;
+
+        [Header("Elites")]
+        [Tooltip("First wave that can contain elites.")]
+        [SerializeField] private int eliteFromWave = 3;
+        [Range(0f, 1f)]
+        [SerializeField] private float eliteChance = 0.18f;
+        [SerializeField] private float eliteHealthMultiplier = 2.6f;
+        [SerializeField] private float eliteScale = 1.35f;
+        [Tooltip("How much slower than a normal enemy an elite moves.")]
+        [SerializeField] private float eliteSpeedPenalty = 1.1f;
+        [SerializeField] private float eliteDamageBonus = 6f;
+        [SerializeField] private int eliteScoreValue = 25;
+        [SerializeField] private Color eliteTint = new Color(1f, 0.5f, 0.12f);
 
         [Header("Waves")]
         [SerializeField] private int startingEnemies = 3;
@@ -115,18 +130,42 @@ namespace Shooter.Managers
 
             float waveIndex = CurrentWave - 1;
 
+            bool elite = CurrentWave >= eliteFromWave && Random.value < eliteChance;
+            float healthMultiplier = 1f + waveIndex * healthPerWave;
+            float speedBonus = waveIndex * speedPerWave;
+            float damageBonus = waveIndex * damagePerWave;
+
+            if (elite)
+            {
+                // Elites are bigger, tougher and hit harder, but slower.
+                healthMultiplier *= eliteHealthMultiplier;
+                speedBonus -= eliteSpeedPenalty;
+                damageBonus += eliteDamageBonus;
+            }
+
             EnemyHealth health = instance.GetComponent<EnemyHealth>();
             EnemyAI ai = instance.GetComponent<EnemyAI>();
 
             if (health != null)
             {
-                health.Initialize(1f + waveIndex * healthPerWave);
+                health.Initialize(healthMultiplier, elite ? eliteScale : 1f, elite ? eliteTint : (Color?)null);
+
+                if (elite)
+                {
+                    health.SetScoreValue(eliteScoreValue);
+                }
+
                 health.Died += HandleEnemyDied;
             }
 
             if (ai != null)
             {
-                ai.Initialize(playerTarget, waveIndex * speedPerWave, waveIndex * damagePerWave);
+                ai.Initialize(playerTarget, speedBonus, damageBonus);
+            }
+
+            if (elite)
+            {
+                hud?.ShowToast("ELITE INBOUND");
             }
 
             AliveCount++;

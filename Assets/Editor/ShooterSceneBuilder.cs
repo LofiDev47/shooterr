@@ -8,6 +8,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
 namespace Shooter.EditorTools
@@ -45,9 +46,15 @@ namespace Shooter.EditorTools
             ConfigureLighting(materials);
             BuildArena(materials);
             PlayerRig rig = BuildPlayer(materials);
+            BuildPostProcessing(rig);
             List<Transform> spawnPoints = BuildSpawnPoints();
             ManagersRig managers = BuildManagers(enemyPrefab, rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
+
+            // Wired after the HUD exists, so these components can raise UI feedback.
+            rig.Weapon.hud = hud;
+            managers.Waves.hud = hud;
+
             BuildAmmoPickups(materials, rig, hud);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -75,6 +82,9 @@ namespace Shooter.EditorTools
             public Material Muzzle;
             public Material Tracer;
             public Material Ammo;
+            public Material Spark;
+            public Material EnemyDebris;
+            public Material Accent;
             public Material Skybox;
         }
 
@@ -94,6 +104,10 @@ namespace Shooter.EditorTools
                 Muzzle = GetOrCreateUnlitMaterial("Muzzle", new Color(1f, 0.85f, 0.35f)),
                 Tracer = GetOrCreateUnlitMaterial("Tracer", new Color(1f, 0.92f, 0.55f)),
                 Ammo = GetOrCreateUnlitMaterial("Ammo", new Color(0.45f, 1f, 0.5f)),
+                Spark = GetOrCreateUnlitMaterial("Spark", new Color(1f, 0.87f, 0.45f)),
+                EnemyDebris = GetOrCreateLitMaterial("EnemyDebris", new Color(0.42f, 0.09f, 0.11f), 0.3f, 0f),
+                Accent = GetOrCreateEmissiveMaterial("Accent", new Color(0.08f, 0.12f, 0.16f),
+                    new Color(0.15f, 0.75f, 1f) * 1.6f),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -132,6 +146,22 @@ namespace Shooter.EditorTools
             if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", color);
             if (material.HasProperty("_Color")) material.SetColor("_Color", color);
 
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        /// <summary>Lit material with emission enabled, so bloom makes it glow.</summary>
+        private static Material GetOrCreateEmissiveMaterial(string name, Color baseColor, Color emission)
+        {
+            Material material = GetOrCreateLitMaterial(name, baseColor, 0.45f, 0f);
+            material.EnableKeyword("_EMISSION");
+
+            if (material.HasProperty("_EmissionColor"))
+            {
+                material.SetColor("_EmissionColor", emission);
+            }
+
+            material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             EditorUtility.SetDirty(material);
             return material;
         }
@@ -279,7 +309,86 @@ namespace Shooter.EditorTools
                     materials.Wall, arena.transform);
             }
 
+            // Emissive trim: a strip along each wall base and a cap on every pillar.
+            // Paired with the bloom in BuildPostProcessing these glow.
+            CreatePrimitive("Trim North", PrimitiveType.Cube, new Vector3(0f, 0.28f, ArenaHalfSize - 0.68f),
+                new Vector3(ArenaHalfSize * 2f - 2f, 0.12f, 0.06f), materials.Accent, arena.transform);
+            CreatePrimitive("Trim South", PrimitiveType.Cube, new Vector3(0f, 0.28f, -ArenaHalfSize + 0.68f),
+                new Vector3(ArenaHalfSize * 2f - 2f, 0.12f, 0.06f), materials.Accent, arena.transform);
+            CreatePrimitive("Trim East", PrimitiveType.Cube, new Vector3(ArenaHalfSize - 0.68f, 0.28f, 0f),
+                new Vector3(0.06f, 0.12f, ArenaHalfSize * 2f - 2f), materials.Accent, arena.transform);
+            CreatePrimitive("Trim West", PrimitiveType.Cube, new Vector3(-ArenaHalfSize + 0.68f, 0.28f, 0f),
+                new Vector3(0.06f, 0.12f, ArenaHalfSize * 2f - 2f), materials.Accent, arena.transform);
+
+            foreach (Vector3 pillar in pillarPositions)
+            {
+                CreatePrimitive("Pillar Cap", PrimitiveType.Cube, pillar + new Vector3(0f, 2.06f, 0f),
+                    new Vector3(1.34f, 0.12f, 1.34f), materials.Accent, arena.transform);
+            }
+
             ground.isStatic = true;
+        }
+
+        // ---------------------------------------------------------------- post processing
+
+        /// <summary>
+        /// Creates a global URP volume (bloom, vignette, ACES tonemapping) and enables
+        /// post-processing on the player camera.
+        /// </summary>
+        private static void BuildPostProcessing(PlayerRig rig)
+        {
+            const string profilePath = "Assets/Settings/ShooterPostProcessing.asset";
+
+            if (AssetDatabase.LoadAssetAtPath<VolumeProfile>(profilePath) != null)
+            {
+                AssetDatabase.DeleteAsset(profilePath);
+            }
+
+            VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            AssetDatabase.CreateAsset(profile, profilePath);
+
+            Bloom bloom = profile.Add<Bloom>(true);
+            bloom.intensity.overrideState = true;
+            bloom.intensity.value = 0.85f;
+            bloom.threshold.overrideState = true;
+            bloom.threshold.value = 0.9f;
+            bloom.scatter.overrideState = true;
+            bloom.scatter.value = 0.55f;
+
+            Vignette vignette = profile.Add<Vignette>(true);
+            vignette.intensity.overrideState = true;
+            vignette.intensity.value = 0.3f;
+            vignette.smoothness.overrideState = true;
+            vignette.smoothness.value = 0.45f;
+            vignette.color.overrideState = true;
+            vignette.color.value = new Color(0.02f, 0.02f, 0.05f);
+
+            Tonemapping tonemapping = profile.Add<Tonemapping>(true);
+            tonemapping.mode.overrideState = true;
+            tonemapping.mode.value = TonemappingMode.ACES;
+
+            ColorAdjustments adjustments = profile.Add<ColorAdjustments>(true);
+            adjustments.postExposure.overrideState = true;
+            adjustments.postExposure.value = 0.15f;
+            adjustments.contrast.overrideState = true;
+            adjustments.contrast.value = 10f;
+            adjustments.saturation.overrideState = true;
+            adjustments.saturation.value = 8f;
+
+            EditorUtility.SetDirty(profile);
+
+            var volumeObject = new GameObject("Post Processing");
+            Volume volume = volumeObject.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 0f;
+            volume.sharedProfile = profile;
+
+            if (rig.Camera != null)
+            {
+                rig.Camera.GetUniversalAdditionalCameraData().renderPostProcessing = true;
+            }
+
+            Debug.Log("[Shooter] Post-processing volume created (bloom, vignette, ACES).");
         }
 
         private static List<Transform> BuildSpawnPoints()
@@ -419,6 +528,7 @@ namespace Shooter.EditorTools
             weapon.tracer = tracer;
             weapon.audioSource = audioSource;
             weapon.impactMaterial = materials.Impact;
+            weapon.sparkMaterial = materials.Spark;
 
             flash.SetActive(false);
             flashLight.enabled = false;
@@ -447,7 +557,8 @@ namespace Shooter.EditorTools
                 new Vector3(0.42f, 0.12f, 0.08f), materials.EnemyEye, root.transform);
             StripCollider(eye);
 
-            root.AddComponent<EnemyHealth>();
+            EnemyHealth enemyHealth = root.AddComponent<EnemyHealth>();
+            enemyHealth.debrisMaterial = materials.EnemyDebris;
             root.AddComponent<EnemyAI>();
 
             string path = $"{PrefabsFolder}/Enemy.prefab";
@@ -573,6 +684,22 @@ namespace Shooter.EditorTools
             CreateCrosshairBar(crosshair, "Left", new Vector2(-9f, 0f), new Vector2(9f, 2f), crosshairColor);
             CreateCrosshairBar(crosshair, "Right", new Vector2(9f, 0f), new Vector2(9f, 2f), crosshairColor);
 
+            // Hit marker: four diagonal ticks that flash when a shot lands on an enemy.
+            RectTransform hitMarker = CreateRect("HitMarker", canvasObject.transform, new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
+            CanvasGroup hitMarkerGroup = hitMarker.gameObject.AddComponent<CanvasGroup>();
+            hitMarkerGroup.alpha = 0f;
+
+            Color hitMarkerColor = new Color(1f, 0.95f, 0.75f, 1f);
+            CreateCrosshairBar(hitMarker, "HitTopLeft", new Vector2(-6f, 6f), new Vector2(2f, 9f),
+                hitMarkerColor, -45f);
+            CreateCrosshairBar(hitMarker, "HitTopRight", new Vector2(6f, 6f), new Vector2(2f, 9f),
+                hitMarkerColor, 45f);
+            CreateCrosshairBar(hitMarker, "HitBottomLeft", new Vector2(-6f, -6f), new Vector2(2f, 9f),
+                hitMarkerColor, 45f);
+            CreateCrosshairBar(hitMarker, "HitBottomRight", new Vector2(6f, -6f), new Vector2(2f, 9f),
+                hitMarkerColor, -45f);
+
             // Pickup toast (just above the crosshair, hidden until something happens).
             Text toastText = CreateText(canvasObject.transform, "ToastText", string.Empty, 22,
                 new Color(0.65f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
@@ -623,6 +750,7 @@ namespace Shooter.EditorTools
             hud.gameOverScoreText = gameOverScore;
             hud.hintText = hintText;
             hud.toastText = toastText;
+            hud.hitMarkerGroup = hitMarkerGroup;
 
             DamageFlash flash = canvasObject.AddComponent<DamageFlash>();
             flash.playerHealth = rig.Health;
@@ -682,10 +810,17 @@ namespace Shooter.EditorTools
             Debug.Log($"[Shooter] Placed {positions.Length} ammo crates.");
         }
 
-        private static void CreateCrosshairBar(Transform parent, string name, Vector2 position, Vector2 size, Color color)
+        private static void CreateCrosshairBar(Transform parent, string name, Vector2 position, Vector2 size,
+            Color color, float rotation = 0f)
         {
             RectTransform rect = CreateRect(name, parent, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 position, size);
+
+            if (!Mathf.Approximately(rotation, 0f))
+            {
+                rect.localRotation = Quaternion.Euler(0f, 0f, rotation);
+            }
+
             AddImage(rect, color);
         }
 
