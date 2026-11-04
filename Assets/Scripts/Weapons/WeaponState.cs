@@ -81,6 +81,12 @@ namespace Shooter.Weapons
             return true;
         }
 
+        /// <summary>Sets the magazine count, clamped to 0..MagazineSize (used by rebuilds and tests).</summary>
+        public void SetMagazineAmmo(int value)
+        {
+            AmmoInMagazine = Mathf.Clamp(value, 0, MagazineSize);
+        }
+
         /// <summary>Adds ammo to the reserve, respecting the reserve cap.</summary>
         public void AddReserveAmmo(int amount)
         {

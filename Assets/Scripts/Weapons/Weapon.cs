@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using Shooter.Combat;
 using Shooter.Effects;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
+using Shooter.Upgrades;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -125,7 +127,7 @@ namespace Shooter.Weapons
 
         private void Awake()
         {
-            State = new WeaponState(magazineSize, reserveAmmo, fireInterval, reloadDuration, maxReserve);
+            RebuildState();
             restLocalPosition = transform.localPosition;
             restLocalRotation = transform.localRotation;
 
@@ -143,6 +145,37 @@ namespace Shooter.Weapons
 
             HideEffects();
         }
+
+        /// <summary>
+        /// Rebuilds the pure weapon state with augment-modified stats, carrying the
+        /// current magazine and reserve counts across so picking a card mid-fight
+        /// does not magically refill the gun. Multipliers are read live from
+        /// <see cref="UpgradeManager"/>; this is only needed when magazine size,
+        /// fire interval, reload duration or the reserve cap change.
+        /// </summary>
+        public void RebuildState()
+        {
+            UpgradeManager upgrades = UpgradeManager.Instance;
+
+            int magazine = Mathf.Max(1, Mathf.CeilToInt(magazineSize * (upgrades != null ? upgrades.MagazineMultiplier : 1f)));
+            float interval = Mathf.Max(0.02f, fireInterval / (upgrades != null ? upgrades.FireRateMultiplier : 1f));
+            float reload = Mathf.Max(0.15f, reloadDuration / (upgrades != null ? upgrades.ReloadSpeedMultiplier : 1f));
+            int effectiveMaxReserve = maxReserve + (upgrades != null ? upgrades.ReserveBonus : 0);
+            int inMagazine = magazine;
+            int reserve = reserveAmmo;
+
+            if (State != null)
+            {
+                inMagazine = State.AmmoInMagazine;
+                reserve = State.ReserveAmmo;
+            }
+
+            State = new WeaponState(magazine, reserve, interval, reload, effectiveMaxReserve);
+            State.SetMagazineAmmo(inMagazine);
+        }
+
+        /// <summary>Called by the upgrade manager after an augment changes weapon stats.</summary>
+        public void OnAugmentsChanged() => RebuildState();
 
         private void Update()
         {
@@ -221,35 +254,71 @@ namespace Shooter.Weapons
         {
             State.TryFire(now);
 
+            UpgradeManager upgrades = UpgradeManager.Instance;
+
             bool aiming = player != null && player.IsAiming;
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
             Vector3 direction = aimCamera != null ? aimCamera.transform.forward : transform.forward;
-            float currentSpread = spreadDegrees * (aiming ? aimSpreadMultiplier : 1f);
+            float currentSpread = spreadDegrees * (aiming ? aimSpreadMultiplier : 1f) *
+                (upgrades != null ? upgrades.SpreadMultiplier : 1f);
             direction = ApplySpread(direction, currentSpread);
 
             Vector3 endPoint = origin + direction * range;
 
             // Layer 2 ("Ignore Raycast") holds the player, so the ray cannot hit its owner.
             int mask = ~(1 << 2);
+            int pierce = upgrades != null ? upgrades.BonusPierce : 0;
 
-            if (Physics.Raycast(origin, direction, out RaycastHit hit, range, mask, QueryTriggerInteraction.Ignore))
+            // RaycastAll, sorted by distance: the shot damages the first few distinct
+            // targets it meets (base target plus pierce budget) and stops on geometry.
+            // With no pierce this behaves exactly like a plain Raycast.
+            List<RaycastHit> hits = new List<RaycastHit>(
+                Physics.RaycastAll(origin, direction, range, mask, QueryTriggerInteraction.Ignore));
+            hits.Sort((a, b) => a.distance.CompareTo(b.distance));
+
+            List<IDamageable> damaged = new List<IDamageable>(pierce + 1);
+
+            foreach (RaycastHit hit in hits)
             {
                 endPoint = hit.point;
-                SpawnImpact(hit.point, hit.normal);
 
                 IDamageable target = hit.collider.GetComponentInParent<IDamageable>();
 
-                if (target != null)
+                if (target == null)
                 {
-                    target.TakeDamage(damage, hit.point);
-                    hud?.ShowHitMarker();
-                    AudioManager.Instance?.PlayWeaponHit(hit.point);
+                    // Solid geometry ends the shot wherever it is in the queue.
+                    SpawnImpact(hit.point, hit.normal);
+
+                    if (sparkMaterial != null)
+                    {
+                        // Ricochet sparks off geometry, thrown back along the reflected ray.
+                        DebrisBurst.Spawn(hit.point, Vector3.Reflect(direction, hit.normal), sparkMaterial,
+                            4, 3f, 0.035f, 0.6f);
+                    }
+
+                    break;
                 }
-                else if (sparkMaterial != null)
+
+                if (damaged.Contains(target))
                 {
-                    // Ricochet sparks off geometry, thrown back along the reflected ray.
-                    DebrisBurst.Spawn(hit.point, Vector3.Reflect(direction, hit.normal), sparkMaterial,
-                        4, 3f, 0.035f, 0.6f);
+                    continue; // a second collider on the same enemy.
+                }
+
+                float appliedDamage = damage * (upgrades != null ? upgrades.DamageMultiplier : 1f);
+
+                if (upgrades != null && upgrades.CritChance > 0f && Random.value < upgrades.CritChance)
+                {
+                    appliedDamage *= upgrades.CritMultiplier;
+                }
+
+                damaged.Add(target);
+                target.TakeDamage(appliedDamage, hit.point);
+                hud?.ShowHitMarker();
+                AudioManager.Instance?.PlayWeaponHit(hit.point);
+
+                if (damaged.Count > pierce)
+                {
+                    break; // base target plus the pierce budget is spent.
                 }
             }
 
@@ -341,6 +410,12 @@ namespace Shooter.Weapons
             if (player != null)
             {
                 float multiplier = player.IsAiming ? aimRecoilMultiplier : 1f;
+
+                if (UpgradeManager.Instance != null)
+                {
+                    multiplier *= UpgradeManager.Instance.RecoilMultiplier;
+                }
+
                 float yawKick = Random.Range(-recoilYaw, recoilYaw) * multiplier;
                 player.AddRecoil(recoilPitch * multiplier, yawKick);
                 player.AddShake(0.3f * multiplier);

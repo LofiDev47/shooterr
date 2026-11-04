@@ -3,6 +3,7 @@ using Shooter.Enemies;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
+using Shooter.Upgrades;
 using Shooter.Weapons;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -915,6 +916,7 @@ namespace Shooter.EditorTools
             public GameManager Game;
             public WaveSpawner Waves;
             public AudioManager Audio;
+            public UpgradeManager Upgrades;
         }
 
         private static ManagersRig BuildManagers(GameObject enemyPrefab, GameObject ammoCachePrefab, PlayerRig rig,
@@ -925,6 +927,7 @@ namespace Shooter.EditorTools
             GameManager gameManager = managers.AddComponent<GameManager>();
             WaveSpawner waveSpawner = managers.AddComponent<WaveSpawner>();
             AudioManager audioManager = managers.AddComponent<AudioManager>();
+            UpgradeManager upgradeManager = managers.AddComponent<UpgradeManager>();
 
             waveSpawner.enemyPrefab = enemyPrefab;
             waveSpawner.ammoCachePrefab = ammoCachePrefab;
@@ -935,7 +938,13 @@ namespace Shooter.EditorTools
             gameManager.playerController = rig.Controller;
             gameManager.waveSpawner = waveSpawner;
 
-            return new ManagersRig { Game = gameManager, Waves = waveSpawner, Audio = audioManager };
+            // Choice panel, card texts and the HUD reference are wired later in
+            // BuildHud; the panel object does not exist yet at this point.
+            upgradeManager.player = rig.Controller;
+            upgradeManager.playerHealth = rig.Health;
+
+            return new ManagersRig { Game = gameManager, Waves = waveSpawner, Audio = audioManager,
+                Upgrades = upgradeManager };
         }
 
         // ---------------------------------------------------------------- HUD
@@ -1075,6 +1084,9 @@ namespace Shooter.EditorTools
 
             gameOverPanel.gameObject.SetActive(false);
 
+            // Augment choice screen, built last so it draws over the game-over panel.
+            UpgradePanelRig upgradePanel = BuildUpgradePanel(canvasObject.transform, font);
+
             HUDController hud = canvasObject.AddComponent<HUDController>();
             hud.playerHealth = rig.Health;
             hud.weapon = rig.Weapon;
@@ -1095,6 +1107,14 @@ namespace Shooter.EditorTools
             hud.crosshairBars = new[] { crosshairTop, crosshairBottom, crosshairLeft, crosshairRight };
             hud.player = rig.Controller;
 
+            // The upgrade manager needs the finished HUD for toasts plus the choice panel.
+            UpgradeManager upgrades = managers.Upgrades;
+            upgrades.hud = hud;
+            upgrades.choicePanel = upgradePanel.Panel;
+            upgrades.cardTitles = upgradePanel.Titles;
+            upgrades.cardDescriptions = upgradePanel.Descriptions;
+            upgrades.choiceHintText = upgradePanel.Hint;
+
             DamageFlash flash = canvasObject.AddComponent<DamageFlash>();
             flash.playerHealth = rig.Health;
             flash.flashImage = damageImage;
@@ -1107,6 +1127,102 @@ namespace Shooter.EditorTools
             _ = healthBackground;
 
             return hud;
+        }
+
+        /// <summary>Everything the upgrade manager needs from the pick-augment screen.</summary>
+        private sealed class UpgradePanelRig
+        {
+            public GameObject Panel;
+            public Text[] Titles;
+            public Text[] Descriptions;
+            public Text Hint;
+        }
+
+        /// <summary>
+        /// Builds the wave-clear augment screen: a dim panel with three cards, each
+        /// showing its key badge, name and description. Input is keyboard only
+        /// (1 / 2 / 3), so no EventSystem is involved.
+        /// </summary>
+        private static UpgradePanelRig BuildUpgradePanel(Transform canvas, Font font)
+        {
+            UpgradePanelRig result = new UpgradePanelRig
+            {
+                Titles = new Text[3],
+                Descriptions = new Text[3],
+            };
+
+            Image panelImage = CreateFullScreenImage(canvas, "UpgradePanel", new Color(0.02f, 0.03f, 0.05f, 0.86f));
+            result.Panel = panelImage.gameObject;
+
+            Text title = CreateText(panelImage.transform, "UpgradeTitle", "WAVE CLEARED", 64,
+                new Color(1f, 0.82f, 0.3f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 250f), new Vector2(1200f, 80f), font, FontStyle.Bold);
+
+            Text subtitle = CreateText(panelImage.transform, "UpgradeSubtitle", "CHOOSE AN AUGMENT", 26,
+                new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 188f), new Vector2(1200f, 40f), font);
+
+            result.Hint = CreateText(panelImage.transform, "ChoiceHint", "PRESS 1 / 2 / 3 TO PICK", 24,
+                new Color(1f, 1f, 1f, 0.9f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(0f, -330f), new Vector2(1200f, 40f), font);
+
+            // One card per slot, spaced horizontally. The accent color differs per
+            // card so the choice reads at a glance.
+            Vector2[] offsets =
+            {
+                new Vector2(-490f, -40f), new Vector2(0f, -40f), new Vector2(490f, -40f),
+            };
+
+            Color[] accents =
+            {
+                new Color(0.35f, 0.85f, 1f),    // cyan
+                new Color(1f, 0.82f, 0.3f),     // gold
+                new Color(1f, 0.45f, 0.35f),    // orange-red
+            };
+
+            for (int i = 0; i < 3; i++)
+            {
+                RectTransform card = CreateRect("Card" + (i + 1), panelImage.transform, new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f), offsets[i], new Vector2(420f, 440f));
+
+                Image cardBack = card.gameObject.AddComponent<Image>();
+                cardBack.color = new Color(0.09f, 0.1f, 0.13f, 0.98f);
+                cardBack.raycastTarget = false;
+
+                // A thin accent strip along the top edge.
+                RectTransform strip = CreateRect("AccentStrip", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                    new Vector2(0f, 5f), new Vector2(416f, 10f));
+                AddImage(strip, accents[i]);
+
+                // Press key badge: which number picks this card.
+                RectTransform badge = CreateRect("KeyBadge", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                    new Vector2(0f, -34f), new Vector2(56f, 56f));
+                Image badgeBack = badge.gameObject.AddComponent<Image>();
+                badgeBack.color = accents[i];
+                badgeBack.raycastTarget = false;
+
+                Text badgeText = CreateText(badge, "KeyText", (i + 1).ToString(), 30,
+                    new Color(0.05f, 0.06f, 0.09f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56f, 56f), font, FontStyle.Bold);
+
+                result.Titles[i] = CreateText(card, "CardTitle", "AUGMENT", 30, accents[i],
+                    TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, 55f), new Vector2(380f, 44f), font, FontStyle.Bold);
+
+                Text description = CreateText(card, "CardDescription", "DESCRIBE THE CARD HERE", 22,
+                    Color.white, TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, -75f), new Vector2(360f, 250f), font);
+                description.horizontalOverflow = HorizontalWrapMode.Wrap; // Descriptions must wrap.
+                result.Descriptions[i] = description;
+
+                _ = badgeText;
+            }
+
+            _ = title;
+            _ = subtitle;
+
+            result.Panel.SetActive(false);
+            return result;
         }
 
         // ---------------------------------------------------------------- pickups

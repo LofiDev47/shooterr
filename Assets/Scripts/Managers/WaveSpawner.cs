@@ -109,6 +109,10 @@ namespace Shooter.Managers
                 Phase = WavePhase.Countdown;
                 CountdownRemaining = interWaveDelay;
                 AudioManager.Instance?.PlayWaveComplete();
+
+                // The cleared wave pays out an augment pick; the game pauses until
+                // the player makes it (UpgradeManager freezes time itself).
+                Upgrades.UpgradeManager.Instance?.OfferChoice();
             }
         }
 

@@ -144,6 +144,10 @@ namespace Shooter.Enemies
                 debrisMaterial, pieces, 4.5f, 0.11f, 1.2f);
 
             GameManager.Instance?.AddScore(scoreValue);
+
+            // Lifesteal augments heal off every confirmed kill.
+            Upgrades.UpgradeManager.Instance?.OnKill();
+
             Died?.Invoke(this);
         }
 

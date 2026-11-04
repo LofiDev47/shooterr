@@ -1,5 +1,6 @@
 using Shooter.Enemies;
 using Shooter.Player;
+using Shooter.Upgrades;
 using Shooter.Weapons;
 using UnityEditor;
 using UnityEngine;
@@ -28,6 +29,10 @@ namespace Shooter.EditorTools
             TestAmmoPickups();
             TestPlayerHealth();
             TestEnemyHealth();
+            TestAugmentMultipliersAndCaps();
+            TestAugmentAirJumps();
+            TestAugmentsOnPlayerHealth();
+            TestWeaponStateMagazineClamp();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -164,6 +169,102 @@ namespace Shooter.EditorTools
             Check(deathCount == 1, "damage after death is ignored");
 
             Object.DestroyImmediate(gameObject);
+        }
+
+        private static void TestAugmentMultipliersAndCaps()
+        {
+            var root = new GameObject("AugmentTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+
+            // Percentage stacks multiply together.
+            upgrades.AddDamageMultiplier(0.3f);
+            upgrades.AddDamageMultiplier(0.3f);
+            Check(Mathf.Approximately(upgrades.DamageMultiplier, 1.69f), "damage augments stack multiplicatively");
+
+            upgrades.ImproveSpread(0.4f);
+            upgrades.ImproveSpread(0.4f);
+            Check(Mathf.Approximately(upgrades.SpreadMultiplier, 0.36f), "spread augments stack down to 36%");
+
+            // Floors: repeated picks must never degenerate the stats to zero.
+            for (int i = 0; i < 6; i++)
+            {
+                upgrades.ImproveSpread(0.4f);
+                upgrades.ReduceRecoil(0.35f);
+                upgrades.ReduceSlideCooldown(0.4f);
+                upgrades.AddDamageReduction(0.15f);
+            }
+
+            Check(Mathf.Approximately(upgrades.SpreadMultiplier, 0.1f), "spread improvement is floored at 10%");
+            Check(Mathf.Approximately(upgrades.RecoilMultiplier, 0.1f), "recoil reduction is floored at 10%");
+            Check(Mathf.Approximately(upgrades.SlideCooldownMultiplier, 0.2f), "slide cooldown is floored at 20%");
+            Check(Mathf.Approximately(upgrades.DamageReduction, 0.45f), "damage reduction is capped at 45%");
+
+            upgrades.ResetAugments();
+            Check(Mathf.Approximately(upgrades.DamageMultiplier, 1f), "reset restores the damage multiplier");
+            Check(Mathf.Approximately(upgrades.DamageReduction, 0f), "reset clears damage reduction");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestAugmentAirJumps()
+        {
+            var root = new GameObject("AugmentJumpTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+
+            Check(!upgrades.TryConsumeAirJump(), "no air jump is available before the augment");
+            upgrades.AddExtraAirJump();
+            Check(upgrades.TryConsumeAirJump(), "the extra air jump is available on purchase");
+            Check(!upgrades.TryConsumeAirJump(), "a single extra jump cannot be used twice in the air");
+            upgrades.ResetAirJumps();
+            Check(upgrades.TryConsumeAirJump(), "landing restores the air jump");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestAugmentsOnPlayerHealth()
+        {
+            var root = new GameObject("AugmentHealthTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var health = root.AddComponent<PlayerHealth>();
+            upgrades.playerHealth = health; // The manager routes health augments through wiring.
+            health.ResetState();
+
+            health.TakeDamage(10f);
+            Check(Mathf.Approximately(health.CurrentHealth, 90f), "baseline damage is unaffected without augments");
+
+            upgrades.AddMaxHealth(40f);
+            Check(Mathf.Approximately(health.MaxHealth, 140f), "Titan Frame raises maximum health");
+            Check(Mathf.Approximately(health.CurrentHealth, 130f), "the max-health bonus also heals");
+
+            // TakeDamage reads the static instance; point it at this manager for the
+            // check and restore it afterwards so other tests are not affected.
+            var instanceProperty = typeof(UpgradeManager).GetProperty("Instance",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            object previousInstance = instanceProperty.GetValue(null);
+            instanceProperty.SetValue(null, upgrades);
+
+            upgrades.AddDamageReduction(0.15f);
+            health.TakeDamage(10f);
+            Check(Mathf.Approximately(health.CurrentHealth, 121.5f), "Kevlar Weave reduces damage by 15%");
+            instanceProperty.SetValue(null, previousInstance);
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestWeaponStateMagazineClamp()
+        {
+            var state = new WeaponState(30, 150, 0.1f, 1f);
+
+            state.SetMagazineAmmo(9999);
+            Check(state.AmmoInMagazine == state.MagazineSize, "magazine count clamps to the magazine size");
+            state.SetMagazineAmmo(-5);
+            Check(state.AmmoInMagazine == 0, "magazine count clamps at zero");
+
+            // The reserve bonus from augments only makes sense if the cap moves too.
+            var deep = new WeaponState(30, 300, 0.1f, 1f, 420);
+            deep.AddReserveAmmo(120);
+            Check(deep.MaxReserve == 420, "the raised reserve cap is applied on construction");
+            Check(deep.ReserveAmmo == 420, "the reserve bonus fits inside the raised cap");
         }
 
         private static void Check(bool condition, string description)

@@ -1,3 +1,4 @@
+using Shooter.Upgrades;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -140,8 +141,9 @@ namespace Shooter.Player
         /// <summary>Current planar velocity, exposed for weapon sway and HUD spread.</summary>
         public Vector3 Velocity => planarVelocity;
 
-        /// <summary>Top sprint speed, used to normalise speed-based effects.</summary>
-        public float SprintSpeed => sprintSpeed;
+        /// <summary>Top sprint speed with augments applied, used to normalise speed-based effects.</summary>
+        public float SprintSpeed => sprintSpeed *
+            (UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f);
 
         private void Awake()
         {
@@ -335,6 +337,7 @@ namespace Shooter.Player
             if (controller.isGrounded)
             {
                 lastGroundedTime = Time.time;
+                UpgradeManager.Instance?.ResetAirJumps();
 
                 if (verticalVelocity < 0f)
                 {
@@ -362,9 +365,10 @@ namespace Shooter.Player
 
         private void UpdateWalk(Vector2 input, float deltaTime)
         {
-            float targetSpeed = IsAiming
+            float speedScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f;
+            float targetSpeed = (IsAiming
                 ? walkSpeed * aimSpeedMultiplier
-                : (IsSprinting ? sprintSpeed : walkSpeed);
+                : (IsSprinting ? sprintSpeed : walkSpeed)) * speedScale;
 
             Vector3 wish = transform.right * input.x + transform.forward * input.y;
 
@@ -391,7 +395,10 @@ namespace Shooter.Player
                 return;
             }
 
-            if (Time.time < lastSlideEndTime + slideCooldown)
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float cooldownScale = upgrades != null ? upgrades.SlideCooldownMultiplier : 1f;
+
+            if (Time.time < lastSlideEndTime + slideCooldown * cooldownScale)
             {
                 return;
             }
@@ -415,7 +422,8 @@ namespace Shooter.Player
             }
 
             slideDirection = direction.normalized;
-            slideSpeed = Mathf.Max(planarVelocity.magnitude, sprintSpeed) * slideSpeedMultiplier;
+            slideSpeed = Mathf.Max(planarVelocity.magnitude, sprintSpeed) * slideSpeedMultiplier *
+                (upgrades != null ? upgrades.SlideSpeedMultiplier : 1f);
             slideEndTime = Time.time + slideDuration;
             isSliding = true;
             IsSprinting = false;
@@ -466,11 +474,13 @@ namespace Shooter.Player
                 return;
             }
 
-            bool canJump = Time.time - lastGroundedTime <= coyoteTime;
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
+            bool groundedJump = Time.time - lastGroundedTime <= coyoteTime;
 
-            if (!canJump)
+            if (!groundedJump && !(upgrades != null && upgrades.TryConsumeAirJump()))
             {
-                return;
+                return; // No coyote window and no air jump available.
             }
 
             if (isSliding)
@@ -478,7 +488,7 @@ namespace Shooter.Player
                 EndSlide(); // Slide-jumping keeps the slide momentum.
             }
 
-            verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
             lastGroundedTime = -999f;
             jumpBufferedUntil = -1f;
         }

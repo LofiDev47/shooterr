@@ -36,12 +36,34 @@ namespace Shooter.Player
             HealthChanged?.Invoke(CurrentHealth, maxHealth);
         }
 
+        /// <summary>
+        /// Permanently raises the maximum (Titan Frame). The current health grows by
+        /// the same amount so an augment pick never feels like it shrinks the bar.
+        /// </summary>
+        public void IncreaseMaxHealth(float amount)
+        {
+            if (amount <= 0f)
+            {
+                return;
+            }
+
+            maxHealth += amount;
+            CurrentHealth = Mathf.Min(maxHealth, CurrentHealth + amount);
+            HealthChanged?.Invoke(CurrentHealth, maxHealth);
+        }
+
         /// <summary>Applies damage, clamping at zero and raising events once.</summary>
         public void TakeDamage(float amount)
         {
             if (IsDead || amount <= 0f)
             {
                 return;
+            }
+
+            // Augment damage reduction (Kevlar Weave), read live so stacking works.
+            if (Upgrades.UpgradeManager.Instance != null)
+            {
+                amount *= 1f - Upgrades.UpgradeManager.Instance.DamageReduction;
             }
 
             float previous = CurrentHealth;

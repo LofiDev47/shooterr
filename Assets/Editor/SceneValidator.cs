@@ -2,6 +2,7 @@ using Shooter.Enemies;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
+using Shooter.Upgrades;
 using Shooter.Weapons;
 using System.Linq;
 using UnityEditor;
@@ -44,6 +45,7 @@ namespace Shooter.EditorTools
             Weapon weapon = Object.FindAnyObjectByType<Weapon>();
             HUDController hud = Object.FindAnyObjectByType<HUDController>();
             DamageFlash damageFlash = Object.FindAnyObjectByType<DamageFlash>();
+            UpgradeManager upgradeManager = Object.FindAnyObjectByType<UpgradeManager>();
             Camera camera = Object.FindAnyObjectByType<Camera>();
 
             Check(scene.IsValid(), "arena scene opens");
@@ -54,7 +56,29 @@ namespace Shooter.EditorTools
             Check(weapon != null, "scene contains a Weapon");
             Check(hud != null, "scene contains the HUD controller");
             Check(damageFlash != null, "scene contains the damage flash");
+            Check(upgradeManager != null, "scene contains an UpgradeManager");
             Check(camera != null, "scene contains a camera");
+
+            if (upgradeManager != null)
+            {
+                Check(upgradeManager.player != null, "UpgradeManager is wired to the player controller");
+                Check(upgradeManager.playerHealth != null, "UpgradeManager is wired to player health");
+                Check(upgradeManager.hud != null, "UpgradeManager is wired to the HUD");
+                Check(upgradeManager.choicePanel != null, "UpgradeManager has a choice panel");
+                Check(!upgradeManager.choicePanel.activeSelf, "the augment choice panel starts hidden");
+
+                bool cardsWired = upgradeManager.cardTitles != null && upgradeManager.cardDescriptions != null &&
+                    upgradeManager.cardTitles.Length == 3 && upgradeManager.cardDescriptions.Length == 3;
+
+                if (cardsWired)
+                {
+                    cardsWired = upgradeManager.cardTitles.All(card => card != null) &&
+                        upgradeManager.cardDescriptions.All(card => card != null);
+                }
+
+                Check(cardsWired, "the three augment cards are wired with title and description texts");
+                Check(upgradeManager.choiceHintText != null, "the augment choice hint text is wired");
+            }
 
             if (gameManager != null)
             {
