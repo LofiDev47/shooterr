@@ -1096,7 +1096,7 @@ namespace Shooter.EditorTools
                 partName.Contains("ReceiverTop") || partName.Contains("HandguardTop") ||
                 partName.Contains("HandguardBottom") || partName.Contains("Panel") ||
                 partName.Contains("Slide") || partName.Contains("Trigger") ||
-                partName.Contains("GripCap"))
+                partName.Contains("GripCap") || partName.Contains("OpticFrame"))
             {
                 return materials.GunAccent;
             }

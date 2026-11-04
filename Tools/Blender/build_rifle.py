@@ -200,11 +200,16 @@ for index in range(9):
     add_box(f"RailTooth{index}", (0.0, y, 0.088), (0.052, 0.014, 0.012), metal, parent=root, bevel=0.0015)
 
 add_box("OpticMount", (0.0, 0.03, 0.10), (0.052, 0.10, 0.03), body, parent=root, bevel=0.004)
-add_cylinder("OpticTube", (0.0, 0.03, 0.132), 0.030, 0.11, body, axis="Y", parent=root)
-add_cylinder("OpticRingFront", (0.0, -0.025, 0.132), 0.036, 0.016, metal, axis="Y", parent=root)
-add_cylinder("OpticRingRear", (0.0, 0.085, 0.132), 0.036, 0.016, metal, axis="Y", parent=root)
-add_cylinder("OpticGlass", (0.0, -0.027, 0.135), 0.029, 0.005, glow, axis="Y", parent=root)
-add_box("OpticDot", (0.0, 0.032, 0.137), (0.007, 0.002, 0.007), amber, parent=root, bevel=0.0)
+
+# Open holographic sight. There is deliberately no tube or lens: the camera
+# looks through the aperture in ADS, so a solid cylinder would read as a
+# black ball. Four thin bars frame a floating amber dot.
+add_box("OpticFrameTop", (0.0, 0.03, 0.170), (0.060, 0.020, 0.009), metal, parent=root, bevel=0.0015)
+add_box("OpticFrameBottom", (0.0, 0.03, 0.100), (0.060, 0.020, 0.009), metal, parent=root, bevel=0.0015)
+add_box("OpticFrameLeft", (-0.0285, 0.03, 0.135), (0.009, 0.020, 0.079), metal, parent=root, bevel=0.0015)
+add_box("OpticFrameRight", (0.0285, 0.03, 0.135), (0.009, 0.020, 0.079), metal, parent=root, bevel=0.0015)
+add_box("OpticDot", (0.0, 0.018, 0.135), (0.007, 0.002, 0.007), amber, parent=root, bevel=0.0)
+add_box("OpticDotTick", (0.0, 0.018, 0.117), (0.002, 0.002, 0.014), amber, parent=root, bevel=0.0)
 
 # Iron sights: a front post and a rear notch made from two ears.
 add_box("FrontSightBase", (0.0, -0.385, 0.095), (0.05, 0.03, 0.018), metal, parent=root, bevel=0.002)

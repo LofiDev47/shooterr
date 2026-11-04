@@ -258,6 +258,10 @@ namespace Shooter.EditorTools
                     "weapon model has muzzle detail");
                 Check(weaponParts.Any(part => part.name == "StatusGlow"),
                     "weapon model has a charge strip");
+                Check(!weaponParts.Any(part => part.name == "OpticTube"),
+                    "rifle optic has no solid tube to block the sight picture");
+                Check(weaponParts.Any(part => part.name == "OpticFrameTop"),
+                    "rifle optic is an open sight frame");
                 Check(sceneWeapon.SlideWired && sceneWeapon.slide != null,
                     "weapon has an animated bolt");
                 Check(sceneWeapon.shellEjectPoint != null && sceneWeapon.shellMaterial != null,

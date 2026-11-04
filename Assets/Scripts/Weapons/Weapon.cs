@@ -43,8 +43,8 @@ namespace Shooter.Weapons
         [Tooltip("Recoil multiplier while aiming.")]
         [Range(0f, 1f)]
         [SerializeField] private float aimRecoilMultiplier = 0.45f;
-        [Tooltip("Local position the weapon moves to while aiming.")]
-        [SerializeField] private Vector3 aimLocalPosition = new Vector3(0f, -0.125f, 0.28f);
+        [Tooltip("Local position the weapon moves to while aiming. Y centres the optic dot; Z clears the rear sight.")]
+        [SerializeField] private Vector3 aimLocalPosition = new Vector3(0f, -0.135f, 0.44f);
         [SerializeField] private float hideWeaponBelowFov = 45f;
         [SerializeField] private float sightBlendSpeed = 14f;
 
