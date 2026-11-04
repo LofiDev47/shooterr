@@ -35,6 +35,12 @@ namespace Shooter.Enemies
         [SerializeField] private float neighborRadius = 1.1f;
         [SerializeField] private float separationStrength = 2.5f;
 
+        [Header("Impact response")]
+        [Tooltip("Seconds a hit slows movement and knocks the enemy back.")]
+        [SerializeField] private float flinchDuration = 0.09f;
+        [Tooltip("Metres pushed away from the hit point per accepted shot.")]
+        [SerializeField] private float flinchKnockback = 0.09f;
+
         [Header("Ranged behaviour")]
         [Tooltip("Set by the spawner for marksmen. Zero keeps melee behaviour.")]
         [SerializeField] private float rangedHoldDistance;
@@ -55,6 +61,7 @@ namespace Shooter.Enemies
         private int strafeDirection = 1;
         private float strafeSwitchAt;
         private Vector3 lastPosition;
+        private float flinchTimer;
         private float stuckTimer;
         private float biasTimer;
         private float biasDirection = 1f;
@@ -62,12 +69,20 @@ namespace Shooter.Enemies
         /// <summary>True while a melee swipe is winding up, exposed for tests.</summary>
         public bool IsAttacking => attackStrikeTime >= 0f;
 
+        /// <summary>True while an accepted hit is slowing this enemy, exposed for tests.</summary>
+        public bool IsFlinching => flinchTimer > 0f;
+
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
             health = GetComponent<EnemyHealth>();
             model = transform.Find("Model");
             lastPosition = transform.position;
+
+            if (health != null)
+            {
+                health.Damaged += HandleDamaged;
+            }
         }
 
         /// <summary>Called by the wave spawner to set the target and per-wave scaling.</summary>
@@ -92,8 +107,37 @@ namespace Shooter.Enemies
             strafeSwitchAt = 0f;
         }
 
+        private void OnDestroy()
+        {
+            if (health != null)
+            {
+                health.Damaged -= HandleDamaged;
+            }
+        }
+
+        private void HandleDamaged(float damage, Vector3 hitPoint)
+        {
+            // A gunshot should register in the enemy's body, not just on the HP bar.
+            flinchTimer = Mathf.Max(flinchTimer, flinchDuration);
+
+            if (controller == null)
+            {
+                return;
+            }
+
+            Vector3 away = transform.position - hitPoint;
+            away.y = 0f;
+
+            if (away.sqrMagnitude > 0.0001f)
+            {
+                controller.Move(away.normalized * flinchKnockback);
+            }
+        }
+
         private void Update()
         {
+            flinchTimer = Mathf.Max(0f, flinchTimer - Time.deltaTime);
+
             if (health != null && health.IsDead)
             {
                 return;
@@ -152,9 +196,12 @@ namespace Shooter.Enemies
                 direction = Quaternion.Euler(0f, biasDirection * 55f, 0f) * direction;
             }
 
-            Vector3 desired = direction * moveSpeed + ComputeSeparation();
+            Vector3 desired = direction * moveSpeed * ImpactSpeedScale() + ComputeSeparation();
             planarVelocity = Vector3.MoveTowards(planarVelocity, desired, acceleration * deltaTime);
         }
+
+        /// <summary>How much of the normal speed is kept mid-flinch.</summary>
+        private float ImpactSpeedScale() => flinchTimer > 0f ? 0.45f : 1f;
 
         /// <summary>
         /// Marksman movement: close the gap, back out of knife range, otherwise
@@ -183,7 +230,7 @@ namespace Shooter.Enemies
             }
 
             Vector3 tangent = Vector3.Cross(Vector3.up, direction) * strafeDirection;
-            Vector3 desired = tangent * rangedStrafeSpeed + ComputeSeparation();
+            Vector3 desired = tangent * rangedStrafeSpeed * ImpactSpeedScale() + ComputeSeparation();
             planarVelocity = Vector3.MoveTowards(planarVelocity, desired, acceleration * deltaTime);
         }
 

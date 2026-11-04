@@ -822,6 +822,8 @@ MonoBehaviour:
   meleeLeanAngle: 14
   neighborRadius: 1.1
   separationStrength: 2.5
+  flinchDuration: 0.09
+  flinchKnockback: 0.09
   rangedHoldDistance: 0
   rangedStrafeSpeed: 2.6
 --- !u!114 &4928472784612200932

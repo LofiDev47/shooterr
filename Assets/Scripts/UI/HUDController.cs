@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Shooter.Combat;
 using Shooter.Managers;
 using Shooter.Player;
@@ -42,6 +43,13 @@ namespace Shooter.UI
 
         [SerializeField] private float hitMarkerDuration = 0.18f;
 
+        [Header("Damage numbers")]
+        [Tooltip("Floating damage text at the hit point. Headshots are gold and larger.")]
+        public bool showDamageNumbers = true;
+        [SerializeField] private int damageNumberFontSize = 18;
+        [SerializeField] private float damageNumberLifetime = 0.85f;
+        [SerializeField] private float damageNumberRise = 60f;
+
         [Header("Crosshair")]
         public RectTransform[] crosshairBars;
 
@@ -68,6 +76,19 @@ namespace Shooter.UI
         private Image[] hitMarkerImages;
         private int lastComboCount = -1;
         private float lastComboMultiplier = -1f;
+        private readonly List<DamageMarker> activeDamageNumbers = new List<DamageMarker>();
+        private Font markerFont;
+
+        /// <summary>Live damage numbers, exposed for tests and balance work.</summary>
+        public int ActiveDamageNumberCount => activeDamageNumbers.Count;
+
+        private sealed class DamageMarker
+        {
+            public Text Text;
+            public Vector2 Position;
+            public Vector2 Velocity;
+            public float Age;
+        }
 
         private void Awake()
         {
@@ -84,6 +105,8 @@ namespace Shooter.UI
                     }
                 }
             }
+
+            markerFont = healthText != null ? healthText.font : toastText != null ? toastText.font : null;
         }
 
         private void Update()
@@ -97,6 +120,7 @@ namespace Shooter.UI
             UpdateToast();
             UpdateHitMarker();
             UpdateCrosshair();
+            UpdateDamageNumbers();
         }
 
         /// <summary>
@@ -372,6 +396,99 @@ namespace Shooter.UI
                 comboText.color = Color.Lerp(
                     new Color(1f, 0.85f, 0.35f), new Color(1f, 0.42f, 0.16f),
                     Mathf.InverseLerp(2f, 4f, combo.Multiplier));
+            }
+        }
+
+        /// <summary>
+        /// Spawns a floating damage number at the world hit point. Critical hits are
+        /// orange, headshots are gold and larger; both stack (heads are the stronger
+        /// signal).
+        /// </summary>
+        public void ShowDamageNumber(Vector3 worldPoint, float amount, bool headshot, bool critical)
+        {
+            if (!showDamageNumbers || markerFont == null || player == null || player.playerCamera == null)
+            {
+                return;
+            }
+
+            Vector3 screen = player.playerCamera.WorldToScreenPoint(worldPoint);
+
+            if (screen.z < 0f)
+            {
+                return; // Behind the camera.
+            }
+
+            RectTransform canvasRect = transform as RectTransform;
+
+            if (canvasRect == null ||
+                !RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screen, null, out Vector2 local))
+            {
+                return;
+            }
+
+            var go = new GameObject("DamageNumber");
+            go.transform.SetParent(canvasRect, false);
+
+            Text text = go.AddComponent<Text>();
+            text.font = markerFont;
+            text.text = Mathf.RoundToInt(Mathf.Max(0f, amount)).ToString();
+            text.alignment = TextAnchor.MiddleCenter;
+            text.raycastTarget = false;
+            text.fontSize = headshot ? damageNumberFontSize + 6 : damageNumberFontSize;
+            text.fontStyle = FontStyle.Bold;
+            text.color = critical
+                ? new Color(1f, 0.45f, 0.12f, 1f)
+                : headshot ? new Color(1f, 0.82f, 0.2f, 1f) : new Color(1f, 1f, 1f, 1f);
+
+            RectTransform rect = text.rectTransform;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(90f, 28f);
+
+            Vector2 position = local + new Vector2(Random.Range(-16f, 16f), Random.Range(6f, 18f));
+            rect.anchoredPosition = position;
+
+            activeDamageNumbers.Add(new DamageMarker
+            {
+                Text = text,
+                Position = position,
+                Velocity = new Vector2(Random.Range(-12f, 12f), damageNumberRise),
+                Age = 0f,
+            });
+        }
+
+        private void UpdateDamageNumbers()
+        {
+            float deltaTime = Time.unscaledDeltaTime;
+
+            for (int i = activeDamageNumbers.Count - 1; i >= 0; i--)
+            {
+                DamageMarker marker = activeDamageNumbers[i];
+
+                if (marker.Text == null)
+                {
+                    activeDamageNumbers.RemoveAt(i);
+                    continue;
+                }
+
+                marker.Age += deltaTime;
+
+                if (marker.Age >= damageNumberLifetime)
+                {
+                    Destroy(marker.Text.gameObject);
+                    activeDamageNumbers.RemoveAt(i);
+                    continue;
+                }
+
+                // Ease outward motion to a stop and rise without uniform drag.
+                marker.Velocity = Vector2.Lerp(marker.Velocity, Vector2.zero, 1f - Mathf.Exp(-5f * deltaTime));
+                marker.Position += marker.Velocity * deltaTime;
+
+                Color color = marker.Text.color;
+                color.a = 1f - marker.Age / damageNumberLifetime;
+                marker.Text.color = color;
+                marker.Text.rectTransform.anchoredPosition = marker.Position;
             }
         }
 

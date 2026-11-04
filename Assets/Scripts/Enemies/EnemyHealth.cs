@@ -34,6 +34,9 @@ namespace Shooter.Enemies
         /// <summary>Raised once when the enemy dies, used by the wave spawner to count survivors.</summary>
         public event Action<EnemyHealth> Died;
 
+        /// <summary>(damage, hitPoint) on every accepted hit, used by the AI to flinch.</summary>
+        public event Action<float, Vector3> Damaged;
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         private Renderer[] renderers;
@@ -100,6 +103,7 @@ namespace Shooter.Enemies
             lastHitDamage = amount;
             Flash();
             AudioManager.Instance?.PlayEnemyHit(hitPoint);
+            Damaged?.Invoke(amount, hitPoint);
 
             if (CurrentHealth <= 0f)
             {

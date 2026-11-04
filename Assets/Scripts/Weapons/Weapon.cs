@@ -333,6 +333,7 @@ namespace Shooter.Weapons
                 damaged.Add(target);
                 target.TakeDamage(appliedDamage, hit.point);
                 hud?.ShowHitMarker(headshot);
+                hud?.ShowDamageNumber(hit.point, appliedDamage, headshot, critical);
                 AudioManager.Instance?.PlayWeaponHit(hit.point);
 
                 if (critical)
