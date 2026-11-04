@@ -40,6 +40,8 @@ namespace Shooter.EditorTools
             TestComboTracker();
             TestHeadshotBounds();
             TestShotgunState();
+            TestRangeFalloffAndMelee();
+            TestBallisticsAugments();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -353,6 +355,57 @@ namespace Shooter.EditorTools
             }
 
             Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.16f), "Adrenaline Surge caps at eight kills");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestRangeFalloffAndMelee()
+        {
+            Check(Mathf.Approximately(
+                    Weapon.RangeDamageMultiplier(10f, 1f, 18f, 60f, 0.65f), 1f),
+                "rifle keeps full damage inside its falloff window");
+
+            float slow = Weapon.RangeDamageMultiplier(40f, 1f, 18f, 60f, 0.65f);
+            float fast = Weapon.RangeDamageMultiplier(40f, 1.7f, 18f, 60f, 0.65f);
+
+            Check(slow < 0.95f, "rifle damage falls off at long range");
+            Check(fast > slow + 0.02f, "high velocity retains more damage at range");
+            Check(Weapon.RangeDamageMultiplier(200f, 1f, 18f, 60f, 0.65f) >= 0.649f,
+                "rifle falloff never drops below its floor");
+
+            Check(Weapon.IsInMeleeArc(Vector3.zero, Vector3.forward, new Vector3(0f, 0f, 2f), 2.6f, 0.3f),
+                "melee hits a target in front");
+            Check(!Weapon.IsInMeleeArc(Vector3.zero, Vector3.forward, new Vector3(0f, 0f, -2f), 2.6f, 0.3f),
+                "melee does not hit a target behind");
+            Check(!Weapon.IsInMeleeArc(Vector3.zero, Vector3.forward, new Vector3(0f, 0f, 3.2f), 2.6f, 0.3f),
+                "melee respects its range");
+        }
+
+        private static void TestBallisticsAugments()
+        {
+            var root = new GameObject("BallisticsRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+
+            Check(!upgrades.ShotgunUnlocked, "underbarrel starts locked");
+            upgrades.UnlockShotgun();
+            Check(upgrades.ShotgunUnlocked, "Breach Tube unlocks the underbarrel");
+
+            upgrades.AddRicochetBounce();
+            upgrades.AddRicochetBounce();
+            upgrades.AddRicochetBounce();
+            Check(upgrades.RicochetBounces == 2, "ricochet bounces cap at two");
+
+            upgrades.AddBulletVelocity(0.35f);
+            upgrades.AddBulletVelocity(0.35f);
+            upgrades.AddBulletVelocity(0.35f);
+            Check(Mathf.Approximately(upgrades.BulletVelocityMultiplier, 1.7f),
+                "bullet velocity caps at 1.7x");
+
+            upgrades.AddBulletExplosion(2.4f, 0.35f);
+            upgrades.AddBulletExplosion(2.4f, 0.35f);
+            Check(Mathf.Approximately(upgrades.ExplosionRadius, 2.4f) &&
+                  Mathf.Approximately(upgrades.ExplosionDamageFraction, 0.35f),
+                "explosive rounds cap at one stack");
 
             Object.DestroyImmediate(root);
         }

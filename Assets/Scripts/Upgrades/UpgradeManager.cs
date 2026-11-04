@@ -139,6 +139,13 @@ namespace Shooter.Upgrades
         private int explosiveRadius;         // kills within this many metres chain
         private float ammoPerKillFraction;
 
+        // --- weapon-mode / ballistics cards ------------------------------------------
+        private bool shotgunUnlocked;
+        private int ricochetBounces;
+        private float bulletVelocityMultiplier = 1f;
+        private float explosionRadius;
+        private float explosionDamageFraction;
+
         private float critWindowEnd;         // last time Crit() fired
         private float baseCritChance;
         private int consecutiveCrits;
@@ -172,6 +179,11 @@ namespace Shooter.Upgrades
         public float AirborneDamageMultiplier => airborneDamageMultiplier;
         public float SpeedPenaltyPerShot => speedPenaltyPerShot;
         public float ScalpelDamagePerCrit => scalpelDamagePerCrit;
+        public bool ShotgunUnlocked => shotgunUnlocked;
+        public int RicochetBounces => ricochetBounces;
+        public float BulletVelocityMultiplier => bulletVelocityMultiplier;
+        public float ExplosionRadius => explosionRadius;
+        public float ExplosionDamageFraction => explosionDamageFraction;
 
         /// <summary>Base crit chance (before Chain Crits extends it dynamically).</summary>
         public float BaseCritChance => baseCritChance;
@@ -576,6 +588,23 @@ namespace Shooter.Upgrades
             bonusPierce = Mathf.Min(3, bonusPierce + amount);
         }
 
+        /// <summary>Breach Tube: permanently enables the underbarrel shotgun.</summary>
+        public void UnlockShotgun() => shotgunUnlocked = true;
+
+        /// <summary>Ricochet Rounds: one extra wall bounce per stack, capped at two.</summary>
+        public void AddRicochetBounce() => ricochetBounces = Mathf.Min(2, ricochetBounces + 1);
+
+        /// <summary>High-Velocity Rounds: increases the range/damage-retention multiplier.</summary>
+        public void AddBulletVelocity(float amount) =>
+            bulletVelocityMultiplier = Mathf.Min(1.7f, bulletVelocityMultiplier + amount);
+
+        /// <summary>Explosive Rounds: adds blast radius and splash fraction, capped.</summary>
+        public void AddBulletExplosion(float radius, float fraction)
+        {
+            explosionRadius = Mathf.Min(2.4f, explosionRadius + radius);
+            explosionDamageFraction = Mathf.Min(0.35f, explosionDamageFraction + fraction);
+        }
+
         public void AddReserveBonus(int amount)
         {
             reserveBonus += amount;
@@ -696,6 +725,19 @@ namespace Shooter.Upgrades
             }
 
             var picked = new List<AugmentDef>();
+
+            // Make the new underbarrel mode discoverable: until it is taken it is
+            // guaranteed to appear in every offer (the player can still pick another).
+            if (!shotgunUnlocked)
+            {
+                AugmentDef breach = pool.Find(def => def.Id == "Breach Tube");
+
+                if (breach != null)
+                {
+                    picked.Add(breach);
+                    pool.Remove(breach);
+                }
+            }
 
             while (picked.Count < count && pool.Count > 0)
             {
@@ -840,12 +882,48 @@ namespace Shooter.Upgrades
                 },
                 new AugmentDef
                 {
-                    Id = "Ricochet Rounds",
+                    Id = "Piercing Rounds",
                     Rarity = AugmentRarity.Advanced,
-                    Title = "Ricochet Rounds",
+                    Title = "Piercing Rounds",
                     Description = "Shots pierce 1 extra enemy",
                     CanOffer = manager => manager.BonusPierce < 3,
                     Apply = manager => manager.AddBonusPierce(1),
+                },
+                new AugmentDef
+                {
+                    Id = "Ricochet Rounds",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Ricochet Rounds",
+                    Description = "Rifle rounds bounce off walls once for 70% damage. Stacks twice.",
+                    CanOffer = manager => manager.RicochetBounces < 2,
+                    Apply = manager => manager.AddRicochetBounce(),
+                },
+                new AugmentDef
+                {
+                    Id = "High-Velocity Rounds",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "High-Velocity Rounds",
+                    Description = "+35% rifle velocity: full damage carries much farther",
+                    CanOffer = manager => manager.BulletVelocityMultiplier < 1.7f,
+                    Apply = manager => manager.AddBulletVelocity(0.35f),
+                },
+                new AugmentDef
+                {
+                    Id = "Explosive Rounds",
+                    Rarity = AugmentRarity.Master,
+                    Title = "Explosive Rounds",
+                    Description = "Rifle rounds detonate on impact for 35% damage in a 2.4 m radius",
+                    CanOffer = manager => manager.ExplosionRadius < 2.4f,
+                    Apply = manager => manager.AddBulletExplosion(2.4f, 0.35f),
+                },
+                new AugmentDef
+                {
+                    Id = "Breach Tube",
+                    Rarity = AugmentRarity.Master,
+                    Title = "Breach Tube",
+                    Description = "Mount a four-shell underbarrel shotgun. Press F to fire",
+                    CanOffer = manager => !manager.ShotgunUnlocked,
+                    Apply = manager => manager.UnlockShotgun(),
                 },
                 new AugmentDef
                 {

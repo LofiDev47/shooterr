@@ -20,6 +20,8 @@ namespace Shooter.Managers
         public AudioClip weaponEmpty;
         public AudioClip weaponReload;
         public AudioClip shotgunFire;
+        public AudioClip meleeSwing;
+        public AudioClip explosion;
         public AudioClip weaponHit;
         public AudioClip enemyHit;
         public AudioClip enemyDeath;
@@ -62,6 +64,8 @@ namespace Shooter.Managers
             if (weaponEmpty == null) weaponEmpty = Generate("WeaponEmpty", 0.15f, EmptyClickSample);
             if (weaponReload == null) weaponReload = Generate("WeaponReload", 0.62f, ReloadSample);
             if (shotgunFire == null) shotgunFire = Generate("ShotgunFire", 0.55f, ShotgunFireSample);
+            if (meleeSwing == null) meleeSwing = Generate("MeleeSwing", 0.25f, MeleeSwingSample);
+            if (explosion == null) explosion = Generate("Explosion", 0.75f, ExplosionSample);
             if (weaponHit == null) weaponHit = Generate("WeaponHit", 0.18f, MetalTickSample);
             if (enemyHit == null) enemyHit = Generate("EnemyHit", 0.26f, EnemyImpactSample);
             if (enemyDeath == null) enemyDeath = Generate("EnemyDeath", 0.58f, EnemyDeathSample);
@@ -122,6 +126,23 @@ namespace Shooter.Managers
             float blast = (float)NoiseAt(time * 1600.0) * Decay(time, 22.0);
             float snap = (float)NoiseAt(time * 4200.0) * Decay(time, 55.0);
             return boom * 0.75f + body * 0.40f + blast * 0.60f + snap * 0.35f;
+        }
+
+        private float MeleeSwingSample(float t, double time)
+        {
+            float sweep = (float)Math.Sin(Math.PI * 2.0 * (180.0 + time * 900.0) * time) * Decay(time, 12.0);
+            float air = (float)NoiseAt(time * 2400.0) * Decay(time, 16.0);
+            float envelope = Mathf.Clamp01((float)time / 0.05f) * (1f - Mathf.Clamp01((float)time / 0.25f));
+            return (sweep * 0.35f + air * 0.45f) * envelope;
+        }
+
+        private float ExplosionSample(float t, double time)
+        {
+            float boom = (float)Math.Sin(Math.PI * 2.0 * 44.0 * time) * Decay(time, 6.5);
+            float body = (float)Math.Sin(Math.PI * 2.0 * 88.0 * time) * Decay(time, 9.0);
+            float blast = (float)NoiseAt(time * 1100.0) * Decay(time, 12.0);
+            float snap = (float)NoiseAt(time * 3600.0) * Decay(time, 32.0);
+            return boom * 0.8f + body * 0.4f + blast * 0.65f + snap * 0.3f;
         }
 
         private float EmptyClickSample(float t, double time)
@@ -236,6 +257,12 @@ namespace Shooter.Managers
 
         public void PlayShotgunFire(Vector3 position, AudioSource source) =>
             Play(shotgunFire, position, 0.85f, source);
+
+        public void PlayMeleeSwing(Vector3 position) =>
+            Play(meleeSwing, position, 0.5f);
+
+        public void PlayExplosion(Vector3 position) =>
+            Play(explosion, position, 0.8f);
 
         public void PlayWeaponHit(Vector3 position) =>
             Play(weaponHit, position, 0.5f);

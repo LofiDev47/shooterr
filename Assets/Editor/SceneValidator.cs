@@ -272,6 +272,8 @@ namespace Shooter.EditorTools
                     "underbarrel shotgun muzzle and flash are wired");
                 Check(sceneWeapon.pump != null && sceneWeapon.PumpWired,
                     "underbarrel shotgun has an animated pump");
+                Check(sceneWeapon.explosionMaterial != null,
+                    "weapon has an explosion material");
                 Check(sceneWeapon.shotgunEjectPoint != null,
                     "underbarrel shotgun has an ejection point");
             }

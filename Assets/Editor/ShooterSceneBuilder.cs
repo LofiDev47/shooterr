@@ -1068,6 +1068,7 @@ namespace Shooter.EditorTools
             weapon.audioSource = audioSource;
             weapon.impactMaterial = materials.Impact;
             weapon.sparkMaterial = materials.Spark;
+            weapon.explosionMaterial = materials.Muzzle;
             weapon.slide = slide;
             weapon.shellEjectPoint = ejectPoint;
             weapon.shellMaterial = materials.Brass;
@@ -1464,7 +1465,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC free cursor",
+                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC free cursor",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 

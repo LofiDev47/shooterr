@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Shooter.Combat;
 using Shooter.Managers;
 using Shooter.Player;
+using Shooter.Upgrades;
 using Shooter.Weapons;
 using UnityEngine;
 using UnityEngine.UI;
@@ -56,6 +57,11 @@ namespace Shooter.UI
 
         [Tooltip("Pixels the crosshair opens at full spread.")]
         [SerializeField] private float crosshairMaxSpread = 14f;
+
+        private const string HintBase =
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC free cursor";
+        private const string HintWithShotgun =
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC free cursor";
 
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
@@ -115,6 +121,7 @@ namespace Shooter.UI
             UpdateHealth();
             UpdateWeapon();
             UpdateShotgun();
+            UpdateHint();
             UpdateWave();
             UpdateScore();
             UpdateCombo();
@@ -311,10 +318,22 @@ namespace Shooter.UI
             }
         }
 
-        /// <summary>Underbarrel shell count and reload state.</summary>
+        /// <summary>Underbarrel shell count and reload state; hidden until the augment is taken.</summary>
         private void UpdateShotgun()
         {
             if (weapon == null || shotgunText == null)
+            {
+                return;
+            }
+
+            bool unlocked = UpgradeManager.Instance != null && UpgradeManager.Instance.ShotgunUnlocked;
+
+            if (shotgunText.enabled != unlocked)
+            {
+                shotgunText.enabled = unlocked;
+            }
+
+            if (!unlocked)
             {
                 return;
             }
@@ -339,6 +358,23 @@ namespace Shooter.UI
             {
                 shotgunText.text = text;
                 shotgunText.color = color;
+            }
+        }
+
+        /// <summary>The F hint only appears once the Breach Tube has been taken.</summary>
+        private void UpdateHint()
+        {
+            if (hintText == null)
+            {
+                return;
+            }
+
+            bool unlocked = UpgradeManager.Instance != null && UpgradeManager.Instance.ShotgunUnlocked;
+            string text = unlocked ? HintWithShotgun : HintBase;
+
+            if (hintText.text != text)
+            {
+                hintText.text = text;
             }
         }
 

@@ -52,6 +52,25 @@ namespace Shooter.Weapons
         [SerializeField] private float pumpTravel = 0.06f;
         [SerializeField] private float pumpCycleDuration = 0.35f;
 
+        [Header("Ballistics")]
+        [Tooltip("Rifle damage is full inside this distance, then falls off.")]
+        [SerializeField] private float falloffStart = 18f;
+        [SerializeField] private float falloffEnd = 60f;
+        [Range(0.1f, 1f)]
+        [SerializeField] private float falloffMinimum = 0.65f;
+        [Tooltip("Damage multiplier for a ricocheted hit.")]
+        [Range(0.1f, 1f)]
+        [SerializeField] private float ricochetDamageMultiplier = 0.7f;
+
+        [Header("Melee")]
+        [SerializeField] private float meleeRange = 2.6f;
+        [SerializeField] private float meleeDamage = 55f;
+        [SerializeField] private float meleeCooldown = 0.9f;
+        [Tooltip("Dot-product threshold for the melee cone (1 = dead ahead).")]
+        [Range(-1f, 1f)]
+        [SerializeField] private float meleeArcDot = 0.3f;
+        [SerializeField] private float meleeSwingDuration = 0.24f;
+
         [Header("Aim down sights")]
         [Tooltip("Spread multiplier while aiming.")]
         [Range(0f, 1f)]
@@ -121,6 +140,7 @@ namespace Shooter.Weapons
         [Header("Effects (wired by the scene builder)")]
         public Material impactMaterial;
         public Material sparkMaterial;
+        public Material explosionMaterial;
 
         public WeaponState State { get; private set; }
 
@@ -142,6 +162,14 @@ namespace Shooter.Weapons
         public float PumpOffset => pumpOffset;
 
         public bool PumpWired => pump != null;
+
+        /// <summary>True while the melee bash animation is playing.</summary>
+        public bool MeleeActive => Time.time - meleeSwingStartedAt < meleeSwingDuration;
+
+        public float MeleeCooldownRemaining => Mathf.Max(0f, meleeReadyAt - Time.time);
+
+        /// <summary>Number of points in the last tracer, exposed for ricochet tests.</summary>
+        public int LastTracerPointCount { get; private set; }
 
         /// <summary>False when the reserve is already full, so pickups are not wasted.</summary>
         public bool CanReceiveAmmo => State != null && State.ReserveAmmo < State.MaxReserve;
@@ -178,6 +206,8 @@ namespace Shooter.Weapons
         private float pumpOffset;
         private float pumpCycleStartedAt = -999f;
         private float shotgunFlashUntil;
+        private float meleeReadyAt;
+        private float meleeSwingStartedAt = -999f;
         private Vector3 swayPosition;        // smoothed sway offset (local space)
         private Vector2 swayRotation;        // smoothed sway rotation in degrees (x, y)
         private float lastFireTime = -999f;
@@ -287,6 +317,7 @@ namespace Shooter.Weapons
             HandleReloadInput(now);
             HandleFireInput(now);
             HandleShotgunInput();
+            HandleMeleeInput();
             UpdateEffects(now);
             UpdatePose(now);
             UpdateVisibility();
@@ -368,6 +399,90 @@ namespace Shooter.Weapons
             TryFireShotgun();
         }
 
+        private void HandleMeleeInput()
+        {
+            if (Keyboard.current == null || !Keyboard.current.vKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            if (GameManager.Instance != null && !GameManager.Instance.IsPlaying)
+            {
+                return;
+            }
+
+            if (player != null && !player.CanFireNow)
+            {
+                return;
+            }
+
+            TryMelee();
+        }
+
+        /// <summary>
+        /// Short-range bash. Hits every enemy in a forward cone, so it doubles as
+        /// crowd control when a runner closes the gap. Includes a real cooldown so
+        /// it cannot replace the gun.
+        /// </summary>
+        public bool TryMelee()
+        {
+            float now = Time.time;
+
+            if (now < meleeReadyAt ||
+                (GameManager.Instance != null && !GameManager.Instance.IsPlaying))
+            {
+                return false;
+            }
+
+            meleeReadyAt = now + meleeCooldown;
+            meleeSwingStartedAt = now;
+            AudioManager.Instance?.PlayMeleeSwing(transform.position);
+
+            Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
+            Vector3 forward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float appliedDamage = meleeDamage *
+                (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
+
+            Collider[] candidates = Physics.OverlapSphere(
+                origin + forward * (meleeRange * 0.5f),
+                meleeRange * 0.7f,
+                ~(1 << 2),
+                QueryTriggerInteraction.Ignore);
+
+            var hitTargets = new HashSet<IDamageable>();
+
+            foreach (Collider candidate in candidates)
+            {
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                IDamageable target = candidate.GetComponentInParent<IDamageable>();
+
+                if (target == null || !hitTargets.Add(target))
+                {
+                    continue;
+                }
+
+                Vector3 targetPosition = candidate.transform.position;
+
+                if (!IsInMeleeArc(origin, forward, targetPosition, meleeRange, meleeArcDot))
+                {
+                    continue;
+                }
+
+                Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (meleeRange * 0.5f));
+                target.TakeDamage(appliedDamage, hitPoint);
+                hud?.ShowHitMarker(false);
+                hud?.ShowDamageNumber(hitPoint, appliedDamage, false, false);
+                AudioManager.Instance?.PlayEnemyHit(hitPoint);
+            }
+
+            return true;
+        }
+
         private void Fire(float now)
         {
             State.TryFire(now);
@@ -381,93 +496,130 @@ namespace Shooter.Weapons
                 (upgrades != null ? upgrades.SpreadMultiplier : 1f);
             direction = ApplySpread(direction, currentSpread);
 
-            Vector3 endPoint = origin + direction * range;
-
-            // Layer 2 ("Ignore Raycast") holds the player, so the ray cannot hit its owner.
+            float velocity = upgrades != null ? upgrades.BulletVelocityMultiplier : 1f;
+            float effectiveRange = range * velocity;
             int mask = ~(1 << 2);
             int pierce = upgrades != null ? upgrades.BonusPierce : 0;
+            int maxBounces = upgrades != null ? upgrades.RicochetBounces : 0;
 
-            // RaycastAll, sorted by distance: the shot damages the first few distinct
-            // targets it meets (base target plus pierce budget) and stops on geometry.
-            // With no pierce this behaves exactly like a plain Raycast.
-            List<RaycastHit> hits = new List<RaycastHit>(
-                Physics.RaycastAll(origin, direction, range, mask, QueryTriggerInteraction.Ignore));
-            hits.Sort((a, b) => a.distance.CompareTo(b.distance));
+            var damaged = new HashSet<IDamageable>();
+            var tracerPoints = new List<Vector3> { muzzle != null ? muzzle.position : transform.position };
 
-            List<IDamageable> damaged = new List<IDamageable>(pierce + 1);
+            Vector3 segmentOrigin = origin;
+            Vector3 segmentDirection = direction;
+            float remainingRange = effectiveRange;
+            int bounceIndex = 0;
+            bool continueShot = true;
 
-            foreach (RaycastHit hit in hits)
+            while (continueShot)
             {
-                endPoint = hit.point;
+                continueShot = false;
 
-                IDamageable target = hit.collider.GetComponentInParent<IDamageable>();
+                List<RaycastHit> hits = new List<RaycastHit>(
+                    Physics.RaycastAll(segmentOrigin, segmentDirection, remainingRange, mask, QueryTriggerInteraction.Ignore));
+                hits.Sort((a, b) => a.distance.CompareTo(b.distance));
 
-                if (target == null)
+                Vector3 segmentEnd = segmentOrigin + segmentDirection * remainingRange;
+
+                foreach (RaycastHit hit in hits)
                 {
-                    // Solid geometry ends the shot wherever it is in the queue.
-                    SpawnImpact(hit.point, hit.normal);
+                    segmentEnd = hit.point;
+                    IDamageable target = hit.collider.GetComponentInParent<IDamageable>();
 
-                    if (sparkMaterial != null)
+                    if (target == null)
                     {
-                        // Ricochet sparks off geometry, thrown back along the reflected ray.
-                        DebrisBurst.Spawn(hit.point, Vector3.Reflect(direction, hit.normal), sparkMaterial,
-                            4, 3f, 0.035f, 0.6f);
+                        SpawnImpact(hit.point, hit.normal);
+
+                        if (sparkMaterial != null)
+                        {
+                            DebrisBurst.Spawn(hit.point, Vector3.Reflect(segmentDirection, hit.normal), sparkMaterial,
+                                4, 3f, 0.035f, 0.6f);
+                        }
+
+                        if (upgrades != null && upgrades.ExplosionRadius > 0f)
+                        {
+                            ExplodeBulletAt(hit.point, null,
+                                BulletExplosionBaseDamage(hit.distance, upgrades), upgrades);
+                        }
+
+                        // Ricochet off world geometry once per owned stack. A wall hit
+                        // with no bounces left ends the shot exactly as before.
+                        if (bounceIndex < maxBounces && remainingRange - hit.distance > 0.2f)
+                        {
+                            segmentOrigin = hit.point + hit.normal * 0.02f;
+                            segmentDirection = Vector3.Reflect(segmentDirection, hit.normal);
+                            remainingRange -= hit.distance;
+                            bounceIndex++;
+                            continueShot = true;
+                        }
+
+                        break;
                     }
 
-                    break;
+                    if (!damaged.Add(target))
+                    {
+                        continue; // a second collider on the same enemy.
+                    }
+
+                    float appliedDamage = damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
+                    appliedDamage *= RangeDamageMultiplier(hit.distance, velocity,
+                        falloffStart, falloffEnd, falloffMinimum);
+
+                    bool headshot = target is EnemyHealth && IsHeadshot(hit.collider.bounds, hit.point);
+
+                    if (headshot)
+                    {
+                        appliedDamage *= Mathf.Max(1f, headshotMultiplier);
+                    }
+
+                    appliedDamage *= 1f + (upgrades != null ? upgrades.SlideFirstHitDamageMultiplier : 0f);
+                    appliedDamage *= 1f + (upgrades != null ? upgrades.AirborneFirstHitDamageMultiplier : 0f);
+
+                    if (bounceIndex > 0)
+                    {
+                        appliedDamage *= ricochetDamageMultiplier;
+                    }
+
+                    bool critical = upgrades != null && Random.value < upgrades.EffectiveCritChance;
+
+                    if (critical)
+                    {
+                        appliedDamage *= upgrades.CritMultiplier;
+                    }
+
+                    target.TakeDamage(appliedDamage, hit.point);
+                    hud?.ShowHitMarker(headshot);
+                    hud?.ShowDamageNumber(hit.point, appliedDamage, headshot, critical);
+                    AudioManager.Instance?.PlayWeaponHit(hit.point);
+
+                    if (upgrades != null && upgrades.ExplosionRadius > 0f)
+                    {
+                        ExplodeBulletAt(hit.point, target, appliedDamage, upgrades);
+                    }
+
+                    if (critical)
+                    {
+                        upgrades.OnCrit();
+                    }
+
+                    if (upgrades != null)
+                    {
+                        // Winded trade: every accepted hit costs a sliver of move speed.
+                        upgrades.TakeSpeedPenalty();
+                    }
+
+                    // Piercing only applies to the straight ray; a ricochet hits one target.
+                    if (bounceIndex > 0 || damaged.Count > pierce)
+                    {
+                        break;
+                    }
                 }
 
-                if (damaged.Contains(target))
-                {
-                    continue; // a second collider on the same enemy.
-                }
-
-                float appliedDamage = damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
-
-                // Precision pays: a shot in the top fifth of the body doubles damage.
-                bool headshot = target is EnemyHealth && IsHeadshot(hit.collider.bounds, hit.point);
-
-                if (headshot)
-                {
-                    appliedDamage *= Mathf.Max(1f, headshotMultiplier);
-                }
-
-                appliedDamage *= 1f + (upgrades != null ? upgrades.SlideFirstHitDamageMultiplier : 0f);
-                appliedDamage *= 1f + (upgrades != null ? upgrades.AirborneFirstHitDamageMultiplier : 0f);
-
-                bool critical = upgrades != null && Random.value < upgrades.EffectiveCritChance;
-
-                if (critical)
-                {
-                    appliedDamage *= upgrades.CritMultiplier;
-                }
-
-
-                damaged.Add(target);
-                target.TakeDamage(appliedDamage, hit.point);
-                hud?.ShowHitMarker(headshot);
-                hud?.ShowDamageNumber(hit.point, appliedDamage, headshot, critical);
-                AudioManager.Instance?.PlayWeaponHit(hit.point);
-
-                if (critical)
-                {
-                    upgrades.OnCrit();
-                }
-
-                if (upgrades != null)
-                {
-                    // Winded trade: every accepted hit costs a sliver of move speed.
-                    upgrades.TakeSpeedPenalty();
-                }
-
-                if (damaged.Count > pierce)
-                {
-                    break; // base target plus the pierce budget is spent.
-                }
+                tracerPoints.Add(segmentEnd);
             }
 
             PlayMuzzleFlash();
-            PlayTracer(endPoint);
+            PlayTracer(tracerPoints);
             ApplyRecoil();
             CycleAction();
             PlayFireAudio();
@@ -476,18 +628,136 @@ namespace Shooter.Weapons
         }
 
         /// <summary>
-        /// True when <paramref name="point"/> is inside the top 20% of
-        /// <paramref name="bounds"/>. Scale-agnostic, so elites and runners use
-        /// the same rule. Exposed for headless tests.
+        /// Damage retention over distance. High-Velocity Rounds multiply both
+        /// distances, so the full-damage window and the falloff tail stretch out.
         /// </summary>
-        public static bool IsHeadshot(Bounds bounds, Vector3 point)
+        public static float RangeDamageMultiplier(float distance, float velocityMultiplier,
+            float start, float end, float minimum)
         {
-            if (bounds.size.y <= 0.001f)
+            float full = start * Mathf.Max(0.1f, velocityMultiplier);
+            float tail = end * Mathf.Max(0.1f, velocityMultiplier);
+
+            if (distance <= full)
+            {
+                return 1f;
+            }
+
+            float t = Mathf.Clamp01((distance - full) / Mathf.Max(0.01f, tail - full));
+            return Mathf.Lerp(1f, Mathf.Clamp01(minimum), t);
+        }
+
+        /// <summary>
+        /// True when the target is inside the melee cone. Exposed for tests.
+        /// </summary>
+        public static bool IsInMeleeArc(Vector3 origin, Vector3 forward, Vector3 target,
+            float range, float minimumDot)
+        {
+            Vector3 toTarget = target - origin;
+            toTarget.y = 0f;
+            forward.y = 0f;
+
+            if (toTarget.sqrMagnitude > range * range)
             {
                 return false;
             }
 
-            return point.y >= bounds.max.y - bounds.size.y * 0.2f;
+            if (toTarget.sqrMagnitude < 0.0001f)
+            {
+                return true;
+            }
+
+            return Vector3.Dot(forward.normalized, toTarget.normalized) >= minimumDot;
+        }
+
+        private float BulletExplosionBaseDamage(float distance, UpgradeManager upgrades)
+        {
+            float velocity = upgrades != null ? upgrades.BulletVelocityMultiplier : 1f;
+            return damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f) *
+                RangeDamageMultiplier(distance, velocity, falloffStart, falloffEnd, falloffMinimum);
+        }
+
+        /// <summary>
+        /// Explosive Rounds: splash damage around a bullet impact. The direct target
+        /// is excluded because it already took the full hit.
+        /// </summary>
+        private void ExplodeBulletAt(Vector3 point, IDamageable directTarget, float sourceDamage,
+            UpgradeManager upgrades)
+        {
+            if (upgrades == null || upgrades.ExplosionRadius <= 0f || upgrades.ExplosionDamageFraction <= 0f ||
+                sourceDamage <= 0f)
+            {
+                return;
+            }
+
+            float radius = upgrades.ExplosionRadius;
+            float fraction = upgrades.ExplosionDamageFraction;
+            SpawnExplosionEffect(point, radius);
+
+            foreach (EnemyHealth enemy in FindObjectsByType<EnemyHealth>(FindObjectsInactive.Exclude))
+            {
+                if (enemy == null || enemy.IsDead)
+                {
+                    continue;
+                }
+
+                if (directTarget is EnemyHealth directEnemy && enemy == directEnemy)
+                {
+                    continue;
+                }
+
+                float distance = Vector3.Distance(point, enemy.transform.position);
+
+                if (distance > radius)
+                {
+                    continue;
+                }
+
+                float falloff = Mathf.Lerp(1f, 0.4f, distance / Mathf.Max(0.01f, radius));
+                enemy.TakeDamage(sourceDamage * fraction * falloff, point);
+            }
+        }
+
+        private void SpawnExplosionEffect(Vector3 point, float radius)
+        {
+            float size = Mathf.Max(0.25f, radius * 0.45f);
+
+            if (explosionMaterial != null)
+            {
+                GameObject flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                flash.name = "Bullet Explosion";
+                flash.layer = 2;
+                flash.transform.position = point;
+                flash.transform.localScale = Vector3.one * size;
+
+                Collider collider = flash.GetComponent<Collider>();
+
+                if (collider != null)
+                {
+                    Destroy(collider);
+                }
+
+                MeshRenderer renderer = flash.GetComponent<MeshRenderer>();
+
+                if (renderer != null)
+                {
+                    renderer.sharedMaterial = explosionMaterial;
+                    renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                }
+
+                Destroy(flash, 0.12f);
+            }
+
+            DebrisBurst.Spawn(point, Random.onUnitSphere, sparkMaterial, 6, 4f, 0.04f, 0.5f);
+
+            var lightObject = new GameObject("Explosion Light");
+            lightObject.transform.position = point;
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.55f, 0.15f);
+            light.range = radius * 2.5f;
+            light.intensity = 8f;
+            light.shadows = LightShadows.None;
+            Destroy(lightObject, 0.15f);
         }
 
         /// <summary>
@@ -504,6 +774,12 @@ namespace Shooter.Weapons
             }
 
             UpgradeManager upgrades = UpgradeManager.Instance;
+
+            // The underbarrel is an augment, not starting equipment.
+            if (upgrades != null && !upgrades.ShotgunUnlocked)
+            {
+                return false;
+            }
             float fireRate = upgrades != null ? Mathf.Max(0.1f, upgrades.EffectiveFireRateMultiplier) : 1f;
             float reloadSpeed = upgrades != null ? Mathf.Max(0.1f, upgrades.ReloadSpeedMultiplier) : 1f;
             float now = Time.time;
@@ -627,6 +903,21 @@ namespace Shooter.Weapons
             lastFireTime = now;
         }
 
+        /// <summary>
+        /// True when <paramref name="point"/> is inside the top 20% of
+        /// <paramref name="bounds"/>. Scale-agnostic, so elites and runners use
+        /// the same rule. Exposed for headless tests.
+        /// </summary>
+        public static bool IsHeadshot(Bounds bounds, Vector3 point)
+        {
+            if (bounds.size.y <= 0.001f)
+            {
+                return false;
+            }
+
+            return point.y >= bounds.max.y - bounds.size.y * 0.2f;
+        }
+
         private static Vector3 ApplySpread(Vector3 forward, float degrees)
         {
             if (degrees <= 0.001f)
@@ -707,6 +998,25 @@ namespace Shooter.Weapons
             PlayTracer(muzzle != null ? muzzle.position : transform.position, endPoint);
         }
 
+        private void PlayTracer(List<Vector3> points)
+        {
+            if (tracer == null || points == null || points.Count < 2)
+            {
+                return;
+            }
+
+            tracer.positionCount = points.Count;
+            LastTracerPointCount = points.Count;
+
+            for (int i = 0; i < points.Count; i++)
+            {
+                tracer.SetPosition(i, points[i]);
+            }
+
+            tracer.enabled = true;
+            tracerUntil = Time.time + tracerTime;
+        }
+
         private void PlayTracer(Vector3 start, Vector3 endPoint)
         {
             if (tracer == null)
@@ -714,6 +1024,8 @@ namespace Shooter.Weapons
                 return;
             }
 
+            tracer.positionCount = 2;
+            LastTracerPointCount = 2;
             tracer.SetPosition(0, start);
             tracer.SetPosition(1, endPoint);
             tracer.enabled = true;
@@ -833,17 +1145,26 @@ namespace Shooter.Weapons
             UpdateSlide();
             UpdatePump();
 
+            float meleeProgress = meleeSwingDuration > 0.001f
+                ? (Time.time - meleeSwingStartedAt) / meleeSwingDuration
+                : 1f;
+            float meleeWeight = meleeProgress >= 0f && meleeProgress < 1f
+                ? Mathf.Sin(meleeProgress * Mathf.PI)
+                : 0f;
+
             // Recoil now lifts and rolls the gun a touch, so the animation has
             // more than one axis instead of a straight back-and-forth slide.
             Vector3 targetPosition = hipPosition
                 + new Vector3(0f, reloadDip + kickback * 0.014f, -kickback * 0.8f * Mathf.Lerp(1f, 0.45f, eased))
+                + new Vector3(-0.16f, -0.05f, 0.18f) * meleeWeight
                 + swayPosition;
 
             float kickAngle = kickback * 130f * Mathf.Lerp(1f, 0.4f, eased);
             float kickRoll = kickback * 16f * Mathf.Lerp(1f, 0.35f, eased);
             Quaternion targetRotation = hipRotation
                 * Quaternion.Euler(-kickAngle, 0f, reloadTilt - kickRoll)
-                * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f);
+                * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f)
+                * Quaternion.Euler(-8f * meleeWeight, -38f * meleeWeight, 22f * meleeWeight);
 
             float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);
