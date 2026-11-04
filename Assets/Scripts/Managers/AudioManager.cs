@@ -19,6 +19,7 @@ namespace Shooter.Managers
         public AudioClip weaponFire;
         public AudioClip weaponEmpty;
         public AudioClip weaponReload;
+        public AudioClip shotgunFire;
         public AudioClip weaponHit;
         public AudioClip enemyHit;
         public AudioClip enemyDeath;
@@ -60,6 +61,7 @@ namespace Shooter.Managers
             if (weaponFire == null) weaponFire = Generate("WeaponFire", 0.34f, WeaponFireSample);
             if (weaponEmpty == null) weaponEmpty = Generate("WeaponEmpty", 0.15f, EmptyClickSample);
             if (weaponReload == null) weaponReload = Generate("WeaponReload", 0.62f, ReloadSample);
+            if (shotgunFire == null) shotgunFire = Generate("ShotgunFire", 0.55f, ShotgunFireSample);
             if (weaponHit == null) weaponHit = Generate("WeaponHit", 0.18f, MetalTickSample);
             if (enemyHit == null) enemyHit = Generate("EnemyHit", 0.26f, EnemyImpactSample);
             if (enemyDeath == null) enemyDeath = Generate("EnemyDeath", 0.58f, EnemyDeathSample);
@@ -111,6 +113,15 @@ namespace Shooter.Managers
             float whip = (float)NoiseAt(time * 2200.0) * Decay(time, 35f);
             float click = (float)NoiseAt(time * 3900.0) * Decay(time, 75f);
             return body * 0.58f + bite * 0.22f + whip * 0.32f + click * 0.45f;
+        }
+
+        private float ShotgunFireSample(float t, double time)
+        {
+            float boom = (float)Math.Sin(Math.PI * 2.0 * 52.0 * time) * Decay(time, 12.0);
+            float body = (float)Math.Sin(Math.PI * 2.0 * 95.0 * time) * Decay(time, 16.0);
+            float blast = (float)NoiseAt(time * 1600.0) * Decay(time, 22.0);
+            float snap = (float)NoiseAt(time * 4200.0) * Decay(time, 55.0);
+            return boom * 0.75f + body * 0.40f + blast * 0.60f + snap * 0.35f;
         }
 
         private float EmptyClickSample(float t, double time)
@@ -222,6 +233,9 @@ namespace Shooter.Managers
 
         public void PlayWeaponEmpty(Vector3 position) =>
             Play(weaponEmpty, position, 0.5f);
+
+        public void PlayShotgunFire(Vector3 position, AudioSource source) =>
+            Play(shotgunFire, position, 0.85f, source);
 
         public void PlayWeaponHit(Vector3 position) =>
             Play(weaponHit, position, 0.5f);

@@ -27,6 +27,7 @@ namespace Shooter.UI
         public Text healthText;
         public Text ammoText;
         public Text reloadText;
+        public Text shotgunText;
         public Text waveText;
         public Text statusText;
         public Text scoreText;
@@ -113,6 +114,7 @@ namespace Shooter.UI
         {
             UpdateHealth();
             UpdateWeapon();
+            UpdateShotgun();
             UpdateWave();
             UpdateScore();
             UpdateCombo();
@@ -306,6 +308,37 @@ namespace Shooter.UI
             {
                 reloadText.enabled = false;
                 lastReloadPercent = -1;
+            }
+        }
+
+        /// <summary>Underbarrel shell count and reload state.</summary>
+        private void UpdateShotgun()
+        {
+            if (weapon == null || shotgunText == null)
+            {
+                return;
+            }
+
+            string text;
+            Color color;
+
+            if (weapon.IsShotgunReloading)
+            {
+                text = "SHELLS  RELOADING";
+                color = new Color(1f, 0.55f, 0.18f);
+            }
+            else
+            {
+                text = $"SHELLS {weapon.ShotgunShells}/{weapon.ShotgunCapacity}";
+                color = weapon.ShotgunShells > 0
+                    ? new Color(1f, 0.78f, 0.32f)
+                    : new Color(1f, 1f, 1f, 0.3f);
+            }
+
+            if (shotgunText.text != text)
+            {
+                shotgunText.text = text;
+                shotgunText.color = color;
             }
         }
 

@@ -36,6 +36,22 @@ namespace Shooter.Weapons
         [Tooltip("Damage multiplier when a shot lands in the top of an enemy's body.")]
         [SerializeField] private float headshotMultiplier = 2f;
 
+        [Header("Underbarrel shotgun")]
+        [Tooltip("Press F to fire the breach shotgun.")]
+        [SerializeField] private int shotgunCapacity = 4;
+        [SerializeField] private int shotgunPellets = 8;
+        [SerializeField] private float shotgunDamage = 10f;
+        [SerializeField] private float shotgunSpreadDegrees = 6f;
+        [SerializeField] private float shotgunRange = 45f;
+        [Tooltip("Damage multiplier at maximum range.")]
+        [Range(0.05f, 1f)]
+        [SerializeField] private float shotgunFalloff = 0.35f;
+        [SerializeField] private float shotgunCooldown = 0.9f;
+        [SerializeField] private float shotgunReloadDuration = 2.4f;
+        [SerializeField] private float shotgunRecoilPitch = 3.2f;
+        [SerializeField] private float pumpTravel = 0.06f;
+        [SerializeField] private float pumpCycleDuration = 0.35f;
+
         [Header("Aim down sights")]
         [Tooltip("Spread multiplier while aiming.")]
         [Range(0f, 1f)]
@@ -93,6 +109,11 @@ namespace Shooter.Weapons
         public Transform muzzle;
         public GameObject muzzleFlash;
         public Light muzzleLight;
+        public Transform shotgunMuzzle;
+        public GameObject shotgunFlash;
+        public Light shotgunLight;
+        public Transform shotgunEjectPoint;
+        public Transform pump;
         public LineRenderer tracer;
         public AudioSource audioSource;
         public HUDController hud;
@@ -107,6 +128,20 @@ namespace Shooter.Weapons
         public int ReserveAmmo => State != null ? State.ReserveAmmo : 0;
         public bool IsReloading => State != null && State.IsReloading;
         public float ReloadProgress01 => State != null ? State.ReloadProgress(Time.time) : 0f;
+
+        /// <summary>Loaded shells in the underbarrel shotgun.</summary>
+        public int ShotgunShells => shotgunState != null ? shotgunState.Shells : 0;
+
+        public int ShotgunCapacity => shotgunState != null ? shotgunState.Capacity : 0;
+
+        public bool IsShotgunReloading => shotgunState != null && shotgunState.IsReloading;
+
+        public float ShotgunReloadProgress => shotgunState != null ? shotgunState.ReloadProgress(Time.time) : 1f;
+
+        /// <summary>Current pump travel in metres, exposed for play-mode tests.</summary>
+        public float PumpOffset => pumpOffset;
+
+        public bool PumpWired => pump != null;
 
         /// <summary>False when the reserve is already full, so pickups are not wasted.</summary>
         public bool CanReceiveAmmo => State != null && State.ReserveAmmo < State.MaxReserve;
@@ -137,6 +172,12 @@ namespace Shooter.Weapons
         private Vector3 slideBackAxis = Vector3.back;
         private float slideOffset;
         private float slideCycleStartedAt = -999f;
+        private ShotgunState shotgunState;
+        private Vector3 pumpRestLocalPosition;
+        private Vector3 pumpBackAxis = Vector3.back;
+        private float pumpOffset;
+        private float pumpCycleStartedAt = -999f;
+        private float shotgunFlashUntil;
         private Vector3 swayPosition;        // smoothed sway offset (local space)
         private Vector2 swayRotation;        // smoothed sway rotation in degrees (x, y)
         private float lastFireTime = -999f;
@@ -156,6 +197,7 @@ namespace Shooter.Weapons
         private void Awake()
         {
             RebuildState();
+            shotgunState = new ShotgunState(shotgunCapacity);
             restLocalPosition = transform.localPosition;
             restLocalRotation = transform.localRotation;
 
@@ -182,6 +224,17 @@ namespace Shooter.Weapons
                 if (slideBackAxis.sqrMagnitude < 0.001f)
                 {
                     slideBackAxis = Vector3.up;
+                }
+            }
+
+            if (pump != null)
+            {
+                pumpRestLocalPosition = pump.localPosition;
+                pumpBackAxis = pump.parent.InverseTransformDirection(-transform.forward).normalized;
+
+                if (pumpBackAxis.sqrMagnitude < 0.001f)
+                {
+                    pumpBackAxis = Vector3.up;
                 }
             }
 
@@ -228,9 +281,12 @@ namespace Shooter.Weapons
 
             float now = Time.time;
             State.Tick(now);
+            shotgunState ??= new ShotgunState(shotgunCapacity);
+            shotgunState.Tick(now);
 
             HandleReloadInput(now);
             HandleFireInput(now);
+            HandleShotgunInput();
             UpdateEffects(now);
             UpdatePose(now);
             UpdateVisibility();
@@ -290,6 +346,26 @@ namespace Shooter.Weapons
             }
 
             Fire(now);
+        }
+
+        private void HandleShotgunInput()
+        {
+            if (Keyboard.current == null || !Keyboard.current.fKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            if (GameManager.Instance != null && !GameManager.Instance.IsPlaying)
+            {
+                return;
+            }
+
+            if (player != null && !player.CanFireNow)
+            {
+                return;
+            }
+
+            TryFireShotgun();
         }
 
         private void Fire(float now)
@@ -414,6 +490,143 @@ namespace Shooter.Weapons
             return point.y >= bounds.max.y - bounds.size.y * 0.2f;
         }
 
+        /// <summary>
+        /// Fires one shell from the underbarrel shotgun. Returns false when the
+        /// tube is empty or still cooling down.
+        /// </summary>
+        public bool TryFireShotgun()
+        {
+            shotgunState ??= new ShotgunState(shotgunCapacity);
+
+            if (GameManager.Instance != null && !GameManager.Instance.IsPlaying)
+            {
+                return false;
+            }
+
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float fireRate = upgrades != null ? Mathf.Max(0.1f, upgrades.EffectiveFireRateMultiplier) : 1f;
+            float reloadSpeed = upgrades != null ? Mathf.Max(0.1f, upgrades.ReloadSpeedMultiplier) : 1f;
+            float now = Time.time;
+
+            if (!shotgunState.TryFire(now, shotgunCooldown / fireRate, shotgunReloadDuration / reloadSpeed))
+            {
+                return false;
+            }
+
+            FireShotgun(now);
+            return true;
+        }
+
+        /// <summary>
+        /// Eight independent pellets with range falloff. Damage is aggregated per
+        /// enemy so one blast produces one hit marker and one damage number
+        /// instead of eight overlapping ones.
+        /// </summary>
+        private void FireShotgun(float now)
+        {
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            bool aiming = player != null && player.IsAiming;
+            Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
+            Vector3 forward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
+            float spread = shotgunSpreadDegrees * (aiming ? aimSpreadMultiplier : 1f) *
+                (upgrades != null ? upgrades.SpreadMultiplier : 1f);
+            int mask = ~(1 << 2);
+
+            var damageByTarget = new Dictionary<IDamageable, float>();
+            var pointByTarget = new Dictionary<IDamageable, Vector3>();
+            var headshotTargets = new HashSet<IDamageable>();
+            bool anyCrit = false;
+            Vector3 tracerEnd = origin + forward * shotgunRange;
+
+            for (int pellet = 0; pellet < shotgunPellets; pellet++)
+            {
+                Vector3 direction = ApplySpread(forward, spread);
+                List<RaycastHit> hits = new List<RaycastHit>(
+                    Physics.RaycastAll(origin, direction, shotgunRange, mask, QueryTriggerInteraction.Ignore));
+                hits.Sort((a, b) => a.distance.CompareTo(b.distance));
+
+                foreach (RaycastHit hit in hits)
+                {
+                    IDamageable target = hit.collider.GetComponentInParent<IDamageable>();
+
+                    if (target == null)
+                    {
+                        // Only a few decals per blast; eight holes per shell is noise.
+                        if (pellet < 3)
+                        {
+                            SpawnImpact(hit.point, hit.normal);
+                        }
+
+                        tracerEnd = hit.point;
+                        break;
+                    }
+
+                    float falloff = Mathf.Lerp(1f, shotgunFalloff, Mathf.Clamp01(hit.distance / shotgunRange));
+                    float appliedDamage = shotgunDamage * falloff *
+                        (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
+
+                    bool headshot = target is EnemyHealth && IsHeadshot(hit.collider.bounds, hit.point);
+
+                    if (headshot)
+                    {
+                        appliedDamage *= Mathf.Max(1f, headshotMultiplier);
+                    }
+
+                    if (upgrades != null && Random.value < upgrades.EffectiveCritChance)
+                    {
+                        appliedDamage *= upgrades.CritMultiplier;
+                        anyCrit = true;
+                    }
+
+                    damageByTarget[target] = damageByTarget.TryGetValue(target, out float existing)
+                        ? existing + appliedDamage
+                        : appliedDamage;
+
+                    if (!pointByTarget.ContainsKey(target))
+                    {
+                        pointByTarget[target] = hit.point;
+                    }
+
+                    if (headshot)
+                    {
+                        headshotTargets.Add(target);
+                    }
+
+                    tracerEnd = hit.point;
+                    break; // this pellet stops on the first damageable it meets
+                }
+            }
+
+            foreach (KeyValuePair<IDamageable, float> pair in damageByTarget)
+            {
+                Vector3 point = pointByTarget[pair.Key];
+                bool headshot = headshotTargets.Contains(pair.Key);
+
+                pair.Key.TakeDamage(pair.Value, point);
+                hud?.ShowHitMarker(headshot);
+                hud?.ShowDamageNumber(point, pair.Value, headshot, anyCrit);
+                upgrades?.TakeSpeedPenalty();
+            }
+
+            if (anyCrit)
+            {
+                upgrades?.OnCrit();
+            }
+
+            Vector3 muzzleStart = shotgunMuzzle != null
+                ? shotgunMuzzle.position
+                : muzzle != null ? muzzle.position : transform.position;
+
+            PlayShotgunFlash();
+            PlayTracer(muzzleStart, tracerEnd);
+            ApplyShotgunRecoil();
+            CyclePump();
+            EjectShell(shotgunEjectPoint != null ? shotgunEjectPoint : shellEjectPoint, 0.05f);
+            PlayShotgunAudio();
+
+            lastFireTime = now;
+        }
+
         private static Vector3 ApplySpread(Vector3 forward, float degrees)
         {
             if (degrees <= 0.001f)
@@ -472,14 +685,35 @@ namespace Shooter.Weapons
             muzzleFlashUntil = Time.time + muzzleFlashTime;
         }
 
+        private void PlayShotgunFlash()
+        {
+            if (shotgunFlash != null)
+            {
+                shotgunFlash.SetActive(true);
+                shotgunFlash.transform.localRotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+            }
+
+            if (shotgunLight != null)
+            {
+                shotgunLight.enabled = true;
+                shotgunLight.intensity = Random.Range(8f, 12f);
+            }
+
+            shotgunFlashUntil = Time.time + muzzleFlashTime * 1.4f;
+        }
+
         private void PlayTracer(Vector3 endPoint)
+        {
+            PlayTracer(muzzle != null ? muzzle.position : transform.position, endPoint);
+        }
+
+        private void PlayTracer(Vector3 start, Vector3 endPoint)
         {
             if (tracer == null)
             {
                 return;
             }
 
-            Vector3 start = muzzle != null ? muzzle.position : transform.position;
             tracer.SetPosition(0, start);
             tracer.SetPosition(1, endPoint);
             tracer.enabled = true;
@@ -506,10 +740,35 @@ namespace Shooter.Weapons
             }
         }
 
+        private void ApplyShotgunRecoil()
+        {
+            kickbackVelocity += 1.6f;
+
+            if (player != null)
+            {
+                float multiplier = player.IsAiming ? aimRecoilMultiplier : 1f;
+
+                if (UpgradeManager.Instance != null)
+                {
+                    multiplier *= UpgradeManager.Instance.RecoilMultiplier;
+                }
+
+                player.AddRecoil(shotgunRecoilPitch * multiplier,
+                    Random.Range(-1.4f, 1.4f) * multiplier);
+                player.AddShake(1.1f * multiplier);
+            }
+        }
+
         private void PlayFireAudio()
         {
             Vector3 position = muzzle != null ? muzzle.position : transform.position;
             AudioManager.Instance?.PlayWeaponFire(position, audioSource);
+        }
+
+        private void PlayShotgunAudio()
+        {
+            Vector3 position = shotgunMuzzle != null ? shotgunMuzzle.position : transform.position;
+            AudioManager.Instance?.PlayShotgunFire(position, audioSource);
         }
 
         private void UpdateEffects(float now)
@@ -522,6 +781,16 @@ namespace Shooter.Weapons
             if (muzzleLight != null && muzzleLight.enabled && now >= muzzleFlashUntil)
             {
                 muzzleLight.enabled = false;
+            }
+
+            if (shotgunFlash != null && shotgunFlash.activeSelf && now >= shotgunFlashUntil)
+            {
+                shotgunFlash.SetActive(false);
+            }
+
+            if (shotgunLight != null && shotgunLight.enabled && now >= shotgunFlashUntil)
+            {
+                shotgunLight.enabled = false;
             }
 
             if (tracer != null && tracer.enabled && now >= tracerUntil)
@@ -562,6 +831,7 @@ namespace Shooter.Weapons
 
             UpdateSway(eased);
             UpdateSlide();
+            UpdatePump();
 
             // Recoil now lifts and rolls the gun a touch, so the animation has
             // more than one axis instead of a straight back-and-forth slide.
@@ -611,9 +881,36 @@ namespace Shooter.Weapons
             slide.localPosition = slideRestLocalPosition + slideBackAxis * slideOffset;
         }
 
-        private void EjectShell()
+        /// <summary>Cycles the underbarrel pump fore-end after a shell.</summary>
+        private void CyclePump()
         {
-            if (shellMaterial == null || shellEjectPoint == null)
+            pumpOffset = pumpTravel;
+            pumpCycleStartedAt = Time.time;
+        }
+
+        private void UpdatePump()
+        {
+            if (pump == null)
+            {
+                return;
+            }
+
+            float progress = pumpCycleDuration > 0.001f
+                ? (Time.time - pumpCycleStartedAt) / pumpCycleDuration
+                : 1f;
+
+            pumpOffset = progress >= 0f && progress < 1f
+                ? pumpTravel * (1f - Mathf.SmoothStep(0f, 1f, progress))
+                : 0f;
+
+            pump.localPosition = pumpRestLocalPosition + pumpBackAxis * pumpOffset;
+        }
+
+        private void EjectShell() => EjectShell(shellEjectPoint, 0.034f);
+
+        private void EjectShell(Transform origin, float casingLength)
+        {
+            if (shellMaterial == null || origin == null)
             {
                 return;
             }
@@ -621,9 +918,9 @@ namespace Shooter.Weapons
             GameObject casing = GameObject.CreatePrimitive(PrimitiveType.Cube);
             casing.name = "Shell Casing";
             casing.layer = 2; // Ignore Raycast, matching every other effect piece.
-            casing.transform.position = shellEjectPoint.position;
+            casing.transform.position = origin.position;
             casing.transform.rotation = Random.rotation;
-            casing.transform.localScale = new Vector3(0.012f, 0.012f, 0.034f);
+            casing.transform.localScale = new Vector3(0.014f, 0.014f, Mathf.Max(0.02f, casingLength));
 
             Collider collider = casing.GetComponent<Collider>();
 
@@ -728,6 +1025,16 @@ namespace Shooter.Weapons
             if (muzzleLight != null)
             {
                 muzzleLight.enabled = false;
+            }
+
+            if (shotgunFlash != null)
+            {
+                shotgunFlash.SetActive(false);
+            }
+
+            if (shotgunLight != null)
+            {
+                shotgunLight.enabled = false;
             }
 
             if (tracer != null)

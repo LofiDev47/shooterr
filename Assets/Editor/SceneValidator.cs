@@ -155,6 +155,7 @@ namespace Shooter.EditorTools
                     "HUD game-over widgets are wired");
                 Check(hud.toastText != null, "HUD toast text is wired");
                 Check(hud.comboText != null, "HUD combo text is wired");
+                Check(hud.shotgunText != null, "HUD shotgun shell text is wired");
             }
 
             AmmoPickup[] pickups = Object.FindObjectsByType<AmmoPickup>(FindObjectsInactive.Exclude);
@@ -266,6 +267,13 @@ namespace Shooter.EditorTools
                     "weapon has an animated bolt");
                 Check(sceneWeapon.shellEjectPoint != null && sceneWeapon.shellMaterial != null,
                     "weapon has a wired shell ejection point");
+                Check(sceneWeapon.shotgunMuzzle != null && sceneWeapon.shotgunFlash != null &&
+                      sceneWeapon.shotgunLight != null,
+                    "underbarrel shotgun muzzle and flash are wired");
+                Check(sceneWeapon.pump != null && sceneWeapon.PumpWired,
+                    "underbarrel shotgun has an animated pump");
+                Check(sceneWeapon.shotgunEjectPoint != null,
+                    "underbarrel shotgun has an ejection point");
             }
 
             // --- arena layout ------------------------------------------------------

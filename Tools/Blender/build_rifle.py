@@ -247,6 +247,34 @@ add_box("StockSpine", (0.0, 0.435, 0.002), (0.066, 0.032, 0.12), body, parent=ro
 add_box("CheekRiser", (0.0, 0.36, 0.072), (0.056, 0.13, 0.020), rubber, parent=root, bevel=0.004)
 add_box("ButtPad", (0.0, 0.458, 0.0), (0.078, 0.028, 0.135), rubber, parent=root, bevel=0.005)
 
+# ---- underbarrel breach shotgun (secondary fire, animated pump)
+
+add_box("UnderbarrelMount", (0.0, -0.17, -0.070), (0.050, 0.070, 0.035), body, parent=root, bevel=0.003)
+add_cylinder("UnderbarrelTube", (0.0, -0.330, -0.085), 0.020, 0.280, metal, axis="Y", parent=root)
+add_cylinder("ShotgunBrake", (0.0, -0.468, -0.085), 0.027, 0.030, body, axis="Y", parent=root)
+
+# The pump is joined into one object so Weapon.cs can slide the whole
+# fore-end backward without moving loose ribs.
+pump_parts = [
+    add_box("Pump", (0.0, -0.290, -0.085), (0.060, 0.100, 0.060), rubber, parent=root, bevel=0.008),
+]
+
+for index in range(3):
+    pump_parts.append(add_box(f"PumpRib{index}", (0.0, -0.318 + index * 0.028, -0.085),
+                              (0.064, 0.009, 0.064), rubber, parent=root, bevel=0.0015))
+
+bpy.ops.object.select_all(action="DESELECT")
+
+for part in pump_parts:
+    part.select_set(True)
+
+bpy.context.view_layer.objects.active = pump_parts[0]
+bpy.ops.object.join()
+pump_parts[0].name = "Pump"
+
+add_empty("ShotgunMuzzle", (0.0, -0.485, -0.085), parent=root)
+add_empty("ShotgunEjectPoint", (0.060, -0.330, -0.055), parent=root)
+
 # ---- moving bolt / charging handle (animated by Weapon.cs)
 
 add_box("Slide", (0.055, 0.145, 0.04), (0.028, 0.12, 0.032), metal, parent=root, bevel=0.003)

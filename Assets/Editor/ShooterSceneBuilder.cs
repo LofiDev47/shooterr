@@ -997,6 +997,50 @@ namespace Shooter.EditorTools
             flashLight.intensity = 7f;
             flashLight.shadows = LightShadows.None;
 
+            // Underbarrel shotgun anchors and a second, wider flash rig.
+            Transform shotgunMuzzleAnchor = FindDeep(rifle.transform, "ShotgunMuzzle");
+            Transform shotgunEjectPoint = FindDeep(rifle.transform, "ShotgunEjectPoint");
+            Transform pump = FindDeep(rifle.transform, "Pump");
+            Transform shotgunMuzzle = null;
+            GameObject shotgunFlashRoot = null;
+            Light shotgunLight = null;
+
+            if (shotgunMuzzleAnchor != null)
+            {
+                var shotgunMuzzleObject = new GameObject("ShotgunMuzzle");
+                shotgunMuzzleObject.transform.SetParent(weaponObject.transform, false);
+                shotgunMuzzleObject.transform.localPosition =
+                    weaponObject.transform.InverseTransformPoint(shotgunMuzzleAnchor.position);
+                shotgunMuzzle = shotgunMuzzleObject.transform;
+
+                shotgunFlashRoot = new GameObject("ShotgunFlash");
+                shotgunFlashRoot.transform.SetParent(shotgunMuzzle, false);
+                CreatePrimitive("ShotgunFlashCore", PrimitiveType.Sphere, Vector3.zero,
+                    new Vector3(0.17f, 0.17f, 0.17f), materials.Muzzle, shotgunFlashRoot.transform);
+
+                for (int i = 0; i < 5; i++)
+                {
+                    CreatePrimitive($"ShotgunFlashPetal{i}", PrimitiveType.Cube, new Vector3(0f, 0f, 0.045f),
+                        new Vector3(0.024f, 0.23f, 0.024f), materials.Muzzle, shotgunFlashRoot.transform,
+                        Quaternion.Euler(0f, 0f, i * 36f));
+                }
+
+                foreach (Transform flashPart in shotgunFlashRoot.GetComponentsInChildren<Transform>(true))
+                {
+                    StripCollider(flashPart.gameObject);
+                    flashPart.gameObject.layer = 2;
+                }
+
+                var shotgunLightObject = new GameObject("ShotgunLight");
+                shotgunLightObject.transform.SetParent(shotgunMuzzle, false);
+                shotgunLight = shotgunLightObject.AddComponent<Light>();
+                shotgunLight.type = LightType.Point;
+                shotgunLight.color = new Color(1f, 0.68f, 0.28f);
+                shotgunLight.range = 10f;
+                shotgunLight.intensity = 0f;
+                shotgunLight.shadows = LightShadows.None;
+            }
+
             LineRenderer tracer = weaponObject.AddComponent<LineRenderer>();
             tracer.useWorldSpace = true;
             tracer.positionCount = 2;
@@ -1027,9 +1071,24 @@ namespace Shooter.EditorTools
             weapon.slide = slide;
             weapon.shellEjectPoint = ejectPoint;
             weapon.shellMaterial = materials.Brass;
+            weapon.shotgunMuzzle = shotgunMuzzle;
+            weapon.shotgunFlash = shotgunFlashRoot;
+            weapon.shotgunLight = shotgunLight;
+            weapon.shotgunEjectPoint = shotgunEjectPoint;
+            weapon.pump = pump;
 
             flashRoot.SetActive(false);
             flashLight.enabled = false;
+
+            if (shotgunFlashRoot != null)
+            {
+                shotgunFlashRoot.SetActive(false);
+            }
+
+            if (shotgunLight != null)
+            {
+                shotgunLight.enabled = false;
+            }
 
             return weapon;
         }
@@ -1084,7 +1143,7 @@ namespace Shooter.EditorTools
 
             if (partName.Contains("Grip") || partName.Contains("ButtPad") ||
                 partName.Contains("Cheek") || partName.Contains("Vent") ||
-                partName.Contains("EjectionPort"))
+                partName.Contains("EjectionPort") || partName.Contains("Pump"))
             {
                 return materials.Grip;
             }
@@ -1344,9 +1403,13 @@ namespace Shooter.EditorTools
                 new Vector2(360f, 20f), font);
 
             Text reloadText = CreateText(ammoPanel, "ReloadText", "RELOADING", 18, new Color(1f, 0.82f, 0.3f),
-                TextAnchor.MiddleRight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 14f),
+                TextAnchor.MiddleRight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, -12f),
                 new Vector2(360f, 24f), font, FontStyle.Bold);
             reloadText.enabled = false;
+
+            Text shotgunText = CreateText(ammoPanel, "ShotgunText", "SHELLS 4/4", 16,
+                new Color(1f, 0.78f, 0.32f), TextAnchor.MiddleRight, new Vector2(1f, 0f),
+                new Vector2(1f, 0f), new Vector2(0f, 14f), new Vector2(360f, 22f), font, FontStyle.Bold);
 
             // Wave (top center).
             Text waveText = CreateText(canvasObject.transform, "WaveText", "GET READY", 32, Color.white,
@@ -1401,7 +1464,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   C slide   ·   R reload   ·   ESC free cursor",
+                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC free cursor",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
@@ -1439,6 +1502,7 @@ namespace Shooter.EditorTools
             hud.healthText = healthText;
             hud.ammoText = ammoText;
             hud.reloadText = reloadText;
+            hud.shotgunText = shotgunText;
             hud.waveText = waveText;
             hud.statusText = statusText;
             hud.scoreText = scoreText;

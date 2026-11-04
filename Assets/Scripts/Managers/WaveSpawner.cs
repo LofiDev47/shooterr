@@ -80,13 +80,13 @@ namespace Shooter.Managers
         [SerializeField] private int eliteDropAmmo = 90;
 
         [Header("Waves")]
-        [SerializeField] private int startingEnemies = 3;
+        [SerializeField] private int startingEnemies = 4;
         [SerializeField] private int enemiesAddedPerWave = 2;
         [SerializeField] private int maxEnemiesPerWave = 36;
         [SerializeField] private int maxAlive = 14;
-        [SerializeField] private float spawnInterval = 0.65f;
-        [SerializeField] private float firstWaveDelay = 3f;
-        [SerializeField] private float interWaveDelay = 6f;
+        [SerializeField] private float spawnInterval = 0.55f;
+        [SerializeField] private float firstWaveDelay = 1.5f;
+        [SerializeField] private float interWaveDelay = 3.5f;
 
         [Header("Difficulty scaling (per wave, wave 1 = 0)")]
         [SerializeField] private float healthPerWave = 0.18f;

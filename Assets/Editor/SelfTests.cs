@@ -39,6 +39,7 @@ namespace Shooter.EditorTools
             TestSynergyKillHooks();
             TestComboTracker();
             TestHeadshotBounds();
+            TestShotgunState();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -354,6 +355,32 @@ namespace Shooter.EditorTools
             Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.16f), "Adrenaline Surge caps at eight kills");
 
             Object.DestroyImmediate(root);
+        }
+
+        private static void TestShotgunState()
+        {
+            var shotgun = new ShotgunState(4);
+
+            Check(shotgun.Shells == 4 && shotgun.Capacity == 4, "shotgun starts with four shells");
+            Check(shotgun.CanFire(0f), "shotgun can fire when loaded");
+
+            Check(shotgun.TryFire(0f, 0.9f, 2.4f), "first shell fires");
+            Check(shotgun.Shells == 3, "firing spends one shell");
+            Check(!shotgun.TryFire(0.2f, 0.9f, 2.4f), "cooldown blocks a second shell");
+            Check(shotgun.TryFire(0.9f, 0.9f, 2.4f), "second shell fires after the cooldown");
+
+            shotgun.TryFire(1.8f, 0.9f, 2.4f);
+            Check(shotgun.TryFire(2.7f, 0.9f, 2.4f), "last shell fires");
+            Check(shotgun.Shells == 0, "tube empties after the fourth shell");
+            Check(shotgun.IsReloading, "an empty tube reloads automatically");
+            Check(!shotgun.TryFire(3.0f, 0.9f, 2.4f), "cannot fire while reloading");
+
+            shotgun.Tick(5.0f);
+            Check(shotgun.IsReloading, "reload does not finish early");
+            Check(shotgun.ReloadProgress(4.0f) > 0.4f, "reload progress advances");
+
+            shotgun.Tick(5.2f);
+            Check(shotgun.Shells == 4 && !shotgun.IsReloading, "reload refills the tube");
         }
 
         private static void TestComboTracker()
