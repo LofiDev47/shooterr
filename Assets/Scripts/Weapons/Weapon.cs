@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Shooter.Combat;
 using Shooter.Effects;
+using Shooter.Enemies;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
@@ -30,6 +31,10 @@ namespace Shooter.Weapons
         [SerializeField] private float range = 150f;
         [Tooltip("Cone half-angle in degrees applied to each shot.")]
         [SerializeField] private float spreadDegrees = 0.9f;
+
+        [Header("Precision")]
+        [Tooltip("Damage multiplier when a shot lands in the top of an enemy's body.")]
+        [SerializeField] private float headshotMultiplier = 2f;
 
         [Header("Aim down sights")]
         [Tooltip("Spread multiplier while aiming.")]
@@ -306,6 +311,14 @@ namespace Shooter.Weapons
 
                 float appliedDamage = damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
 
+                // Precision pays: a shot in the top fifth of the body doubles damage.
+                bool headshot = target is EnemyHealth && IsHeadshot(hit.collider.bounds, hit.point);
+
+                if (headshot)
+                {
+                    appliedDamage *= Mathf.Max(1f, headshotMultiplier);
+                }
+
                 appliedDamage *= 1f + (upgrades != null ? upgrades.SlideFirstHitDamageMultiplier : 0f);
                 appliedDamage *= 1f + (upgrades != null ? upgrades.AirborneFirstHitDamageMultiplier : 0f);
 
@@ -319,7 +332,7 @@ namespace Shooter.Weapons
 
                 damaged.Add(target);
                 target.TakeDamage(appliedDamage, hit.point);
-                hud?.ShowHitMarker();
+                hud?.ShowHitMarker(headshot);
                 AudioManager.Instance?.PlayWeaponHit(hit.point);
 
                 if (critical)
@@ -345,6 +358,21 @@ namespace Shooter.Weapons
             PlayFireAudio();
 
             lastFireTime = now;
+        }
+
+        /// <summary>
+        /// True when <paramref name="point"/> is inside the top 20% of
+        /// <paramref name="bounds"/>. Scale-agnostic, so elites and runners use
+        /// the same rule. Exposed for headless tests.
+        /// </summary>
+        public static bool IsHeadshot(Bounds bounds, Vector3 point)
+        {
+            if (bounds.size.y <= 0.001f)
+            {
+                return false;
+            }
+
+            return point.y >= bounds.max.y - bounds.size.y * 0.2f;
         }
 
         private static Vector3 ApplySpread(Vector3 forward, float degrees)

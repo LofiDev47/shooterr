@@ -154,6 +154,7 @@ namespace Shooter.EditorTools
                 Check(hud.gameOverPanel != null && hud.gameOverScoreText != null && hud.hintText != null,
                     "HUD game-over widgets are wired");
                 Check(hud.toastText != null, "HUD toast text is wired");
+                Check(hud.comboText != null, "HUD combo text is wired");
             }
 
             AmmoPickup[] pickups = Object.FindObjectsByType<AmmoPickup>(FindObjectsInactive.Exclude);
@@ -218,6 +219,11 @@ namespace Shooter.EditorTools
                 Check(prefab.GetComponent<EnemyAI>() != null, "enemy prefab has EnemyAI");
                 Check(prefab.GetComponent<EnemyHealth>() != null, "enemy prefab has EnemyHealth");
                 Check(prefab.GetComponent<CharacterController>() != null, "enemy prefab has a CharacterController");
+
+                EnemyRangedAttack ranged = prefab.GetComponent<EnemyRangedAttack>();
+                Check(ranged != null, "enemy prefab can run as a marksman");
+                Check(ranged != null && ranged.projectileMaterial != null && ranged.telegraphMaterial != null,
+                    "marksman bolt and telegraph materials are wired");
 
                 Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
 

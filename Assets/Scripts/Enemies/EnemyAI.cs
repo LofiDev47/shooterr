@@ -5,9 +5,10 @@ using UnityEngine;
 namespace Shooter.Enemies
 {
     /// <summary>
-    /// Simple steering AI: walk straight at the player, avoid crowding other enemies,
-    /// and swipe when close enough. Uses a <see cref="CharacterController"/> for collision,
-    /// so no baked NavMesh is required and the arena can be rebuilt entirely from code.
+    /// Steering AI. Melee troopers close in and swipe only after a visible wind-up,
+    /// so backing out is a real dodge. Marksmen switch into ranged mode: they hold
+    /// a firing lane and orbit while <see cref="EnemyRangedAttack"/> does the shooting.
+    /// Uses a <see cref="CharacterController"/> so no baked NavMesh is required.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(EnemyHealth))]
@@ -24,27 +25,48 @@ namespace Shooter.Enemies
         [SerializeField] private float attackCooldown = 1.2f;
         [SerializeField] private float attackDamage = 9f;
 
+        [Header("Melee telegraph")]
+        [Tooltip("Seconds between the swipe starting and the damage landing.")]
+        [SerializeField] private float attackWindup = 0.34f;
+        [Tooltip("Degrees the model leans back during the wind-up.")]
+        [SerializeField] private float meleeLeanAngle = 14f;
+
         [Header("Crowd control")]
         [SerializeField] private float neighborRadius = 1.1f;
         [SerializeField] private float separationStrength = 2.5f;
+
+        [Header("Ranged behaviour")]
+        [Tooltip("Set by the spawner for marksmen. Zero keeps melee behaviour.")]
+        [SerializeField] private float rangedHoldDistance;
+        [SerializeField] private float rangedStrafeSpeed = 2.6f;
 
         private static readonly Collider[] Neighbors = new Collider[32];
 
         private CharacterController controller;
         private EnemyHealth health;
         private PlayerHealth target;
+        private Transform model;
         private Vector3 planarVelocity;
         private float verticalVelocity;
         private float nextAttackTime;
+        private float attackStrikeTime = -1f;
+        private float leanAngle;
+        private float lungeTimer;
+        private int strafeDirection = 1;
+        private float strafeSwitchAt;
         private Vector3 lastPosition;
         private float stuckTimer;
         private float biasTimer;
         private float biasDirection = 1f;
 
+        /// <summary>True while a melee swipe is winding up, exposed for tests.</summary>
+        public bool IsAttacking => attackStrikeTime >= 0f;
+
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
             health = GetComponent<EnemyHealth>();
+            model = transform.Find("Model");
             lastPosition = transform.position;
         }
 
@@ -55,7 +77,19 @@ namespace Shooter.Enemies
             moveSpeed += speedBonus;
             attackDamage += damageBonus;
             nextAttackTime = Time.time + 0.6f;
+            attackStrikeTime = -1f;
             lastPosition = transform.position;
+        }
+
+        /// <summary>
+        /// Switches this enemy into marksman behaviour: keep roughly
+        /// <paramref name="holdDistance"/> metres away and strafe instead of meleeing.
+        /// </summary>
+        public void SetRanged(float holdDistance, float strafeSpeed = 2.6f)
+        {
+            rangedHoldDistance = Mathf.Max(0f, holdDistance);
+            rangedStrafeSpeed = Mathf.Max(0f, strafeSpeed);
+            strafeSwitchAt = 0f;
         }
 
         private void Update()
@@ -85,16 +119,26 @@ namespace Shooter.Enemies
 
             Face(direction, deltaTime);
 
-            if (distance <= attackRange)
+            if (rangedHoldDistance > 0.01f)
+            {
+                UpdateRangedMovement(direction, distance, deltaTime);
+            }
+            else if (attackStrikeTime >= 0f)
+            {
+                // Mid-swing: plant the feet. The pause is the dodge window.
+                planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, acceleration * deltaTime);
+            }
+            else if (distance <= attackRange)
             {
                 planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, acceleration * deltaTime);
-                TryAttack();
+                BeginAttack();
             }
             else
             {
                 Steer(direction, deltaTime);
             }
 
+            UpdateMeleeSwing(deltaTime);
             Move(deltaTime);
             UpdateStuckDetection(deltaTime);
         }
@@ -109,6 +153,37 @@ namespace Shooter.Enemies
             }
 
             Vector3 desired = direction * moveSpeed + ComputeSeparation();
+            planarVelocity = Vector3.MoveTowards(planarVelocity, desired, acceleration * deltaTime);
+        }
+
+        /// <summary>
+        /// Marksman movement: close the gap, back out of knife range, otherwise
+        /// orbit so a ranged enemy is never a stationary turret.
+        /// </summary>
+        private void UpdateRangedMovement(Vector3 direction, float distance, float deltaTime)
+        {
+            if (distance > rangedHoldDistance * 1.15f)
+            {
+                Steer(direction, deltaTime);
+                return;
+            }
+
+            if (distance < rangedHoldDistance * 0.7f)
+            {
+                Steer(-direction, deltaTime);
+                return;
+            }
+
+            strafeSwitchAt -= deltaTime;
+
+            if (strafeSwitchAt <= 0f)
+            {
+                strafeSwitchAt = Random.Range(1.1f, 2.2f);
+                strafeDirection = Random.value < 0.5f ? -1 : 1;
+            }
+
+            Vector3 tangent = Vector3.Cross(Vector3.up, direction) * strafeDirection;
+            Vector3 desired = tangent * rangedStrafeSpeed + ComputeSeparation();
             planarVelocity = Vector3.MoveTowards(planarVelocity, desired, acceleration * deltaTime);
         }
 
@@ -154,7 +229,11 @@ namespace Shooter.Enemies
             return push * separationStrength;
         }
 
-        private void TryAttack()
+        /// <summary>
+        /// Starts a telegraphed swipe. Damage is applied later in
+        /// <see cref="UpdateMeleeSwing"/>, so stepping out of range is a dodge.
+        /// </summary>
+        private void BeginAttack()
         {
             if (Time.time < nextAttackTime)
             {
@@ -162,11 +241,52 @@ namespace Shooter.Enemies
             }
 
             nextAttackTime = Time.time + attackCooldown;
-            target.TakeDamage(attackDamage);
-
-            // Small forward jab so the hit reads visually.
-            controller.Move(transform.forward * 0.12f);
+            attackStrikeTime = Time.time + attackWindup;
             AudioManager.Instance?.PlayEnemyAttack(transform.position);
+        }
+
+        private void UpdateMeleeSwing(float deltaTime)
+        {
+            if (attackStrikeTime >= 0f && Time.time >= attackStrikeTime)
+            {
+                attackStrikeTime = -1f;
+                lungeTimer = 0.16f;
+
+                if (target != null && !target.IsDead)
+                {
+                    Vector3 toTarget = target.transform.position - transform.position;
+                    toTarget.y = 0f;
+
+                    if (toTarget.magnitude <= attackRange * 1.2f)
+                    {
+                        target.TakeDamage(attackDamage);
+
+                        // Small forward jab so the hit reads visually.
+                        controller.Move(transform.forward * 0.22f);
+                    }
+                }
+            }
+
+            UpdateLean(deltaTime);
+        }
+
+        private void UpdateLean(float deltaTime)
+        {
+            if (lungeTimer > 0f)
+            {
+                lungeTimer -= deltaTime;
+            }
+
+            float targetLean = lungeTimer > 0f
+                ? meleeLeanAngle
+                : attackStrikeTime >= 0f ? -meleeLeanAngle : 0f;
+
+            leanAngle = Mathf.Lerp(leanAngle, targetLean, 1f - Mathf.Exp(-16f * deltaTime));
+
+            if (model != null)
+            {
+                model.localRotation = Quaternion.Euler(leanAngle, 0f, 0f);
+            }
         }
 
         private void Face(Vector3 direction, float deltaTime)

@@ -1,3 +1,4 @@
+using Shooter.Combat;
 using Shooter.Enemies;
 using Shooter.Player;
 using Shooter.Upgrades;
@@ -36,6 +37,8 @@ namespace Shooter.EditorTools
             TestSynergyDerivedMultipliers();
             TestSynergyCritHooks();
             TestSynergyKillHooks();
+            TestComboTracker();
+            TestHeadshotBounds();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -351,6 +354,36 @@ namespace Shooter.EditorTools
             Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.16f), "Adrenaline Surge caps at eight kills");
 
             Object.DestroyImmediate(root);
+        }
+
+        private static void TestComboTracker()
+        {
+            var combo = new ComboTracker(2f, 0.5f, 2f);
+
+            Check(combo.Count == 0 && Mathf.Approximately(combo.Multiplier, 1f), "combo starts idle");
+            Check(combo.RegisterKill(0f, 10) == 10, "first kill pays base score");
+
+            Check(combo.RegisterKill(0.5f, 10) == 15, "second chained kill pays 1.5x");
+            Check(combo.RegisterKill(1f, 10) == 20, "third chained kill pays 2x");
+            Check(combo.RegisterKill(1.5f, 10) == 20, "combo multiplier is capped at 2x");
+            Check(combo.Count == 4, "combo counts every chained kill");
+            Check(combo.Remaining(2f) > 0f, "a live combo reports time remaining");
+
+            combo.Tick(4f);
+            Check(combo.Count == 0, "combo lapses after its window");
+            Check(Mathf.Approximately(combo.Multiplier, 1f), "lapsed combo resets the multiplier");
+            Check(combo.RegisterKill(10f, 10) == 10, "a kill after the window restarts at base score");
+            Check(combo.Best == 4, "combo remembers the best chain");
+        }
+
+        private static void TestHeadshotBounds()
+        {
+            var bounds = new Bounds(new Vector3(0f, 0.9f, 0f), new Vector3(1f, 1.8f, 1f));
+
+            Check(Weapon.IsHeadshot(bounds, new Vector3(0f, 1.7f, 0f)), "top of the body counts as a headshot");
+            Check(!Weapon.IsHeadshot(bounds, new Vector3(0f, 1.2f, 0f)), "centre mass is not a headshot");
+            Check(!Weapon.IsHeadshot(new Bounds(Vector3.zero, Vector3.zero), Vector3.zero),
+                "degenerate bounds never headshot");
         }
 
         private static void Check(bool condition, string description)

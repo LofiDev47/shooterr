@@ -92,6 +92,7 @@ namespace Shooter.EditorTools
             public Material DarkMetal;
             public Material Stone;
             public Material Hazard;
+            public Material EnemyBolt;
         }
 
         private static ArenaMaterials CreateMaterials()
@@ -121,6 +122,7 @@ namespace Shooter.EditorTools
                 Stone = GetOrCreateLitMaterial("Stone", new Color(0.37f, 0.38f, 0.42f), 0.08f, 0f),
                 Hazard = GetOrCreateEmissiveMaterial("Hazard", new Color(0.85f, 0.23f, 0.04f),
                     new Color(1f, 0.28f, 0.03f) * 1.7f),
+                EnemyBolt = GetOrCreateUnlitMaterial("EnemyBolt", new Color(1f, 0.24f, 0.1f)),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -1102,6 +1104,13 @@ namespace Shooter.EditorTools
             enemyHealth.debrisMaterial = materials.EnemyDebris;
             root.AddComponent<EnemyAI>();
 
+            // Every enemy carries the marksman component, but only the spawner
+            // initialises it for ranged variants. That keeps one prefab family.
+            EnemyRangedAttack ranged = root.AddComponent<EnemyRangedAttack>();
+            ranged.projectileMaterial = materials.EnemyBolt;
+            ranged.telegraphMaterial = materials.EnemyBolt;
+            ranged.sparkMaterial = materials.Spark;
+
             string path = $"{PrefabsFolder}/Enemy.prefab";
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
@@ -1257,6 +1266,12 @@ namespace Shooter.EditorTools
                 TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-36f, -24f),
                 new Vector2(420f, 36f), font, FontStyle.Bold);
 
+            // Kill-chain readout, directly under the score. Hidden until two kills chain.
+            Text comboText = CreateText(canvasObject.transform, "ComboText", string.Empty, 19,
+                new Color(1f, 0.82f, 0.3f), TextAnchor.MiddleRight, new Vector2(1f, 1f),
+                new Vector2(1f, 1f), new Vector2(-36f, -62f), new Vector2(420f, 28f), font, FontStyle.Bold);
+            comboText.enabled = false;
+
             // Crosshair (center). The bars are captured so the HUD can animate their
             // spread while firing and moving.
             RectTransform crosshair = CreateRect("Crosshair", canvasObject.transform, new Vector2(0.5f, 0.5f),
@@ -1331,6 +1346,7 @@ namespace Shooter.EditorTools
             hud.waveText = waveText;
             hud.statusText = statusText;
             hud.scoreText = scoreText;
+            hud.comboText = comboText;
             hud.gameOverPanel = gameOverPanel.gameObject;
             hud.gameOverScoreText = gameOverScore;
             hud.hintText = hintText;

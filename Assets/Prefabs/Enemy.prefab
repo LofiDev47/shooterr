@@ -732,6 +732,7 @@ GameObject:
   - component: {fileID: 797340414469065533}
   - component: {fileID: 2344677136604764714}
   - component: {fileID: 7969085949318855614}
+  - component: {fileID: 4928472784612200932}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Untagged
@@ -817,8 +818,36 @@ MonoBehaviour:
   attackRange: 2
   attackCooldown: 1.2
   attackDamage: 9
+  attackWindup: 0.34
+  meleeLeanAngle: 14
   neighborRadius: 1.1
   separationStrength: 2.5
+  rangedHoldDistance: 0
+  rangedStrafeSpeed: 2.6
+--- !u!114 &4928472784612200932
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3574160683356517843}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 225a12b2ab389550ab122563180e1a8a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Shooter.Enemies.EnemyRangedAttack
+  engageRange: 32
+  windUp: 0.7
+  cooldown: 2.8
+  eyeHeight: 1.4
+  muzzleForward: 0.55
+  aimHeight: 1.1
+  projectileSpeed: 22
+  damage: 9
+  hitRadius: 0.55
+  projectileMaterial: {fileID: 2100000, guid: 81b2c9b6eb8bd87c1963f0a0180d3d10, type: 2}
+  telegraphMaterial: {fileID: 2100000, guid: 81b2c9b6eb8bd87c1963f0a0180d3d10, type: 2}
+  sparkMaterial: {fileID: 2100000, guid: 5fb95b5faadca5abeb6a2e62c5b9c7df, type: 2}
 --- !u!1 &3586733259421072231
 GameObject:
   m_ObjectHideFlags: 0

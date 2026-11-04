@@ -1,3 +1,4 @@
+using Shooter.Combat;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.Weapons;
@@ -28,6 +29,7 @@ namespace Shooter.UI
         public Text waveText;
         public Text statusText;
         public Text scoreText;
+        public Text comboText;
         public GameObject gameOverPanel;
         public Text gameOverScoreText;
         public Text hintText;
@@ -48,6 +50,8 @@ namespace Shooter.UI
 
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
+        private static readonly Color NormalHitColor = new Color(1f, 0.95f, 0.75f, 1f);
+        private static readonly Color HeadshotColor = new Color(1f, 0.68f, 0.14f, 1f);
 
         private int lastHealth = -1;
         private int lastMagazine = -1;
@@ -61,6 +65,9 @@ namespace Shooter.UI
         private float hitMarkerUntil;
         private float crosshairSpread;
         private Vector2[] crosshairBasePositions;
+        private Image[] hitMarkerImages;
+        private int lastComboCount = -1;
+        private float lastComboMultiplier = -1f;
 
         private void Awake()
         {
@@ -85,16 +92,36 @@ namespace Shooter.UI
             UpdateWeapon();
             UpdateWave();
             UpdateScore();
+            UpdateCombo();
             UpdateState();
             UpdateToast();
             UpdateHitMarker();
             UpdateCrosshair();
         }
 
-        /// <summary>Flashes the crosshair tick marks when a shot lands on an enemy.</summary>
-        public void ShowHitMarker()
+        /// <summary>
+        /// Flashes the crosshair tick marks when a shot lands on an enemy. Headshots
+        /// flash longer and gold so precision reads instantly.
+        /// </summary>
+        public void ShowHitMarker(bool headshot = false)
         {
-            hitMarkerUntil = Time.unscaledTime + hitMarkerDuration;
+            hitMarkerUntil = Time.unscaledTime + (headshot ? hitMarkerDuration * 1.7f : hitMarkerDuration);
+
+            if (hitMarkerGroup == null)
+            {
+                return;
+            }
+
+            hitMarkerImages ??= hitMarkerGroup.GetComponentsInChildren<Image>(true);
+            Color color = headshot ? HeadshotColor : NormalHitColor;
+
+            foreach (Image image in hitMarkerImages)
+            {
+                if (image != null)
+                {
+                    image.color = color;
+                }
+            }
         }
 
         private void UpdateHitMarker()
@@ -308,6 +335,43 @@ namespace Shooter.UI
             {
                 lastScore = gameManager.Score;
                 scoreText.text = $"SCORE {lastScore}";
+            }
+        }
+
+        /// <summary>
+        /// Shows the live kill chain once it reaches two kills. The label only
+        /// refreshes on a change, so the text is not rebuilt every frame.
+        /// </summary>
+        private void UpdateCombo()
+        {
+            if (comboText == null || gameManager == null || gameManager.Combo == null)
+            {
+                return;
+            }
+
+            ComboTracker combo = gameManager.Combo;
+            bool visible = combo.Count >= 2;
+
+            if (comboText.enabled != visible)
+            {
+                comboText.enabled = visible;
+            }
+
+            if (!visible)
+            {
+                lastComboCount = combo.Count;
+                lastComboMultiplier = combo.Multiplier;
+                return;
+            }
+
+            if (combo.Count != lastComboCount || !Mathf.Approximately(combo.Multiplier, lastComboMultiplier))
+            {
+                lastComboCount = combo.Count;
+                lastComboMultiplier = combo.Multiplier;
+                comboText.text = $"x{combo.Multiplier:0.##}  ·  {combo.Count} KILL CHAIN";
+                comboText.color = Color.Lerp(
+                    new Color(1f, 0.85f, 0.35f), new Color(1f, 0.42f, 0.16f),
+                    Mathf.InverseLerp(2f, 4f, combo.Multiplier));
             }
         }
 

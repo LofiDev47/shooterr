@@ -144,7 +144,9 @@ namespace Shooter.Enemies
             DebrisBurst.Spawn(transform.position + Vector3.up * deathScale.y * 0.9f, Vector3.up,
                 debrisMaterial, pieces, 4.5f, 0.11f, 1.2f);
 
-            GameManager.Instance?.AddScore(scoreValue);
+            // Kill-chain score plus a short freeze so the kill lands with weight.
+            GameManager.Instance?.AddKillScore(scoreValue);
+            GameManager.Instance?.RequestKillHitStop();
 
             // Lifesteal augments heal off every confirmed kill.
             Upgrades.UpgradeManager.Instance?.OnKill();

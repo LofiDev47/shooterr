@@ -53,6 +53,21 @@ namespace Shooter.Managers
         [SerializeField] private float runnerScale = 0.72f;
         [SerializeField] private Color runnerTint = new Color(1.55f, 0.28f, 0.9f);
 
+        [Header("Marksman variant")]
+        [SerializeField] private int marksmanFromWave = 2;
+        [Range(0f, 1f)]
+        [SerializeField] private float marksmanChance = 0.18f;
+        [SerializeField] private float marksmanHealthMultiplier = 0.8f;
+        [Tooltip("How much slower than a normal enemy a marksman moves.")]
+        [SerializeField] private float marksmanSpeedPenalty = 0.5f;
+        [SerializeField] private int marksmanScoreValue = 18;
+        [SerializeField] private Color marksmanTint = new Color(0.75f, 1.35f, 0.55f);
+
+        [Header("Marksman spacing")]
+        [Tooltip("Preferred distance a ranged enemy keeps from the player.")]
+        [SerializeField] private float marksmanHoldDistance = 11f;
+        [SerializeField] private float marksmanStrafeSpeed = 2.4f;
+
         [SerializeField] private float bulwarkHealthMultiplier = 2.15f;
         [SerializeField] private float bulwarkSpeedPenalty = 1.4f;
         [SerializeField] private float bulwarkDamageBonus = 5f;
@@ -160,8 +175,9 @@ namespace Shooter.Managers
             float waveIndex = CurrentWave - 1;
 
             bool elite = CurrentWave >= eliteFromWave && Random.value < eliteChance;
-            bool runner = !elite && CurrentWave >= runnerFromWave && Random.value < runnerChance;
-            bool bulwark = !elite && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
+            bool marksman = !elite && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
+            bool runner = !elite && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
+            bool bulwark = !elite && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
             float healthMultiplier = 1f + waveIndex * healthPerWave;
             float speedBonus = waveIndex * speedPerWave;
             float damageBonus = waveIndex * damagePerWave;
@@ -178,6 +194,15 @@ namespace Shooter.Managers
                 scale = eliteScale;
                 tint = eliteTint;
                 scoreValue = eliteScoreValue;
+            }
+            else if (marksman)
+            {
+                // Marksmen trade health for a telegraphed ranged attack. They force
+                // the player to break line of sight instead of backpedalling forever.
+                healthMultiplier *= marksmanHealthMultiplier;
+                speedBonus -= marksmanSpeedPenalty;
+                tint = marksmanTint;
+                scoreValue = marksmanScoreValue;
             }
             else if (runner)
             {
@@ -202,6 +227,7 @@ namespace Shooter.Managers
 
             EnemyHealth health = instance.GetComponent<EnemyHealth>();
             EnemyAI ai = instance.GetComponent<EnemyAI>();
+            EnemyRangedAttack ranged = instance.GetComponent<EnemyRangedAttack>();
 
             if (health != null)
             {
@@ -214,6 +240,12 @@ namespace Shooter.Managers
             if (ai != null)
             {
                 ai.Initialize(playerTarget, speedBonus, damageBonus);
+            }
+
+            if (marksman && ranged != null)
+            {
+                ai?.SetRanged(marksmanHoldDistance, marksmanStrafeSpeed);
+                ranged.Initialize(playerTarget, waveIndex * 0.4f);
             }
 
             if (elite)

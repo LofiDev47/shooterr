@@ -23,6 +23,8 @@ namespace Shooter.Managers
         public AudioClip enemyHit;
         public AudioClip enemyDeath;
         public AudioClip enemyAttack;
+        public AudioClip enemyCharge;
+        public AudioClip enemyShot;
         public AudioClip playerHurt;
         public AudioClip ammoPickup;
         public AudioClip waveStart;
@@ -62,6 +64,8 @@ namespace Shooter.Managers
             if (enemyHit == null) enemyHit = Generate("EnemyHit", 0.26f, EnemyImpactSample);
             if (enemyDeath == null) enemyDeath = Generate("EnemyDeath", 0.58f, EnemyDeathSample);
             if (enemyAttack == null) enemyAttack = Generate("EnemyAttack", 0.34f, EnemyGrowlSample);
+            if (enemyCharge == null) enemyCharge = Generate("EnemyCharge", 0.55f, EnemyChargeSample);
+            if (enemyShot == null) enemyShot = Generate("EnemyShot", 0.3f, EnemyShotSample);
             if (playerHurt == null) playerHurt = Generate("PlayerHurt", 0.32f, PlayerHurtSample);
             if (ammoPickup == null) ammoPickup = Generate("AmmoPickup", 0.32f, PickupSample);
             if (waveStart == null) waveStart = Generate("WaveStart", 0.85f, WaveStartSample);
@@ -156,6 +160,24 @@ namespace Shooter.Managers
             return growl * 0.65f + rasp * 0.32f;
         }
 
+        private float EnemyChargeSample(float t, double time)
+        {
+            double rising = 220.0 + time * 900.0;
+            float whine = (float)Math.Sin(Math.PI * 2.0 * rising * time) * 0.42f;
+            float buzz = (float)Math.Sin(Math.PI * 2.0 * 70.0 * time) * 0.24f;
+            float air = (float)NoiseAt(time * 1200.0) * 0.14f;
+            float envelope = Mathf.Clamp01((float)time / 0.12f) * (1f - 0.35f * (float)(time / 0.55));
+            return (whine + buzz + air) * envelope;
+        }
+
+        private float EnemyShotSample(float t, double time)
+        {
+            float zap = (float)Math.Sin(Math.PI * 2.0 * (900.0 - time * 2200.0) * time) * Decay(time, 18.0);
+            float crack = (float)NoiseAt(time * 5200.0) * Decay(time, 55.0);
+            float low = (float)Math.Sin(Math.PI * 2.0 * 120.0 * time) * Decay(time, 16.0);
+            return zap * 0.5f + crack * 0.42f + low * 0.34f;
+        }
+
         private float PlayerHurtSample(float t, double time)
         {
             float thump = WaveSine(time, 96.0, 15.0);
@@ -215,6 +237,12 @@ namespace Shooter.Managers
 
         public void PlayEnemyAttack(Vector3 position) =>
             Play(enemyAttack, position, 0.6f);
+
+        public void PlayEnemyCharge(Vector3 position) =>
+            Play(enemyCharge, position, 0.42f);
+
+        public void PlayEnemyShot(Vector3 position) =>
+            Play(enemyShot, position, 0.6f);
 
         public void PlayPlayerHurt(Vector3 position) =>
             Play(playerHurt, position, 0.75f);
