@@ -41,6 +41,25 @@ namespace Shooter.Managers
         [SerializeField] private int eliteScoreValue = 25;
         [SerializeField] private Color eliteTint = new Color(1f, 0.5f, 0.12f);
 
+        [Header("Variants")]
+        [SerializeField] private int runnerFromWave = 2;
+        [SerializeField] private int bulwarkFromWave = 3;
+        [SerializeField] private float runnerChance = 0.30f;
+        [SerializeField] private float bulwarkChance = 0.20f;
+        [SerializeField] private float runnerHealthMultiplier = 0.62f;
+        [SerializeField] private float runnerSpeedBonus = 1.8f;
+        [SerializeField] private float runnerDamagePenalty = 0.55f;
+        [SerializeField] private int runnerScoreValue = 15;
+        [SerializeField] private float runnerScale = 0.72f;
+        [SerializeField] private Color runnerTint = new Color(1.55f, 0.28f, 0.9f);
+
+        [SerializeField] private float bulwarkHealthMultiplier = 2.15f;
+        [SerializeField] private float bulwarkSpeedPenalty = 1.4f;
+        [SerializeField] private float bulwarkDamageBonus = 5f;
+        [SerializeField] private int bulwarkScoreValue = 20;
+        [SerializeField] private float bulwarkScale = 1.28f;
+        [SerializeField] private Color bulwarkTint = new Color(0.25f, 0.95f, 1.55f);
+
         [Header("Elite drops")]
         [Tooltip("Ammo cache dropped when an elite dies. Null disables the drop.")]
         [SerializeField] private int eliteDropAmmo = 90;
@@ -141,9 +160,14 @@ namespace Shooter.Managers
             float waveIndex = CurrentWave - 1;
 
             bool elite = CurrentWave >= eliteFromWave && Random.value < eliteChance;
+            bool runner = !elite && CurrentWave >= runnerFromWave && Random.value < runnerChance;
+            bool bulwark = !elite && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
             float healthMultiplier = 1f + waveIndex * healthPerWave;
             float speedBonus = waveIndex * speedPerWave;
             float damageBonus = waveIndex * damagePerWave;
+            float scale = 1f;
+            Color? tint = null;
+            int scoreValue = 10;
 
             if (elite)
             {
@@ -151,6 +175,29 @@ namespace Shooter.Managers
                 healthMultiplier *= eliteHealthMultiplier;
                 speedBonus -= eliteSpeedPenalty;
                 damageBonus += eliteDamageBonus;
+                scale = eliteScale;
+                tint = eliteTint;
+                scoreValue = eliteScoreValue;
+            }
+            else if (runner)
+            {
+                // Runners arrive fast and low-health. They punish greedy positioning.
+                healthMultiplier *= runnerHealthMultiplier;
+                speedBonus += runnerSpeedBonus;
+                damageBonus *= runnerDamagePenalty;
+                scale = runnerScale;
+                tint = runnerTint;
+                scoreValue = runnerScoreValue;
+            }
+            else if (bulwark)
+            {
+                // Bulwarks are slow moving shields. They telegraph where the pressure will come from.
+                healthMultiplier *= bulwarkHealthMultiplier;
+                speedBonus -= bulwarkSpeedPenalty;
+                damageBonus += bulwarkDamageBonus;
+                scale = bulwarkScale;
+                tint = bulwarkTint;
+                scoreValue = bulwarkScoreValue;
             }
 
             EnemyHealth health = instance.GetComponent<EnemyHealth>();
@@ -158,12 +205,8 @@ namespace Shooter.Managers
 
             if (health != null)
             {
-                health.Initialize(healthMultiplier, elite ? eliteScale : 1f, elite ? eliteTint : (Color?)null, elite);
-
-                if (elite)
-                {
-                    health.SetScoreValue(eliteScoreValue);
-                }
+                health.Initialize(healthMultiplier, scale, tint, elite);
+                health.SetScoreValue(scoreValue);
 
                 health.Died += HandleEnemyDied;
             }

@@ -254,13 +254,14 @@ namespace Shooter.EditorTools
             GameObject[] ramps = FindArenaObjects("Ramp ", false);
             GameObject[] pad = FindArenaObjects("Central Pad", true);
             GameObject[] pillars = FindArenaObjects("Pillar", true);
-            GameObject[] walls = FindArenaObjects("Wall ", false);
+            int perimeterWalls = new[] { "Wall North", "Wall South", "Wall East", "Wall West" }
+                .Count(name => FindArenaObjects(name, true).Length == 1);
 
             Check(platforms.Length == 4, "arena has four raised corner platforms");
             Check(ramps.Length == 4, "arena has four platform ramps");
             Check(pad.Length == 1, "arena has a central pad");
             Check(pillars.Length == 4, "arena has four inner pillars");
-            Check(walls.Length == 4, "arena has four perimeter walls");
+            Check(perimeterWalls == 4, "arena has four perimeter walls");
 
             // Spawn points must be in open ground: not inside a wall or a platform.
             if (waveSpawner != null && waveSpawner.spawnPoints != null)

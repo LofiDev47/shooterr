@@ -89,6 +89,9 @@ namespace Shooter.EditorTools
             public Material Accent;
             public Material AmmoCache;
             public Material Skybox;
+            public Material DarkMetal;
+            public Material Stone;
+            public Material Hazard;
         }
 
         private static ArenaMaterials CreateMaterials()
@@ -114,6 +117,10 @@ namespace Shooter.EditorTools
                     new Color(0.15f, 0.75f, 1f) * 1.6f),
                 AmmoCache = GetOrCreateEmissiveMaterial("AmmoCache", new Color(0.24f, 0.16f, 0.05f),
                     new Color(1f, 0.68f, 0.2f) * 1.7f),
+                DarkMetal = GetOrCreateLitMaterial("DarkMetal", new Color(0.10f, 0.12f, 0.15f), 0.28f, 0.7f),
+                Stone = GetOrCreateLitMaterial("Stone", new Color(0.37f, 0.38f, 0.42f), 0.08f, 0f),
+                Hazard = GetOrCreateEmissiveMaterial("Hazard", new Color(0.85f, 0.23f, 0.04f),
+                    new Color(1f, 0.28f, 0.03f) * 1.7f),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -202,10 +209,10 @@ namespace Shooter.EditorTools
 
             Material material = GetOrCreateMaterialAsset("Skybox", shader);
 
-            if (material.HasProperty("_SkyTint")) material.SetColor("_SkyTint", new Color(0.22f, 0.28f, 0.42f));
-            if (material.HasProperty("_GroundColor")) material.SetColor("_GroundColor", new Color(0.10f, 0.10f, 0.12f));
-            if (material.HasProperty("_Exposure")) material.SetFloat("_Exposure", 1.1f);
-            if (material.HasProperty("_AtmosphereThickness")) material.SetFloat("_AtmosphereThickness", 0.85f);
+            if (material.HasProperty("_SkyTint")) material.SetColor("_SkyTint", new Color(0.13f, 0.18f, 0.30f));
+            if (material.HasProperty("_GroundColor")) material.SetColor("_GroundColor", new Color(0.05f, 0.07f, 0.10f));
+            if (material.HasProperty("_Exposure")) material.SetFloat("_Exposure", 1.35f);
+            if (material.HasProperty("_AtmosphereThickness")) material.SetFloat("_AtmosphereThickness", 1.1f);
             if (material.HasProperty("_SunSize")) material.SetFloat("_SunSize", 0.04f);
 
             EditorUtility.SetDirty(material);
@@ -220,7 +227,7 @@ namespace Shooter.EditorTools
             Light sun = lightObject.AddComponent<Light>();
             sun.type = LightType.Directional;
             sun.color = new Color(1f, 0.96f, 0.88f);
-            sun.intensity = 1.25f;
+            sun.intensity = 1.5f;
             sun.shadows = LightShadows.Soft;
             sun.shadowStrength = 0.85f;
             lightObject.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
@@ -281,6 +288,7 @@ namespace Shooter.EditorTools
             BuildCoverClusters(materials, arena.transform);
             BuildBarrels(materials, arena.transform);
             BuildFloorGuides(materials, arena.transform);
+            BuildArenaDetails(materials, arena.transform);
 
             ground.isStatic = true;
         }
@@ -515,6 +523,230 @@ namespace Shooter.EditorTools
                         : new Vector3(0.3f, 0.02f, 4f),
                     materials.Accent, parent);
                 StripCollider(guide);
+            }
+        }
+
+        private static void BuildArenaDetails(ArenaMaterials materials, Transform parent)
+        {
+            BuildWallRuns(materials, parent);
+            BuildEnvironmentLights(materials, parent);
+            BuildFloorSeams(materials, parent);
+            BuildHazardChevrons(materials, parent);
+        }
+
+        private static void BuildEnvironmentLights(ArenaMaterials materials, Transform parent)
+        {
+            // Warm wall fixtures and cyan side accents: the arena now has warm/cool contrast,
+            // which makes the pale grey architecture read instead of bleach out.
+            BuildWallLamp(materials, parent, new Vector3(0f, WallHeight - 1.6f, ArenaHalfSize - 1.1f),
+                new Vector3(4.8f, 0.32f, 0.2f), new Color(1f, 0.72f, 0.35f), materials.Hazard);
+            BuildWallLamp(materials, parent, new Vector3(0f, WallHeight - 1.6f, -ArenaHalfSize + 1.1f),
+                new Vector3(4.8f, 0.32f, 0.2f), new Color(1f, 0.72f, 0.35f), materials.Hazard);
+            BuildWallLamp(materials, parent, new Vector3(ArenaHalfSize - 1.1f, WallHeight - 2.6f, 0f),
+                new Vector3(0.2f, 0.32f, 4.8f), new Color(0.25f, 0.75f, 1f), materials.Accent);
+            BuildWallLamp(materials, parent, new Vector3(-ArenaHalfSize + 1.1f, WallHeight - 2.6f, 0f),
+                new Vector3(0.2f, 0.32f, 4.8f), new Color(0.25f, 0.75f, 1f), materials.Accent);
+
+            // A soft fill from high over the centre pad keeps the combat readable while the
+            // perimeter goes moody. It does not replace shadows; it sculpts mid-tones.
+            GameObject fill = new GameObject("Arena Fill Light");
+            fill.transform.SetParent(parent, false);
+            fill.transform.position = new Vector3(0f, WallHeight + 5f, 0f);
+            Light fillLight = fill.AddComponent<Light>();
+            fillLight.type = LightType.Point;
+            fillLight.color = new Color(0.35f, 0.48f, 0.65f);
+            fillLight.intensity = 90f;
+            fillLight.range = 55f;
+            fillLight.shadows = LightShadows.None;
+        }
+
+        private static void BuildWallLamp(ArenaMaterials materials, Transform parent, Vector3 position, Vector3 scale, Color glow, Material glowMaterial)
+        {
+            GameObject housing = CreatePrimitive("Lamp Housing", PrimitiveType.Cube, position, scale, materials.DarkMetal, parent);
+            StripCollider(housing);
+
+            CreatePrimitive("Lamp Glow", PrimitiveType.Cube,
+                position + (position.x != 0f ? new Vector3(-Mathf.Sign(position.x) * 0.08f, 0, 0f) : new Vector3(0, 0, -Mathf.Sign(position.z) * 0.08f)),
+                position.x != 0f ? new Vector3(0.06f, scale.y, scale.z) : new Vector3(scale.x, scale.y, 0.06f),
+                glowMaterial, parent);
+
+            GameObject lightObject = new GameObject("Wall Fixture Light");
+            lightObject.transform.SetParent(housing.transform, false);
+            Light light = lightObject.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.range = 12f;
+            light.intensity = 18f;
+            light.color = glow;
+            light.shadows = LightShadows.None;
+        }
+
+        private static void BuildWallRuns(ArenaMaterials materials, Transform parent)
+        {
+            // Corner posts give the perimeter a silhouette instead of looking like a box.
+            BuildWallCorners(materials, parent);
+
+            float top = WallHeight - 2f;
+
+            // Horizontal service runs along each wall, elevated above the fight.
+            CreatePipe("Pipe North", materials.DarkMetal, parent, new Vector3(0f, top, ArenaHalfSize - 0.95f),
+                new Vector3(ArenaHalfSize * 2f - 6f, 0, 0));
+            CreatePipe("Pipe South", materials.DarkMetal, parent, new Vector3(0f, top, -ArenaHalfSize + 0.95f),
+                new Vector3(ArenaHalfSize * 2f - 6f, 0, 0));
+            CreatePipe("Pipe East", materials.DarkMetal, parent, new Vector3(ArenaHalfSize - 0.95f, top + 0.8f, 0f),
+                new Vector3(0, 0, ArenaHalfSize * 2f - 6f));
+            CreatePipe("Pipe West", materials.DarkMetal, parent, new Vector3(-ArenaHalfSize + 0.95f, top + 0.8f, 0f),
+                new Vector3(0, 0, ArenaHalfSize * 2f - 6f));
+
+            // Deep wall plates break up the long runs. They are thin but they still catch the light.
+            foreach (float x in new[] { -16f, 0f, 16f })
+            {
+                BuildWallPlate(materials, parent, new Vector3(x, 4.2f, ArenaHalfSize - 0.75f), new Vector3(7f, 5.5f, 0.12f));
+                BuildWallPlate(materials, parent, new Vector3(x, 4.2f, -ArenaHalfSize + 0.75f), new Vector3(7f, 5.5f, 0.12f));
+            }
+
+            foreach (float z in new[] { -16f, 0f, 16f })
+            {
+                BuildWallPlate(materials, parent, new Vector3(ArenaHalfSize - 0.75f, 4.2f, z), new Vector3(0.12f, 5.5f, 7f));
+                BuildWallPlate(materials, parent, new Vector3(-ArenaHalfSize + 0.75f, 4.2f, z), new Vector3(0.12f, 5.5f, 7f));
+            }
+
+            // Vertical light rails, evenly spaced—reads as a deliberate light rig rather than lights on box walls.
+            foreach (float x in new[] { -24f, -8f, 8f, 24f })
+            {
+                BuildLuminousRail(materials, parent, new Vector3(x, 4.5f, ArenaHalfSize - 0.68f), new Vector3(0.28f, 5.6f, 0.1f));
+                BuildLuminousRail(materials, parent, new Vector3(x, 4.5f, -ArenaHalfSize + 0.68f), new Vector3(0.28f, 5.6f, 0.1f));
+            }
+
+            foreach (float z in new[] { -24f, -8f, 8f, 24f })
+            {
+                BuildLuminousRail(materials, parent, new Vector3(ArenaHalfSize - 0.68f, 4.5f, z), new Vector3(0.1f, 5.6f, 0.28f));
+                BuildLuminousRail(materials, parent, new Vector3(-ArenaHalfSize + 0.68f, 4.5f, z), new Vector3(0.1f, 5.6f, 0.28f));
+            }
+        }
+
+        private static void BuildWallCorners(ArenaMaterials materials, Transform parent)
+        {
+            foreach (var xSign in new[] { -1f, 1f })
+            {
+                foreach (var zSign in new[] { -1f, 1f })
+                {
+                    Vector3 position = new Vector3(
+                        xSign * (ArenaHalfSize - 0.55f), WallHeight * 0.5f,
+                        zSign * (ArenaHalfSize - 0.55f));
+
+                    // Stone pier, dark plinth, emissive crown — different materials, not same wall replicated.
+                    CreatePrimitive("Wall Pier", PrimitiveType.Cube, position,
+                        new Vector3(1.4f, WallHeight, 1.4f), materials.Stone, parent);
+                    CreatePrimitive("Pier Plinth", PrimitiveType.Cube,
+                        position + Vector3.down * (WallHeight * 0.5f - 0.5f),
+                        new Vector3(2f, 1f, 2f), materials.DarkMetal, parent);
+                    CreatePrimitive("Pier Crown", PrimitiveType.Cube,
+                        position + Vector3.up * (WallHeight * 0.5f - 0.7f),
+                        new Vector3(1.7f, 0.16f, 1.7f), materials.Hazard, parent);
+                }
+            }
+        }
+
+        private static void CreatePipe(string name, Material material, Transform parent, Vector3 position, Vector3 extent)
+        {
+            // Extent is the horizontal axis length; the pipe's other two axes are a fixed 0.6 m diameter.
+            bool runsX = Mathf.Abs(extent.x) > 0.001f;
+            Vector3 scale = runsX
+                ? new Vector3(0.6f, extent.x * 0.5f, 0.6f)
+                : new Vector3(0.6f, extent.z * 0.5f, 0.6f);
+
+            Quaternion rotation = runsX ? Quaternion.Euler(0f, 0f, 90f) : Quaternion.Euler(90f, 0f, 0f);
+            GameObject pipe = CreatePrimitive(name, PrimitiveType.Cylinder, position, scale, material, parent);
+            pipe.transform.rotation = rotation;
+            SetStaticDecoration(pipe);
+        }
+
+        private static void BuildWallPlate(ArenaMaterials materials, Transform parent, Vector3 position, Vector3 scale)
+        {
+            GameObject plate = CreatePrimitive("Wall Plate", PrimitiveType.Cube, position, scale, materials.Stone, parent);
+            SetStaticDecoration(plate);
+        }
+
+        private static void BuildLuminousRail(ArenaMaterials materials, Transform parent, Vector3 position, Vector3 scale)
+        {
+            GameObject rail = CreatePrimitive("Light Rail", PrimitiveType.Cube, position, scale, materials.Accent, parent);
+            StripCollider(rail);
+            SetStaticDecoration(rail);
+        }
+
+        private static void BuildFloorSeams(ArenaMaterials materials, Transform parent)
+        {
+            // Crosses built from very thin strips read as expansion joints and maintenance paths.
+            // They stay at y = 0, below the pad surface.
+            const float length = ArenaHalfSize * 2f - 4f;
+
+            foreach (float x in new[] { -16f, 0f, 16f })
+            {
+                CreatePrimitive("Floor Seam X", PrimitiveType.Cube, new Vector3(x, 0.01f, 0f),
+                    new Vector3(0.12f, 0.02f, length), materials.DarkMetal, parent);
+            }
+
+            foreach (float z in new[] { -16f, 0f, 16f })
+            {
+                CreatePrimitive("Floor Seam Z", PrimitiveType.Cube, new Vector3(0f, 0.01f, z),
+                    new Vector3(length, 0.02f, 0.12f), materials.DarkMetal, parent);
+            }
+
+            // A rivet-like dot in the intersection of every seam — tiny but makes the grid feel authored.
+            foreach (float x in new[] { -16f, 0f, 16f })
+            {
+                foreach (float z in new[] { -16f, 0f, 16f })
+                {
+                    GameObject rivet = CreatePrimitive("Seam Rivet", PrimitiveType.Cube, new Vector3(x, 0.02f, z),
+                        new Vector3(0.28f, 0.02f, 0.28f), materials.Accent, parent);
+                    StripCollider(rivet);
+                }
+            }
+        }
+
+        private static void BuildHazardChevrons(ArenaMaterials materials, Transform parent)
+        {
+            // Four chevron pairs drawn on the ground near each lane entry — the arena reads as a
+            // managed dangerous place, not a blank room, without adding gameplay obstacles.
+            foreach (var offset in new[] { -1f, 1f })
+            {
+                foreach (var xSign in new[] { -1f, 1f })
+                {
+                    Vector3 position = new Vector3(xSign * 21f, 0.02f, offset * 6f);
+                    CreateHazardChevron(materials, parent, position, xSign > 0f ? 225f : -45f);
+                }
+
+                foreach (var zSign in new[] { -1f, 1f })
+                {
+                    Vector3 position = new Vector3(offset * 6f, 0.02f, zSign * 21f);
+                    CreateHazardChevron(materials, parent, position, zSign > 0f ? 135f : -135f);
+                }
+            }
+        }
+
+        private static void CreateHazardChevron(ArenaMaterials materials, Transform parent, Vector3 position, float yaw)
+        {
+            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            GameObject a = CreatePrimitive("Hazard Chevron A", PrimitiveType.Cube, position + Quaternion.Euler(0f, -35f, 0f) * Vector3.right * 0.65f,
+                new Vector3(2.3f, 0.02f, 0.32f), materials.Hazard, parent, rotation);
+
+            GameObject b = CreatePrimitive("Hazard Chevron B", PrimitiveType.Cube, position + Quaternion.Euler(0f, 35f, 0f) * Vector3.right * 0.65f,
+                new Vector3(2.3f, 0.02f, 0.32f), materials.Hazard, parent, rotation);
+
+            StripCollider(a);
+            StripCollider(b);
+            SetStaticDecoration(a);
+            SetStaticDecoration(b);
+        }
+
+        private static void SetStaticDecoration(GameObject gameObject)
+        {
+            gameObject.isStatic = true;
+
+            foreach (Transform child in gameObject.transform)
+            {
+                child.gameObject.isStatic = true;
             }
         }
 
