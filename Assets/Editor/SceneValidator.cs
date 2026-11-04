@@ -68,7 +68,7 @@ namespace Shooter.EditorTools
                 Check(!upgradeManager.choicePanel.activeSelf, "the augment choice panel starts hidden");
 
                 bool cardsWired = upgradeManager.cardTitles != null && upgradeManager.cardDescriptions != null &&
-                    upgradeManager.cardTitles.Length == 3 && upgradeManager.cardDescriptions.Length == 3;
+                    upgradeManager.cardTitles.Length == 4 && upgradeManager.cardDescriptions.Length == 4;
 
                 if (cardsWired)
                 {
@@ -76,8 +76,28 @@ namespace Shooter.EditorTools
                         upgradeManager.cardDescriptions.All(card => card != null);
                 }
 
-                Check(cardsWired, "the three augment cards are wired with title and description texts");
+                Check(cardsWired, "the four augment cards are wired with title and description texts");
                 Check(upgradeManager.choiceHintText != null, "the augment choice hint text is wired");
+                Check(upgradeManager.choiceHintText?.text.Contains("4") == true, "the augment hint includes the fourth key");
+
+                bool visualsWired = upgradeManager.cardRoots != null && upgradeManager.cardRoots.Length == 4 &&
+                    upgradeManager.cardBackgrounds != null && upgradeManager.cardBackgrounds.Length == 4 &&
+                    upgradeManager.cardAccents != null && upgradeManager.cardAccents.Length == 4 &&
+                    upgradeManager.cardBadges != null && upgradeManager.cardBadges.Length == 4 &&
+                    upgradeManager.cardRarities != null && upgradeManager.cardRarities.Length == 4;
+
+                if (visualsWired)
+                {
+                    visualsWired = upgradeManager.cardRoots.All(root => root != null) &&
+                        upgradeManager.cardBackgrounds.All(part => part != null) &&
+                        upgradeManager.cardAccents.All(part => part != null) &&
+                        upgradeManager.cardBadges.All(part => part != null) &&
+                        upgradeManager.cardRarities.All(part => part != null);
+                }
+
+                Check(visualsWired, "the four augment card visuals are wired (background, accent, badge, rarity)");
+                Check(upgradeManager.cardRoots != null && upgradeManager.cardRoots.All(root => root == null || !root.activeSelf),
+                    "the augment cards start hidden behind the choice panel");
             }
 
             if (gameManager != null)

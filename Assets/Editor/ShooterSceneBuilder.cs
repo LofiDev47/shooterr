@@ -1111,6 +1111,11 @@ namespace Shooter.EditorTools
             UpgradeManager upgrades = managers.Upgrades;
             upgrades.hud = hud;
             upgrades.choicePanel = upgradePanel.Panel;
+            upgrades.cardRoots = upgradePanel.Roots;
+            upgrades.cardBackgrounds = upgradePanel.Backgrounds;
+            upgrades.cardAccents = upgradePanel.Accents;
+            upgrades.cardBadges = upgradePanel.Badges;
+            upgrades.cardRarities = upgradePanel.Rarities;
             upgrades.cardTitles = upgradePanel.Titles;
             upgrades.cardDescriptions = upgradePanel.Descriptions;
             upgrades.choiceHintText = upgradePanel.Hint;
@@ -1133,25 +1138,36 @@ namespace Shooter.EditorTools
         private sealed class UpgradePanelRig
         {
             public GameObject Panel;
+            public GameObject[] Roots;
+            public Image[] Backgrounds;
+            public Image[] Accents;
+            public Image[] Badges;
+            public Text[] Rarities;
             public Text[] Titles;
             public Text[] Descriptions;
             public Text Hint;
         }
 
         /// <summary>
-        /// Builds the wave-clear augment screen: a dim panel with three cards, each
-        /// showing its key badge, name and description. Input is keyboard only
-        /// (1 / 2 / 3), so no EventSystem is involved.
+        /// Builds the wave-clear augment screen: a dim panel with four cards, each
+        /// the colour of its rarity (Standard / Advanced / Master) rather than
+        /// its slot. Cards keep a coloured background, header badge and label so
+        /// value can be read at a glance. Input stays keyboard only.
         /// </summary>
         private static UpgradePanelRig BuildUpgradePanel(Transform canvas, Font font)
         {
             UpgradePanelRig result = new UpgradePanelRig
             {
-                Titles = new Text[3],
-                Descriptions = new Text[3],
+                Roots = new GameObject[4],
+                Backgrounds = new Image[4],
+                Accents = new Image[4],
+                Badges = new Image[4],
+                Rarities = new Text[4],
+                Titles = new Text[4],
+                Descriptions = new Text[4],
             };
 
-            Image panelImage = CreateFullScreenImage(canvas, "UpgradePanel", new Color(0.02f, 0.03f, 0.05f, 0.86f));
+            Image panelImage = CreateFullScreenImage(canvas, "UpgradePanel", new Color(0.02f, 0.03f, 0.05f, 0.88f));
             result.Panel = panelImage.gameObject;
 
             Text title = CreateText(panelImage.transform, "UpgradeTitle", "WAVE CLEARED", 64,
@@ -1162,56 +1178,57 @@ namespace Shooter.EditorTools
                 new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 188f), new Vector2(1200f, 40f), font);
 
-            result.Hint = CreateText(panelImage.transform, "ChoiceHint", "PRESS 1 / 2 / 3 TO PICK", 24,
+            result.Hint = CreateText(panelImage.transform, "ChoiceHint", "PRESS 1 / 2 / 3 / 4 TO PICK", 24,
                 new Color(1f, 1f, 1f, 0.9f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -330f), new Vector2(1200f, 40f), font);
 
-            // One card per slot, spaced horizontally. The accent color differs per
-            // card so the choice reads at a glance.
             Vector2[] offsets =
             {
-                new Vector2(-490f, -40f), new Vector2(0f, -40f), new Vector2(490f, -40f),
+                new Vector2(-645f, -40f), new Vector2(-215f, -40f),
+                new Vector2(215f, -40f), new Vector2(645f, -40f),
             };
 
-            Color[] accents =
-            {
-                new Color(0.35f, 0.85f, 1f),    // cyan
-                new Color(1f, 0.82f, 0.3f),     // gold
-                new Color(1f, 0.45f, 0.35f),    // orange-red
-            };
-
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 4; i++)
             {
                 RectTransform card = CreateRect("Card" + (i + 1), panelImage.transform, new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f), offsets[i], new Vector2(420f, 440f));
+                    new Vector2(0.5f, 0.5f), offsets[i], new Vector2(360f, 440f));
+                result.Roots[i] = card.gameObject;
 
                 Image cardBack = card.gameObject.AddComponent<Image>();
-                cardBack.color = new Color(0.09f, 0.1f, 0.13f, 0.98f);
+                cardBack.color = new Color(0.10f, 0.11f, 0.14f, 0.98f); // re-tinted to rarity at pick time.
                 cardBack.raycastTarget = false;
+                result.Backgrounds[i] = cardBack;
 
                 // A thin accent strip along the top edge.
                 RectTransform strip = CreateRect("AccentStrip", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                    new Vector2(0f, 5f), new Vector2(416f, 10f));
-                AddImage(strip, accents[i]);
+                    new Vector2(0f, 5f), new Vector2(356f, 10f));
+                Image accentStrip = AddImage(strip, Color.white);
+                result.Accents[i] = accentStrip;
 
-                // Press key badge: which number picks this card.
+                // Colour carries the card's VALUE, not its slot: a Master card reads
+                // gold wherever it was dealt; a Standard one reads slate.
                 RectTransform badge = CreateRect("KeyBadge", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                     new Vector2(0f, -34f), new Vector2(56f, 56f));
-                Image badgeBack = badge.gameObject.AddComponent<Image>();
-                badgeBack.color = accents[i];
-                badgeBack.raycastTarget = false;
+                Image badgeImage = badge.gameObject.AddComponent<Image>();
+                badgeImage.color = Color.white;
+                badgeImage.raycastTarget = false;
+                result.Badges[i] = badgeImage;
 
-                Text badgeText = CreateText(badge, "KeyText", (i + 1).ToString(), 30,
+                Text badgeText = CreateText(badge, "KeyText", (i + 1).ToString(), 28,
                     new Color(0.05f, 0.06f, 0.09f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56f, 56f), font, FontStyle.Bold);
 
-                result.Titles[i] = CreateText(card, "CardTitle", "AUGMENT", 30, accents[i],
+                result.Titles[i] = CreateText(card, "CardTitle", "AUGMENT", 28, Color.white,
                     TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, 55f), new Vector2(380f, 44f), font, FontStyle.Bold);
+                    new Vector2(0f, 55f), new Vector2(360f, 44f), font, FontStyle.Bold);
 
-                Text description = CreateText(card, "CardDescription", "DESCRIBE THE CARD HERE", 22,
+                result.Rarities[i] = CreateText(card, "CardRarity", "STANDARD", 13, Color.white,
+                    TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, 20f), new Vector2(300f, 18f), font, FontStyle.Bold);
+
+                Text description = CreateText(card, "CardDescription", "DESCRIBE THE CARD HERE", 20,
                     Color.white, TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -75f), new Vector2(360f, 250f), font);
+                    new Vector2(0f, -80f), new Vector2(320f, 250f), font);
                 description.horizontalOverflow = HorizontalWrapMode.Wrap; // Descriptions must wrap.
                 result.Descriptions[i] = description;
 
@@ -1220,6 +1237,11 @@ namespace Shooter.EditorTools
 
             _ = title;
             _ = subtitle;
+
+            foreach (GameObject root in result.Roots)
+            {
+                root.SetActive(false);
+            }
 
             result.Panel.SetActive(false);
             return result;

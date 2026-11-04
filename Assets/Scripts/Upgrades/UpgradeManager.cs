@@ -10,12 +10,15 @@ using UnityEngine.UI;
 
 namespace Shooter.Upgrades
 {
-    /// <summary>
-    /// Rounds-style augment cards: after each cleared wave the game pauses and the
-    /// player picks one of three offered augments. Augments stack, some trade a
-    /// penalty for a bonus, and every stat they touch is read live by the weapon,
-    /// the player controller or the player health.
-    /// </summary>
+    /// <summary>How a card speaks for itself: the colour slot it renders in.</summary>
+    public enum AugmentRarity
+    {
+        Standard, // straight buff
+        Advanced, // trade or multi-part build
+        Master,   // build-defining payoff
+    }
+
+    /// <summary>Rounds-style augments: pauses after each cleared wave and offers four cards colour-coded by rarity (Standard / Advanced / Master).</summary>
     public sealed class UpgradeManager : MonoBehaviour
     {
         public static UpgradeManager Instance { get; private set; }
@@ -27,6 +30,11 @@ namespace Shooter.Upgrades
 
         [Header("Choice UI (scene builder)")]
         public GameObject choicePanel;
+        public GameObject[] cardRoots;
+        public Image[] cardBackgrounds;
+        public Image[] cardAccents;
+        public Image[] cardBadges;
+        public Text[] cardRarities;
         public Text[] cardTitles;
         public Text[] cardDescriptions;
         public Text choiceHintText;
@@ -35,6 +43,64 @@ namespace Shooter.Upgrades
 
         private List<AugmentDef> offers = new List<AugmentDef>();
         private readonly Dictionary<string, int> ownedStacks = new Dictionary<string, int>();
+
+        private static string RarityLabel(AugmentRarity rarity)
+        {
+            return rarity switch
+            {
+                AugmentRarity.Standard => "STANDARD",
+                AugmentRarity.Advanced => "ADVANCED",
+                AugmentRarity.Master => "MASTER",
+                _ => "?",
+            };
+        }
+
+        private static Color RarityColor(AugmentRarity rarity) => rarity switch
+        {
+            AugmentRarity.Standard => new Color(0.54f, 0.60f, 0.68f),
+            AugmentRarity.Advanced => new Color(0.32f, 0.78f, 0.90f),
+            AugmentRarity.Master => new Color(1.00f, 0.81f, 0.30f),
+            _ => Color.white,
+        };
+
+        private static Color RarityBack(AugmentRarity rarity) => rarity switch
+        {
+            AugmentRarity.Standard => new Color(0.16f, 0.17f, 0.20f, 0.98f),
+            AugmentRarity.Advanced => new Color(0.06f, 0.17f, 0.21f, 0.98f),
+            AugmentRarity.Master => new Color(0.21f, 0.15f, 0.04f, 0.98f),
+            _ => new Color(0.10f, 0.11f, 0.14f, 0.98f),
+        };
+
+        private void SetCardVisuals(int index, AugmentDef def)
+        {
+            Color accent = RarityColor(def.Rarity);
+
+            if (cardBackgrounds != null && index < cardBackgrounds.Length && cardBackgrounds[index] != null)
+            {
+                cardBackgrounds[index].color = RarityBack(def.Rarity);
+            }
+
+            if (cardAccents != null && index < cardAccents.Length && cardAccents[index] != null)
+            {
+                cardAccents[index].color = accent;
+            }
+
+            if (cardBadges != null && index < cardBadges.Length && cardBadges[index] != null)
+            {
+                cardBadges[index].color = accent;
+            }
+
+            if (cardRarities != null && index < cardRarities.Length && cardRarities[index] != null)
+            {
+                cardRarities[index].text = RarityLabel(def.Rarity);
+                cardRarities[index].color = accent;
+            }
+
+            if (cardTitles != null && index < cardTitles.Length && cardTitles[index] != null)
+            {
+                cardTitles[index].color = accent;
+            }
+        }
 
         // --- live multiplier state (backing fields, mutated by augment defs) -----
         private float damageMultiplier = 1f;
@@ -184,7 +250,7 @@ namespace Shooter.Upgrades
                 return;
             }
 
-            offers = RollOffers(3);
+            offers = RollOffers(4);
 
             if (offers.Count == 0)
             {
@@ -201,26 +267,44 @@ namespace Shooter.Upgrades
 
             choicePanel.SetActive(true);
 
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 4; i++)
             {
                 bool present = i < offers.Count;
 
-                if (i < cardTitles.Length && cardTitles[i] != null)
+                if (cardRoots != null && i < cardRoots.Length && cardRoots[i] != null)
                 {
-                    cardTitles[i].text = present ? offers[i].Title : string.Empty;
-                    cardTitles[i].gameObject.SetActive(present);
+                    cardRoots[i].SetActive(present);
                 }
 
-                if (i < cardDescriptions.Length && cardDescriptions[i] != null)
+                if (present)
                 {
-                    cardDescriptions[i].text = present ? offers[i].Description : string.Empty;
-                    cardDescriptions[i].gameObject.SetActive(present);
+                    SetCardVisuals(i, offers[i]);
+                }
+
+                bool childPresent = present;
+
+                if (cardTitles != null && i < cardTitles.Length && cardTitles[i] != null)
+                {
+                    cardTitles[i].text = childPresent ? offers[i].Title : string.Empty;
+                    cardTitles[i].gameObject.SetActive(childPresent);
+                }
+
+                if (cardDescriptions != null && i < cardDescriptions.Length && cardDescriptions[i] != null)
+                {
+                    cardDescriptions[i].text = childPresent ? offers[i].Description : string.Empty;
+                    cardDescriptions[i].gameObject.SetActive(childPresent);
                 }
             }
 
             if (choiceHintText != null)
             {
-                choiceHintText.text = offers.Count >= 2 ? "PRESS 1 / 2 / 3 TO PICK" : "PRESS 1 TO PICK";
+                string hint = "PRESS ";
+                for (int i = 0; i < offers.Count; i++)
+                {
+                    hint += i > 0 ? " / " + (i + 1) : (i + 1).ToString();
+                }
+
+                choiceHintText.text = hint + " TO PICK";
             }
 
             Debug.Log($"[Shooter] Offering {offers.Count} augments: {string.Join(", ", offers.ConvertAll(o => o.Title))}.");
@@ -236,6 +320,10 @@ namespace Shooter.Upgrades
             if (Keyboard.current.digit1Key.wasPressedThisFrame && offers.Count > 0)
             {
                 Pick(0);
+            }
+            else if (Keyboard.current.digit4Key.wasPressedThisFrame && offers.Count > 3)
+            {
+                Pick(3);
             }
             else if (Keyboard.current.digit2Key.wasPressedThisFrame && offers.Count > 1)
             {
@@ -648,6 +736,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Heavy Rounds",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Heavy Rounds",
                     Description = "+30% weapon damage",
                     Apply = manager => manager.AddDamageMultiplier(0.3f),
@@ -655,6 +744,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Trigger Finger",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Trigger Finger",
                     Description = "+25% fire rate",
                     Apply = manager => manager.AddFireRateMultiplier(0.25f),
@@ -662,6 +752,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Speed Loader",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Speed Loader",
                     Description = "Reloads are 35% faster",
                     Apply = manager => manager.AddReloadSpeedMultiplier(0.35f),
@@ -669,6 +760,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Big Magazine",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Big Magazine",
                     Description = "Magazine holds 50% more rounds",
                     Apply = manager => manager.AddMagazineMultiplier(0.5f),
@@ -676,6 +768,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Deep Pockets",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Deep Pockets",
                     Description = "+120 reserve ammo (and max)",
                     Apply = manager => manager.AddReserveBonus(120),
@@ -683,6 +776,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Steady Hands",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Steady Hands",
                     Description = "40% tighter spread",
                     Apply = manager => manager.ImproveSpread(0.4f),
@@ -690,6 +784,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Tamed Recoil",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Tamed Recoil",
                     Description = "35% less recoil",
                     Apply = manager => manager.ReduceRecoil(0.35f),
@@ -697,6 +792,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Track Shoes",
+                    Rarity = AugmentRarity.Standard,
                     Title = "Track Shoes",
                     Description = "+20% move speed",
                     Apply = manager => manager.AddSpeedMultiplier(0.2f),
@@ -704,6 +800,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Moon Legs",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Moon Legs",
                     Description = "Jump 25% higher",
                     Apply = manager => manager.AddJumpMultiplier(0.25f),
@@ -711,6 +808,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Titan Frame",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Titan Frame",
                     Description = "+40 max health and heal 40",
                     Apply = manager => manager.AddMaxHealth(40f),
@@ -718,6 +816,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Nanite Repair",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Nanite Repair",
                     Description = "Regenerate 2 health per second",
                     Apply = manager => manager.AddRegen(2f),
@@ -725,6 +824,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Blood Rush",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Blood Rush",
                     Description = "Heal 3 health on every kill",
                     Apply = manager => manager.AddLifesteal(3f),
@@ -732,6 +832,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Double Jump",
+                    Rarity = AugmentRarity.Master,
                     Title = "Double Jump",
                     Description = "One extra jump while airborne",
                     CanOffer = manager => manager.ExtraAirJumps < 1,
@@ -740,6 +841,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Ricochet Rounds",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Ricochet Rounds",
                     Description = "Shots pierce 1 extra enemy",
                     CanOffer = manager => manager.BonusPierce < 3,
@@ -748,6 +850,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Critical Strike",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Critical Strike",
                     Description = "20% chance to deal double damage",
                     Apply = manager => manager.AddCrit(0.2f, 2f),
@@ -755,6 +858,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Greased Soles",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Greased Soles",
                     Description = "Slides recover 40% faster and boost speed 15% more",
                     Apply = manager =>
@@ -768,6 +872,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Glass Cannon",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Glass Cannon",
                     Description = "+50% damage, but -15% move speed",
                     Apply = manager =>
@@ -779,6 +884,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Hollow Point",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Hollow Point",
                     Description = "+45% damage, 40% wider spread",
                     Apply = manager =>
@@ -790,6 +896,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Hair Trigger",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Hair Trigger",
                     Description = "+45% fire rate, but -20% damage",
                     Apply = manager =>
@@ -801,6 +908,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Kevlar Weave",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Kevlar Weave",
                     Description = "Take 15% less damage",
                     CanOffer = manager => manager.DamageReduction < 0.45f,
@@ -809,6 +917,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Adrenaline Surge",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Adrenaline Surge",
                     Description = "+40% metal: gain 2% damage per kill, up to 16%",
                     CanOffer = manager => manager.AdrenalineDamagePerKill < 0.16f,
@@ -817,6 +926,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Winded",
+                    Rarity = AugmentRarity.Master,
                     Title = "Winded",
                     Description = "+60% damage, but move speed drops 2% per shot taken",
                     CanOffer = manager => manager.SpeedPenaltyPerShot < 0.05f,
@@ -829,6 +939,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Chain Reaction",
+                    Rarity = AugmentRarity.Master,
                     Title = "Chain Reaction",
                     Description = "Killed enemies explode for half the damage of the deciding hit in a 6 m radius",
                     Apply = manager => manager.AddExplosiveChain(6),
@@ -838,6 +949,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Kinetic Rounds",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Kinetic Rounds",
                     Description = "Shooting while moving deals up to +35% more damage",
                     Apply = manager => manager.AddDamageFromSpeed(0.35f),
@@ -845,6 +957,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Double Or Nothing",
+                    Rarity = AugmentRarity.Master,
                     Title = "Double Or Nothing",
                     Description = "Damage dealt while your crit chain is live grows +45%",
                     CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
@@ -853,6 +966,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Vampiric Crits",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Vampiric Crits",
                     Description = "Critical hits heal you for 6 health",
                     CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
@@ -861,6 +975,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Scalpel Rounds",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Scalpel Rounds",
                     Description = "+25% damage on critical hits",
                     CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
@@ -869,6 +984,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Sky Hunter",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Sky Hunter",
                     Description = "While airborne, shots deal +30% damage",
                     Apply = manager => manager.AddSkyHunter(),
@@ -876,6 +992,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Kerbside Kicker",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Kerbside Kicker",
                     Description = "The first hit of every slide deals +35% damage",
                     Apply = manager => manager.AddSlideFirstHit(0.35f),
@@ -883,6 +1000,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Crit Combo",
+                    Rarity = AugmentRarity.Master,
                     Title = "Crit Combo",
                     Description = "Criticals refresh your slide cooldown and +20% fire rate for 2 s",
                     CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
@@ -895,6 +1013,7 @@ namespace Shooter.Upgrades
                 new AugmentDef
                 {
                     Id = "Salvage Rounds",
+                    Rarity = AugmentRarity.Advanced,
                     Title = "Salvage Rounds",
                     Description = "Kills refund 10% of a magazine as reserve ammo",
                     Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
@@ -909,6 +1028,9 @@ namespace Shooter.Upgrades
         public string Id;
         public string Title;
         public string Description;
+
+        /// <summary>Power tier: colours the badge, title and body of the card.</summary>
+        public AugmentRarity Rarity;
 
         /// <summary>Optional gate for cards that are capped out.</summary>
         public Func<UpgradeManager, bool> CanOffer;
