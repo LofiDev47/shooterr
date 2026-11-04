@@ -33,6 +33,9 @@ namespace Shooter.EditorTools
             TestAugmentAirJumps();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
+            TestSynergyDerivedMultipliers();
+            TestSynergyCritHooks();
+            TestSynergyKillHooks();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -265,6 +268,89 @@ namespace Shooter.EditorTools
             deep.AddReserveAmmo(120);
             Check(deep.MaxReserve == 420, "the raised reserve cap is applied on construction");
             Check(deep.ReserveAmmo == 420, "the reserve bonus fits inside the raised cap");
+        }
+
+        private static void TestSynergyDerivedMultipliers()
+        {
+            var root = new GameObject("SynergyTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+
+            // Kinetic Rounds: damage scales with speed, but only while moving at speed.
+            upgrades.AddSpeedMultiplier(0.2f);
+            upgrades.AddDamageFromSpeed(0.35f);
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f * (1f + 0.35f * upgrades.SpeedMultiplier)),
+                "Kinetic Rounds scale damage with move speed");
+
+            upgrades.AddCrit(0.2f, 2f);
+            upgrades.AddDamageFromCrits(0.45f);
+            // Not in a crit window: the crit bonus should not apply.
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f * (1f + 0.35f * upgrades.SpeedMultiplier)),
+                "crit-fed damage only applies inside the window");
+
+            upgrades.OnCrit(); // opens the window
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier,
+                1f * (1f + 0.35f * upgrades.SpeedMultiplier) * 1.45f),
+                "crit-fed damage applies during the window");
+
+            upgrades.AddCritFeedsFireRate(0.2f);
+            Check(Mathf.Approximately(upgrades.EffectiveFireRateMultiplier, 1.2f),
+                "crit-fed fire rate applies during the window");
+
+            upgrades.ResetAugments();
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f), "synergy damage resets cleanly");
+            Check(Mathf.Approximately(upgrades.EffectiveFireRateMultiplier, 1f), "synergy fire rate resets cleanly");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestSynergyCritHooks()
+        {
+            var root = new GameObject("SynergyCritRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var health = root.AddComponent<PlayerHealth>();
+            upgrades.playerHealth = health;
+            health.ResetState();
+
+            health.TakeDamage(40f);
+            Check(Mathf.Approximately(health.CurrentHealth, 60f), "crit-hook fixture starts damaged");
+
+            upgrades.AddVampiricCritHeal(6f);
+            upgrades.OnCrit();
+            Check(Mathf.Approximately(health.CurrentHealth, 66f), "Vampiric Crits heal on a crit");
+
+            upgrades.AddCritFeedsFireRate(0.2f);
+            upgrades.OnCrit();
+            Check(Mathf.Approximately(upgrades.EffectiveFireRateMultiplier, 1.2f),
+                "Crit Combo opens the rapid-fire window");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestSynergyKillHooks()
+        {
+            var root = new GameObject("SynergyKillRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var health = root.AddComponent<PlayerHealth>();
+            upgrades.playerHealth = health;
+            health.ResetState();
+
+            health.TakeDamage(30f);
+            upgrades.AddAdrenalineDamage(0.02f);
+            upgrades.AddLifesteal(3f);
+            upgrades.AddAmmoPerKillFraction(0.1f);
+
+            upgrades.OnKill();
+            Check(Mathf.Approximately(health.CurrentHealth, 73f), "Blood Rush heals on a kill");
+            Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.02f), "Adrenaline Surge feeds one kill");
+
+            for (int i = 0; i < 10; i++)
+            {
+                upgrades.OnKill();
+            }
+
+            Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.16f), "Adrenaline Surge caps at eight kills");
+
+            Object.DestroyImmediate(root);
         }
 
         private static void Check(bool condition, string description)

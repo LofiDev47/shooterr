@@ -97,6 +97,7 @@ namespace Shooter.Enemies
             }
 
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
+            lastHitDamage = amount;
             Flash();
             AudioManager.Instance?.PlayEnemyHit(hitPoint);
 
@@ -148,7 +149,47 @@ namespace Shooter.Enemies
             // Lifesteal augments heal off every confirmed kill.
             Upgrades.UpgradeManager.Instance?.OnKill();
 
+            ChainExplode(lastHitDamage);
+
             Died?.Invoke(this);
+        }
+
+        private float lastHitDamage;
+
+        /// <summary>
+        /// Chain Reaction card: a kill detonates nearby enemies. The damage is half
+        /// the damage that landed the deciding hit, so critting through a wall of
+        /// enemies punches a real hole. Runs once per enemy, so chains terminate.
+        /// </summary>
+        private void ChainExplode(float triggeringDamage)
+        {
+            Upgrades.UpgradeManager upgrades = Upgrades.UpgradeManager.Instance;
+
+            if (upgrades == null || upgrades.ExplosiveRadius <= 0)
+            {
+                return;
+            }
+
+            float radius = upgrades.ExplosiveRadius;
+            float chainDamage = triggeringDamage * 0.5f;
+
+            if (chainDamage <= 0f)
+            {
+                return;
+            }
+
+            foreach (EnemyHealth other in FindObjectsByType<EnemyHealth>())
+            {
+                if (other == null || other.IsDead || other == this)
+                {
+                    continue;
+                }
+
+                if (Vector3.Distance(transform.position, other.transform.position) <= radius)
+                {
+                    other.TakeDamage(chainDamage, transform.position);
+                }
+            }
         }
 
         private void Flash()

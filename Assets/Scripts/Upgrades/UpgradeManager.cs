@@ -57,6 +57,28 @@ namespace Shooter.Upgrades
         private int reserveBonus;
         private float lifestealPerKill;
 
+        // --- synergy state (new cards) ----------------------------------------------
+        private float damageFromSpeed;       // Kinetic Rounds / Shuttle
+        private float speedPenaltyPerShot;   // Winded trade; see Weapon.AfterShotAccepted
+        private float damageFromCrits;       // Double Or Nothing: live damage multiplier
+        private int adrenaline;              // kills while chosen cards are owned
+        private float adrenalineDamagePerKill;
+        private float vampiricCritHeal;
+        private float scalpelDamagePerCrit;
+        private bool skyHunter;
+        private float airborneDamageMultiplier;
+        private float slideFirstHitMultiplier;
+        private float critReducesSlideCooldown;
+        private float critFeedsFireRate;
+        private int explosiveRadius;         // kills within this many metres chain
+        private float ammoPerKillFraction;
+
+        private float critWindowEnd;         // last time Crit() fired
+        private float baseCritChance;
+        private int consecutiveCrits;
+        private float fireRateBoostUntil;    // current rapid window
+        private float airborneStartedAt = -1e9f;
+
         private Weapon weapon;
         private int airJumpsUsed;
 
@@ -80,6 +102,19 @@ namespace Shooter.Upgrades
         public int BonusPierce => bonusPierce;
         public int ReserveBonus => reserveBonus;
         public float LifestealPerKill => lifestealPerKill;
+        public bool HasSkyHunter => skyHunter;
+        public float AirborneDamageMultiplier => airborneDamageMultiplier;
+        public float SpeedPenaltyPerShot => speedPenaltyPerShot;
+        public float ScalpelDamagePerCrit => scalpelDamagePerCrit;
+
+        /// <summary>Base crit chance (before Chain Crits extends it dynamically).</summary>
+        public float BaseCritChance => baseCritChance;
+
+        public int ConsecutiveCrits => consecutiveCrits;
+
+        /// <summary>Effective crit chance including Chain Crits' decay window.</summary>
+        public float EffectiveCritChance =>
+            Mathf.Clamp01(baseCritChance + (consecutiveCrits > 0 && Time.time <= critWindowEnd ? 0.05f : 0f));
 
         private void Awake()
         {
@@ -270,6 +305,113 @@ namespace Shooter.Upgrades
             bonusPierce = 0;
             reserveBonus = 0;
             lifestealPerKill = 0f;
+
+            // Synergy state reset.
+            damageFromSpeed = 0f;
+            speedPenaltyPerShot = 0f;
+            damageFromCrits = 0f;
+            adrenaline = 0;
+            adrenalineDamagePerKill = 0f;
+            vampiricCritHeal = 0f;
+            scalpelDamagePerCrit = 0f;
+            skyHunter = false;
+            airborneDamageMultiplier = 0f;
+            slideFirstHitMultiplier = 0f;
+            critReducesSlideCooldown = 0f;
+            critFeedsFireRate = 0f;
+            explosiveRadius = 0;
+            ammoPerKillFraction = 0f;
+            baseCritChance = 0f;
+            consecutiveCrits = 0;
+            critWindowEnd = 0f;
+            fireRateBoostUntil = 0f;
+            airborneStartedAt = -1e9f;
+        }
+
+        // ---------------------------------------------------------------- synergy modifiers
+
+        public void AddDamageFromSpeed(float fraction) => damageFromSpeed += fraction;
+
+        public void AddSpeedPenaltyPerShot(float fraction) => speedPenaltyPerShot += fraction;
+
+        /// <summary>Double Or Nothing: stacking damage on each crit, capped at +90%.</summary>
+        public void AddDamageFromCrits(float value) => damageFromCrits = Mathf.Min(0.9f, damageFromCrits + value);
+
+        /// <summary>Adrenaline Surge: every kill feeds a flat damage tick (capped at eight kills).</summary>
+        public void AddAdrenalineDamage(float value) => adrenalineDamagePerKill += value;
+
+        public void AddVampiricCritHeal(float amount) => vampiricCritHeal += amount;
+
+        public void AddScalpelDamage(float value) => scalpelDamagePerCrit += value;
+
+        public void AddSkyHunter()
+        {
+            skyHunter = true;
+            airborneDamageMultiplier = 0.3f;
+        }
+
+        public void AddSlideFirstHit(float value) => slideFirstHitMultiplier += value;
+
+        public void AddCritReducesSlideCooldown(float value) => critReducesSlideCooldown += value;
+
+        public void AddCritFeedsFireRate(float value) => critFeedsFireRate += value;
+
+        public void AddExplosiveChain(int radius) => explosiveRadius = Mathf.Max(explosiveRadius, radius);
+
+
+        public int ExplosiveRadius => explosiveRadius;
+
+        /// <summary>Base damage fed per kill from Adrenaline Surge (max value is capped at eight kills).</summary>
+        public float AdrenalineDamagePerKill
+        {
+            get
+            {
+                float fed = adrenalineDamagePerKill * adrenaline;
+                return Mathf.Min(0.16f, fed);
+            }
+        }
+
+        /// <summary>Salvage Rounds: a fraction of every kill refunds as reserve ammo.</summary>
+        public void AddAmmoPerKillFraction(float fraction) => ammoPerKillFraction += fraction;
+
+        // --- derived multipliers read by the weapon ---------------------------------
+
+        /// <summary>Total damage multiplier at this moment (base cards + speed + crits).</summary>
+        public float EffectiveDamageMultiplier =>
+            damageMultiplier *
+            (1f + damageFromSpeed * SpeedMultiplier) *
+            (1f + (consecutiveCrits > 0 && Time.time <= critWindowEnd ? damageFromCrits : 0f));
+
+        /// <summary>Fire-rate multiplier, including Chain Crits' rapid window.</summary>
+        public float EffectiveFireRateMultiplier =>
+            fireRateMultiplier * (Time.time <= fireRateBoostUntil ? 1f + critFeedsFireRate : 1f);
+
+        /// <summary>Damage added to the next hit when the player slides (one-shot).</summary>
+        public float SlideFirstHitDamageMultiplier
+        {
+            get
+            {
+                if (player == null || !player.IsSliding)
+                {
+                    return 0f;
+                }
+
+                return slideFirstHitMultiplier;
+            }
+        }
+
+        /// <summary>Damage added to the shot immediately after an airborne period (one-shot).</summary>
+        public float AirborneFirstHitDamageMultiplier
+        {
+            get
+            {
+                if (!skyHunter || airborneStartedAt < -1e8f)
+                {
+                    return 0f;
+                }
+
+                return Time.time - airborneStartedAt >= 0.5f ? airborneDamageMultiplier : 0f;
+            }
         }
 
         // ---------------------------------------------------------------- modifiers
@@ -328,6 +470,7 @@ namespace Shooter.Upgrades
         public void AddCrit(float chance, float multiplier)
         {
             critChance = Mathf.Clamp01(critChance + chance);
+            baseCritChance = critChance;
 
             if (multiplier > critMultiplier)
             {
@@ -354,13 +497,73 @@ namespace Shooter.Upgrades
 
         // ---------------------------------------------------------------- hooks
 
-        /// <summary>Called by enemy deaths, applies lifesteal heals.</summary>
+        /// <summary>Called by enemy deaths, applies lifesteal heals and kill-based synergies.</summary>
         public void OnKill()
         {
-            if (lifestealPerKill > 0f && playerHealth != null && !playerHealth.IsDead)
+            if (playerHealth != null && !playerHealth.IsDead)
             {
-                playerHealth.Heal(lifestealPerKill);
+                if (lifestealPerKill > 0f)
+                {
+                    playerHealth.Heal(lifestealPerKill);
+                }
+
+                if (adrenalineDamagePerKill > 0f)
+                {
+                    adrenaline = Mathf.Min(8, adrenaline + 1);
+                }
+
+                // Salvage Rounds: a fraction of the round is refunded as reserve ammo.
+                if (weapon != null && ammoPerKillFraction > 0f && weapon.State != null)
+                {
+                    weapon.AddAmmo(Mathf.CeilToInt(weapon.State.MagazineSize * ammoPerKillFraction));
+                }
             }
+        }
+
+        /// <summary>Called on every weapon hit that lands a critical.</summary>
+        public void OnCrit()
+        {
+            consecutiveCrits++;
+            critWindowEnd = Time.time + 3f;
+
+            if (vampiricCritHeal > 0f && playerHealth != null && !playerHealth.IsDead)
+            {
+                playerHealth.Heal(vampiricCritHeal);
+            }
+
+            // Chain Reaction: crits reset the slide cooldown and open a rapid-fire window.
+            if (critReducesSlideCooldown > 0f && player != null)
+            {
+                player.ResetSlideCooldown();
+                fireRateBoostUntil = Time.time + 2f;
+            }
+        }
+
+        /// <summary>Called when the player lands, so airborne damage timing resets.</summary>
+        public void OnLanded()
+        {
+            airborneStartedAt = -1e9f;
+        }
+
+        /// <summary>Called the frame the jump key fires, so airborne damage timing starts.</summary>
+        public void OnJumpPressed()
+        {
+            airborneStartedAt = Time.time;
+        }
+
+        /// <summary>
+        /// Winded interlock: each accepted hit drains a small fixed amount of speed.
+        /// Rebuilds the weapon so fire rate never restores speed instead of damage.
+        /// </summary>
+        public void TakeSpeedPenalty()
+        {
+            if (speedPenaltyPerShot <= 0f)
+            {
+                return;
+            }
+
+            AddSpeedMultiplier(-speedPenaltyPerShot);
+            weapon?.OnAugmentsChanged();
         }
 
         /// <summary>One extra air jump is consumed per airborne jump; reset on landing.</summary>
@@ -602,6 +805,99 @@ namespace Shooter.Upgrades
                     Description = "Take 15% less damage",
                     CanOffer = manager => manager.DamageReduction < 0.45f,
                     Apply = manager => manager.AddDamageReduction(0.15f),
+                },
+                new AugmentDef
+                {
+                    Id = "Adrenaline Surge",
+                    Title = "Adrenaline Surge",
+                    Description = "+40% metal: gain 2% damage per kill, up to 16%",
+                    CanOffer = manager => manager.AdrenalineDamagePerKill < 0.16f,
+                    Apply = manager => manager.AddAdrenalineDamage(0.02f),
+                },
+                new AugmentDef
+                {
+                    Id = "Winded",
+                    Title = "Winded",
+                    Description = "+60% damage, but move speed drops 2% per shot taken",
+                    CanOffer = manager => manager.SpeedPenaltyPerShot < 0.05f,
+                    Apply = manager =>
+                    {
+                        manager.AddDamageMultiplier(0.6f);
+                        manager.AddSpeedPenaltyPerShot(0.02f);
+                    },
+                },
+                new AugmentDef
+                {
+                    Id = "Chain Reaction",
+                    Title = "Chain Reaction",
+                    Description = "Killed enemies explode for half the damage of the deciding hit in a 6 m radius",
+                    Apply = manager => manager.AddExplosiveChain(6),
+                },
+
+                // --- synergy cards: they make other builds better ---------------------
+                new AugmentDef
+                {
+                    Id = "Kinetic Rounds",
+                    Title = "Kinetic Rounds",
+                    Description = "Shooting while moving deals up to +35% more damage",
+                    Apply = manager => manager.AddDamageFromSpeed(0.35f),
+                },
+                new AugmentDef
+                {
+                    Id = "Double Or Nothing",
+                    Title = "Double Or Nothing",
+                    Description = "Damage dealt while your crit chain is live grows +45%",
+                    CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
+                    Apply = manager => manager.AddDamageFromCrits(0.45f),
+                },
+                new AugmentDef
+                {
+                    Id = "Vampiric Crits",
+                    Title = "Vampiric Crits",
+                    Description = "Critical hits heal you for 6 health",
+                    CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
+                    Apply = manager => manager.AddVampiricCritHeal(6f),
+                },
+                new AugmentDef
+                {
+                    Id = "Scalpel Rounds",
+                    Title = "Scalpel Rounds",
+                    Description = "+25% damage on critical hits",
+                    CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
+                    Apply = manager => manager.AddScalpelDamage(0.25f),
+                },
+                new AugmentDef
+                {
+                    Id = "Sky Hunter",
+                    Title = "Sky Hunter",
+                    Description = "While airborne, shots deal +30% damage",
+                    Apply = manager => manager.AddSkyHunter(),
+                },
+                new AugmentDef
+                {
+                    Id = "Kerbside Kicker",
+                    Title = "Kerbside Kicker",
+                    Description = "The first hit of every slide deals +35% damage",
+                    Apply = manager => manager.AddSlideFirstHit(0.35f),
+                },
+                new AugmentDef
+                {
+                    Id = "Crit Combo",
+                    Title = "Crit Combo",
+                    Description = "Criticals refresh your slide cooldown and +20% fire rate for 2 s",
+                    CanOffer = manager => manager.CritChance > 0f || manager.ConsecutiveCrits > 0,
+                    Apply = manager =>
+                    {
+                        manager.AddCritReducesSlideCooldown(1f);
+                        manager.AddCritFeedsFireRate(0.2f);
+                    },
+                },
+                new AugmentDef
+                {
+                    Id = "Salvage Rounds",
+                    Title = "Salvage Rounds",
+                    Description = "Kills refund 10% of a magazine as reserve ammo",
+                    Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
                 },
             };
         }

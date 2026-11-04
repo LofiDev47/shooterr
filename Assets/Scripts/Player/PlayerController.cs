@@ -25,8 +25,10 @@ namespace Shooter.Player
         [SerializeField] private float airAcceleration = 14f;
 
         [Header("Jump")]
-        [SerializeField] private float jumpHeight = 1.2f;
-        [SerializeField] private float gravity = -24f;
+        [Tooltip("How high a jump reaches in metres. 2 m lets you land on the arena's platforms.")]
+        [SerializeField] private float jumpHeight = 2f;
+        [Tooltip("Downward acceleration. -30 is the snappy FPS feel (Source-like): ~0.73 s of air time.")]
+        [SerializeField] private float gravity = -30f;
         [SerializeField] private float coyoteTime = 0.12f;
         [Tooltip("A jump pressed this long before landing still fires.")]
         [SerializeField] private float jumpBufferTime = 0.12f;
@@ -144,6 +146,15 @@ namespace Shooter.Player
         /// <summary>Top sprint speed with augments applied, used to normalise speed-based effects.</summary>
         public float SprintSpeed => sprintSpeed *
             (UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f);
+
+        /// <summary>True when the capsule is resting on the ground (used by the air Hunter card).</summary>
+        public bool IsGrounded => controller != null && controller.isGrounded;
+
+        /// <summary>Clears the slide cooldown immediately (Chain Slide augment).</summary>
+        public void ResetSlideCooldown()
+        {
+            lastSlideEndTime = -999f;
+        }
 
         private void Awake()
         {
@@ -310,6 +321,7 @@ namespace Shooter.Player
                 if (Keyboard.current.spaceKey.wasPressedThisFrame)
                 {
                     jumpBufferedUntil = Time.time + jumpBufferTime;
+                    UpgradeManager.Instance?.OnJumpPressed();
                 }
 
                 if (Keyboard.current.spaceKey.wasReleasedThisFrame && verticalVelocity > 0f)
@@ -338,6 +350,7 @@ namespace Shooter.Player
             {
                 lastGroundedTime = Time.time;
                 UpgradeManager.Instance?.ResetAirJumps();
+                UpgradeManager.Instance?.OnLanded();
 
                 if (verticalVelocity < 0f)
                 {

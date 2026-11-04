@@ -158,7 +158,7 @@ namespace Shooter.Weapons
             UpgradeManager upgrades = UpgradeManager.Instance;
 
             int magazine = Mathf.Max(1, Mathf.CeilToInt(magazineSize * (upgrades != null ? upgrades.MagazineMultiplier : 1f)));
-            float interval = Mathf.Max(0.02f, fireInterval / (upgrades != null ? upgrades.FireRateMultiplier : 1f));
+            float interval = Mathf.Max(0.02f, fireInterval / (upgrades != null ? upgrades.EffectiveFireRateMultiplier : 1f));
             float reload = Mathf.Max(0.15f, reloadDuration / (upgrades != null ? upgrades.ReloadSpeedMultiplier : 1f));
             int effectiveMaxReserve = maxReserve + (upgrades != null ? upgrades.ReserveBonus : 0);
             int inMagazine = magazine;
@@ -304,17 +304,34 @@ namespace Shooter.Weapons
                     continue; // a second collider on the same enemy.
                 }
 
-                float appliedDamage = damage * (upgrades != null ? upgrades.DamageMultiplier : 1f);
+                float appliedDamage = damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
 
-                if (upgrades != null && upgrades.CritChance > 0f && Random.value < upgrades.CritChance)
+                appliedDamage *= 1f + (upgrades != null ? upgrades.SlideFirstHitDamageMultiplier : 0f);
+                appliedDamage *= 1f + (upgrades != null ? upgrades.AirborneFirstHitDamageMultiplier : 0f);
+
+                bool critical = upgrades != null && Random.value < upgrades.EffectiveCritChance;
+
+                if (critical)
                 {
                     appliedDamage *= upgrades.CritMultiplier;
                 }
+
 
                 damaged.Add(target);
                 target.TakeDamage(appliedDamage, hit.point);
                 hud?.ShowHitMarker();
                 AudioManager.Instance?.PlayWeaponHit(hit.point);
+
+                if (critical)
+                {
+                    upgrades.OnCrit();
+                }
+
+                if (upgrades != null)
+                {
+                    // Winded trade: every accepted hit costs a sliver of move speed.
+                    upgrades.TakeSpeedPenalty();
+                }
 
                 if (damaged.Count > pierce)
                 {
