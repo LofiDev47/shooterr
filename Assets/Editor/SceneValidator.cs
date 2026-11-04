@@ -248,11 +248,20 @@ namespace Shooter.EditorTools
             if (sceneWeapon != null)
             {
                 Transform weaponModel = sceneWeapon.transform.Find("Model");
-                Check(weaponModel != null, "weapon has a detailed model group");
-                Check(weaponModel != null && weaponModel.transform.Find("MuzzleBrake") != null,
+                Transform[] weaponParts = weaponModel != null
+                    ? weaponModel.GetComponentsInChildren<Transform>(true)
+                    : new Transform[0];
+
+                Check(weaponModel != null && weaponParts.Length > 20,
+                    "weapon has a detailed multi-part model");
+                Check(weaponParts.Any(part => part.name == "MuzzleBrake"),
                     "weapon model has muzzle detail");
-                Check(weaponModel != null && weaponModel.transform.Find("StatusGlow") != null,
+                Check(weaponParts.Any(part => part.name == "StatusGlow"),
                     "weapon model has a charge strip");
+                Check(sceneWeapon.SlideWired && sceneWeapon.slide != null,
+                    "weapon has an animated bolt");
+                Check(sceneWeapon.shellEjectPoint != null && sceneWeapon.shellMaterial != null,
+                    "weapon has a wired shell ejection point");
             }
 
             // --- arena layout ------------------------------------------------------

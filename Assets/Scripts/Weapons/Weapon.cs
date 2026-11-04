@@ -59,6 +59,19 @@ namespace Shooter.Weapons
         [SerializeField] private float kickbackStiffness = 90f;
         [SerializeField] private float kickbackSpringDamping = 11f;
 
+        [Header("Firing animation")]
+        [Tooltip("Bolt/slide transform from the rifle model. Moves back on every shot.")]
+        public Transform slide;
+        [Tooltip("Where spent cases are thrown from.")]
+        public Transform shellEjectPoint;
+        public Material shellMaterial;
+        [SerializeField] private float slideTravel = 0.045f;
+        [Tooltip("Seconds for the bolt to travel back and return. Matches the base fire interval.")]
+        [SerializeField] private float slideCycleDuration = 0.11f;
+        [Tooltip("Multiplier applied to the casing's initial velocity.")]
+        [SerializeField] private float shellEjectSpeed = 1.6f;
+        [SerializeField] private float shellLifetime = 2.5f;
+
         [Header("Sway")]
         [Tooltip("Metres the weapon drifts per pixel of mouse movement.")]
         [SerializeField] private float swayPositionScale = 0.0012f;
@@ -120,6 +133,10 @@ namespace Shooter.Weapons
         private float tracerUntil;
         private float kickback;              // spring offset: 0 at rest, pushed by each shot
         private float kickbackVelocity;
+        private Vector3 slideRestLocalPosition;
+        private Vector3 slideBackAxis = Vector3.back;
+        private float slideOffset;
+        private float slideCycleStartedAt = -999f;
         private Vector3 swayPosition;        // smoothed sway offset (local space)
         private Vector2 swayRotation;        // smoothed sway rotation in degrees (x, y)
         private float lastFireTime = -999f;
@@ -129,6 +146,12 @@ namespace Shooter.Weapons
 
         /// <summary>Seconds since the last shot; large when the gun has not fired yet.</summary>
         public float TimeSinceLastShot => Time.time - lastFireTime;
+
+        /// <summary>Current bolt travel in metres, exposed for play-mode tests.</summary>
+        public float SlideOffset => slideOffset;
+
+        /// <summary>True when the imported rifle supplied a moving bolt.</summary>
+        public bool SlideWired => slide != null;
 
         private void Awake()
         {
@@ -147,6 +170,20 @@ namespace Shooter.Weapons
             }
 
             weaponRenderers = GetComponentsInChildren<Renderer>(true);
+
+            if (slide != null)
+            {
+                slideRestLocalPosition = slide.localPosition;
+
+                // The imported FBX root is rotated, so derive the local axis that
+                // points toward the stock instead of assuming local -Z.
+                slideBackAxis = slide.parent.InverseTransformDirection(-transform.forward).normalized;
+
+                if (slideBackAxis.sqrMagnitude < 0.001f)
+                {
+                    slideBackAxis = Vector3.up;
+                }
+            }
 
             HideEffects();
         }
@@ -356,6 +393,7 @@ namespace Shooter.Weapons
             PlayMuzzleFlash();
             PlayTracer(endPoint);
             ApplyRecoil();
+            CycleAction();
             PlayFireAudio();
 
             lastFireTime = now;
@@ -523,19 +561,100 @@ namespace Shooter.Weapons
             kickback = Mathf.Clamp(kickback + kickbackVelocity * Time.deltaTime, -0.2f, 0.8f);
 
             UpdateSway(eased);
+            UpdateSlide();
 
+            // Recoil now lifts and rolls the gun a touch, so the animation has
+            // more than one axis instead of a straight back-and-forth slide.
             Vector3 targetPosition = hipPosition
-                + new Vector3(0f, reloadDip, -kickback * 0.8f * Mathf.Lerp(1f, 0.45f, eased))
+                + new Vector3(0f, reloadDip + kickback * 0.014f, -kickback * 0.8f * Mathf.Lerp(1f, 0.45f, eased))
                 + swayPosition;
 
             float kickAngle = kickback * 130f * Mathf.Lerp(1f, 0.4f, eased);
+            float kickRoll = kickback * 16f * Mathf.Lerp(1f, 0.35f, eased);
             Quaternion targetRotation = hipRotation
-                * Quaternion.Euler(-kickAngle, 0f, reloadTilt)
+                * Quaternion.Euler(-kickAngle, 0f, reloadTilt - kickRoll)
                 * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f);
 
             float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);
             transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, blend);
+        }
+
+        /// <summary>
+        /// Starts the cyclic action: the bolt is kicked backward and a spent case
+        /// is thrown from the ejection port. Both are pure code; no animation clip.
+        /// </summary>
+        private void CycleAction()
+        {
+            // Frame-rate independent: the bolt snaps fully open on the shot and
+            // closes over a fixed duration, so slow frames cannot skip the cycle.
+            slideOffset = slideTravel;
+            slideCycleStartedAt = Time.time;
+            EjectShell();
+        }
+
+        private void UpdateSlide()
+        {
+            if (slide == null)
+            {
+                return;
+            }
+
+            float progress = slideCycleDuration > 0.001f
+                ? (Time.time - slideCycleStartedAt) / slideCycleDuration
+                : 1f;
+
+            slideOffset = progress >= 0f && progress < 1f
+                ? slideTravel * (1f - Mathf.SmoothStep(0f, 1f, progress))
+                : 0f;
+
+            slide.localPosition = slideRestLocalPosition + slideBackAxis * slideOffset;
+        }
+
+        private void EjectShell()
+        {
+            if (shellMaterial == null || shellEjectPoint == null)
+            {
+                return;
+            }
+
+            GameObject casing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            casing.name = "Shell Casing";
+            casing.layer = 2; // Ignore Raycast, matching every other effect piece.
+            casing.transform.position = shellEjectPoint.position;
+            casing.transform.rotation = Random.rotation;
+            casing.transform.localScale = new Vector3(0.012f, 0.012f, 0.034f);
+
+            Collider collider = casing.GetComponent<Collider>();
+
+            if (collider != null)
+            {
+                Destroy(collider);
+            }
+
+            MeshRenderer renderer = casing.GetComponent<MeshRenderer>();
+
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = shellMaterial;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+
+            Rigidbody body = casing.AddComponent<Rigidbody>();
+            body.mass = 0.015f;
+            body.linearDamping = 0.2f;
+            body.angularDamping = 0.1f;
+
+            // The port sits on the visible (left) side of the rifle, so throw the
+            // casing out of that side rather than through the receiver.
+            Vector3 velocity = -transform.right * Random.Range(1.2f, 2.0f)
+                + transform.up * Random.Range(0.7f, 1.3f)
+                - transform.forward * 0.15f;
+
+            body.AddForce(velocity * shellEjectSpeed, ForceMode.VelocityChange);
+            body.AddTorque(Random.insideUnitSphere * 10f, ForceMode.VelocityChange);
+
+            Destroy(casing, shellLifetime);
         }
 
         /// <summary>

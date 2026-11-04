@@ -93,6 +93,8 @@ namespace Shooter.EditorTools
             public Material Stone;
             public Material Hazard;
             public Material EnemyBolt;
+            public Material Grip;
+            public Material Brass;
         }
 
         private static ArenaMaterials CreateMaterials()
@@ -123,6 +125,8 @@ namespace Shooter.EditorTools
                 Hazard = GetOrCreateEmissiveMaterial("Hazard", new Color(0.85f, 0.23f, 0.04f),
                     new Color(1f, 0.28f, 0.03f) * 1.7f),
                 EnemyBolt = GetOrCreateUnlitMaterial("EnemyBolt", new Color(1f, 0.24f, 0.1f)),
+                Grip = GetOrCreateLitMaterial("Grip", new Color(0.035f, 0.04f, 0.045f), 0.08f, 0.05f),
+                Brass = GetOrCreateLitMaterial("Brass", new Color(0.62f, 0.44f, 0.12f), 0.7f, 0.85f),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -911,72 +915,78 @@ namespace Shooter.EditorTools
         {
             var weaponObject = new GameObject("Weapon");
             weaponObject.transform.SetParent(cameraTransform, false);
-            weaponObject.transform.localPosition = new Vector3(0.22f, -0.16f, 0.35f);
+            weaponObject.transform.localPosition = new Vector3(0.22f, -0.19f, 0.35f);
 
-            // Rifle model: receiver, rail, barrel and muzzle brake, open sights, angled
-            // magazine and grip, stock with butt pad, plus an emissive charge strip.
-            // Every piece is collider-free and on the Ignore Raycast layer so the weapon
-            // can never eat its own shots.
+            // The rifle is a Blender-authored FBX (Tools/Blender/build_rifle.py).
+            // It keeps its named Slide / EjectPoint / MuzzlePoint anchors so the
+            // firing animation stays in code without a rigged animation clip.
             var model = new GameObject("Model");
             model.transform.SetParent(weaponObject.transform, false);
 
-            CreatePrimitive("Receiver", PrimitiveType.Cube, new Vector3(0f, 0f, 0.2f),
-                new Vector3(0.1f, 0.12f, 0.4f), materials.Gun, model.transform);
-            CreatePrimitive("Rail", PrimitiveType.Cube, new Vector3(0f, 0.074f, 0.24f),
-                new Vector3(0.05f, 0.018f, 0.44f), materials.GunAccent, model.transform);
-            CreatePrimitive("ChargingHandle", PrimitiveType.Cube, new Vector3(0.062f, 0.03f, 0.1f),
-                new Vector3(0.02f, 0.03f, 0.07f), materials.GunAccent, model.transform);
+            GameObject rifleAsset = LoadRifleAsset();
 
-            // Barrel: cylinder rotated so its axis runs down the barrel (Z).
-            GameObject barrel = CreatePrimitive("Barrel", PrimitiveType.Cylinder, new Vector3(0f, 0.02f, 0.53f),
-                new Vector3(0.05f, 0.13f, 0.05f), materials.GunAccent, model.transform,
-                Quaternion.Euler(90f, 0f, 0f));
-            CreatePrimitive("MuzzleBrake", PrimitiveType.Cube, new Vector3(0f, 0.02f, 0.68f),
-                new Vector3(0.065f, 0.065f, 0.07f), materials.Gun, model.transform);
-
-            // Open sights at both ends of the rail.
-            CreatePrimitive("FrontSight", PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.62f),
-                new Vector3(0.012f, 0.05f, 0.02f), materials.GunAccent, model.transform);
-            CreatePrimitive("RearSight", PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.06f),
-                new Vector3(0.05f, 0.04f, 0.015f), materials.GunAccent, model.transform);
-
-            // Magazine and grip, both raked for a natural silhouette.
-            CreatePrimitive("Magazine", PrimitiveType.Cube, new Vector3(0f, -0.13f, 0.26f),
-                new Vector3(0.07f, 0.2f, 0.1f), materials.Gun, model.transform,
-                Quaternion.Euler(-8f, 0f, 0f));
-            CreatePrimitive("MagazineBase", PrimitiveType.Cube, new Vector3(0f, -0.227f, 0.27f),
-                new Vector3(0.075f, 0.02f, 0.105f), materials.GunAccent, model.transform,
-                Quaternion.Euler(-8f, 0f, 0f));
-            CreatePrimitive("Grip", PrimitiveType.Cube, new Vector3(0f, -0.13f, 0.04f),
-                new Vector3(0.06f, 0.17f, 0.09f), materials.Gun, model.transform,
-                Quaternion.Euler(14f, 0f, 0f));
-            CreatePrimitive("TriggerGuard", PrimitiveType.Cube, new Vector3(0f, -0.075f, 0.14f),
-                new Vector3(0.04f, 0.012f, 0.09f), materials.GunAccent, model.transform);
-
-            // Stock reaching back with a butt pad.
-            CreatePrimitive("Stock", PrimitiveType.Cube, new Vector3(0f, -0.005f, -0.11f),
-                new Vector3(0.075f, 0.1f, 0.2f), materials.Gun, model.transform);
-            CreatePrimitive("ButtPad", PrimitiveType.Cube, new Vector3(0f, -0.005f, -0.225f),
-                new Vector3(0.085f, 0.12f, 0.03f), materials.GunAccent, model.transform);
-
-            // Emissive charge strip on the left cheek: the weapon's one glowing detail.
-            CreatePrimitive("StatusGlow", PrimitiveType.Cube, new Vector3(-0.053f, 0.015f, 0.26f),
-                new Vector3(0.006f, 0.026f, 0.14f), materials.Ammo, model.transform);
-
-            foreach (Transform piece in model.transform)
+            if (rifleAsset == null)
             {
-                StripCollider(piece.gameObject);
-                piece.gameObject.layer = 2; // Ignore Raycast, matching the player rig.
+                throw new System.InvalidOperationException(
+                    "Missing Assets/Models/ShooterRifle.fbx. Run Tools/Blender/build_rifle.py first.");
             }
+
+            GameObject rifle = (GameObject)Object.Instantiate(rifleAsset, model.transform, false);
+            rifle.name = "Rifle";
+
+            foreach (MeshRenderer renderer in rifle.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                renderer.sharedMaterial = RifleMaterialFor(renderer.gameObject.name, materials);
+            }
+
+            // Every piece is collider-free and on the Ignore Raycast layer so the
+            // weapon can never eat its own shots.
+            foreach (Transform part in rifle.GetComponentsInChildren<Transform>(true))
+            {
+                part.gameObject.layer = 2;
+
+                Collider collider = part.GetComponent<Collider>();
+
+                if (collider != null)
+                {
+                    Object.DestroyImmediate(collider);
+                }
+            }
+
+            Transform muzzleAnchor = FindDeep(rifle.transform, "MuzzlePoint");
+            Transform slide = FindDeep(rifle.transform, "Slide");
+            Transform ejectPoint = FindDeep(rifle.transform, "EjectPoint");
+
+            if (muzzleAnchor == null)
+            {
+                throw new System.InvalidOperationException("ShooterRifle.fbx has no MuzzlePoint anchor.");
+            }
+
+            Vector3 muzzleLocal = weaponObject.transform.InverseTransformPoint(muzzleAnchor.position);
 
             var muzzle = new GameObject("Muzzle");
             muzzle.transform.SetParent(weaponObject.transform, false);
-            muzzle.transform.localPosition = new Vector3(0f, 0.02f, 0.66f);
+            muzzle.transform.localPosition = muzzleLocal;
 
-            // Muzzle flash: emissive sphere plus a short-lived point light.
-            GameObject flash = CreatePrimitive("MuzzleFlash", PrimitiveType.Sphere, Vector3.zero,
-                new Vector3(0.14f, 0.14f, 0.14f), materials.Muzzle, muzzle.transform);
-            StripCollider(flash);
+            // Muzzle flash: a star of emissive petals plus a point light. The root
+            // is rotated randomly per shot by Weapon.PlayMuzzleFlash.
+            var flashRoot = new GameObject("MuzzleFlash");
+            flashRoot.transform.SetParent(muzzle.transform, false);
+            CreatePrimitive("FlashCore", PrimitiveType.Sphere, Vector3.zero,
+                new Vector3(0.13f, 0.13f, 0.13f), materials.Muzzle, flashRoot.transform);
+
+            for (int i = 0; i < 4; i++)
+            {
+                CreatePrimitive($"FlashPetal{i}", PrimitiveType.Cube, new Vector3(0f, 0f, 0.035f),
+                    new Vector3(0.018f, 0.17f, 0.018f), materials.Muzzle, flashRoot.transform,
+                    Quaternion.Euler(0f, 0f, i * 45f));
+            }
+
+            foreach (Transform flashPart in flashRoot.GetComponentsInChildren<Transform>(true))
+            {
+                StripCollider(flashPart.gameObject);
+                flashPart.gameObject.layer = 2;
+            }
 
             var flashLightObject = new GameObject("MuzzleLight");
             flashLightObject.transform.SetParent(muzzle.transform, false);
@@ -1008,17 +1018,103 @@ namespace Shooter.EditorTools
             weapon.aimCamera = cameraTransform.GetComponent<Camera>();
             weapon.player = player;
             weapon.muzzle = muzzle.transform;
-            weapon.muzzleFlash = flash;
+            weapon.muzzleFlash = flashRoot;
             weapon.muzzleLight = flashLight;
             weapon.tracer = tracer;
             weapon.audioSource = audioSource;
             weapon.impactMaterial = materials.Impact;
             weapon.sparkMaterial = materials.Spark;
+            weapon.slide = slide;
+            weapon.shellEjectPoint = ejectPoint;
+            weapon.shellMaterial = materials.Brass;
 
-            flash.SetActive(false);
+            flashRoot.SetActive(false);
             flashLight.enabled = false;
 
             return weapon;
+        }
+
+        /// <summary>
+        /// Loads the Blender rifle and makes sure it imports without generating
+        /// duplicate materials. The material mapping lives in the builder so the
+        /// rifle always uses the project's URP assets.
+        /// </summary>
+        private static GameObject LoadRifleAsset()
+        {
+            const string path = "Assets/Models/ShooterRifle.fbx";
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            if (AssetImporter.GetAtPath(path) is ModelImporter importer)
+            {
+                bool dirty = false;
+
+                if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
+                {
+                    importer.materialImportMode = ModelImporterMaterialImportMode.None;
+                    dirty = true;
+                }
+
+                if (importer.importAnimation)
+                {
+                    importer.importAnimation = false;
+                    dirty = true;
+                }
+
+                if (dirty)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        }
+
+        /// <summary>Maps FBX part names to the shared weapon materials.</summary>
+        private static Material RifleMaterialFor(string partName, ArenaMaterials materials)
+        {
+            if (partName.Contains("Glow") || partName.Contains("OpticGlass"))
+            {
+                return materials.Accent;
+            }
+
+            if (partName.Contains("OpticDot") || partName.Contains("SideAccent"))
+            {
+                return materials.EnemyEye;
+            }
+
+            if (partName.Contains("Grip") || partName.Contains("ButtPad") ||
+                partName.Contains("Cheek") || partName.Contains("Vent") ||
+                partName.Contains("EjectionPort"))
+            {
+                return materials.Grip;
+            }
+
+            if (partName.Contains("Rail") || partName.Contains("Sight") ||
+                partName.Contains("Barrel") || partName.Contains("Muzzle") ||
+                partName.Contains("Brake") || partName.Contains("GasBlock") ||
+                partName.Contains("MagazineBase") || partName.Contains("MagazineRib") ||
+                partName.Contains("ReceiverTop") || partName.Contains("HandguardTop") ||
+                partName.Contains("HandguardBottom") || partName.Contains("Panel") ||
+                partName.Contains("Slide") || partName.Contains("Trigger") ||
+                partName.Contains("GripCap"))
+            {
+                return materials.GunAccent;
+            }
+
+            return materials.Gun;
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == name)
+                {
+                    return child;
+                }
+            }
+
+            return null;
         }
 
         // ---------------------------------------------------------------- enemies
