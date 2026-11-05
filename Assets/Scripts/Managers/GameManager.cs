@@ -71,6 +71,14 @@ namespace Shooter.Managers
                 return;
             }
 
+            // Generated scenes built before the menu existed have no MenuController.
+            // Start the run instead of stranding the player in a frozen menu state.
+            if (FindAnyObjectByType<UI.MenuController>() == null)
+            {
+                StartGame();
+                return;
+            }
+
             State = GameState.Menu;
             Time.timeScale = 0f;
 
