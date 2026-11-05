@@ -214,17 +214,59 @@ namespace Shooter.EditorTools
 
             Debug.Log("[Validate] cooler-pass checks done.");
 
-            if (waveSpawner != null && waveSpawner.enemyPrefab != null)
+            if (waveSpawner != null)
             {
-                GameObject prefab = waveSpawner.enemyPrefab;
-                Check(prefab.GetComponent<EnemyAI>() != null, "enemy prefab has EnemyAI");
-                Check(prefab.GetComponent<EnemyHealth>() != null, "enemy prefab has EnemyHealth");
-                Check(prefab.GetComponent<CharacterController>() != null, "enemy prefab has a CharacterController");
+                GameObject[] variants =
+                {
+                    waveSpawner.trooperPrefab,
+                    waveSpawner.runnerPrefab,
+                    waveSpawner.bulwarkPrefab,
+                    waveSpawner.marksmanPrefab,
+                    waveSpawner.elitePrefab,
+                };
 
-                EnemyRangedAttack ranged = prefab.GetComponent<EnemyRangedAttack>();
-                Check(ranged != null, "enemy prefab can run as a marksman");
-                Check(ranged != null && ranged.projectileMaterial != null && ranged.telegraphMaterial != null,
-                    "marksman bolt and telegraph materials are wired");
+                Check(variants.All(prefab => prefab != null), "all five enemy variants have prefabs");
+                Check(variants.Where(prefab => prefab != null).Distinct().Count() == 5,
+                    "enemy variants use five distinct prefabs");
+                Check(waveSpawner.enemyPrefab != null, "wave spawner has a fallback enemy prefab");
+
+                string[] joints = { "Torso", "Head", "ArmL", "ArmR", "LegL", "LegR" };
+
+                foreach (GameObject prefab in variants.Where(prefab => prefab != null))
+                {
+                    string name = prefab.name;
+
+                    Check(prefab.GetComponent<EnemyAI>() != null, $"{name} has EnemyAI");
+                    Check(prefab.GetComponent<EnemyHealth>() != null, $"{name} has EnemyHealth");
+                    Check(prefab.GetComponent<CharacterController>() != null,
+                        $"{name} has a CharacterController");
+                    Check(prefab.GetComponent<EnemyAnimator>() != null,
+                        $"{name} has an EnemyAnimator");
+
+                    Transform model = prefab.transform.Find("Model");
+                    Transform rig = model != null ? model.Find("Rig") : null;
+                    Check(rig != null, $"{name} has an imported model rig");
+
+                    if (rig != null)
+                    {
+                        Transform[] parts = rig.GetComponentsInChildren<Transform>(true);
+                        Check(joints.All(joint => parts.Any(part => part.name == joint)),
+                            $"{name} has all six animated joints");
+                    }
+
+                    Renderer[] prefabRenderers = prefab.GetComponentsInChildren<Renderer>();
+                    Check(prefabRenderers.Length >= 8, $"{name} has a detailed multi-part model");
+
+                    // Visual pieces must not carry colliders; only the controller should.
+                    bool visualColliders = prefab.GetComponentsInChildren<Collider>()
+                        .Any(collider => !ReferenceEquals(collider, prefab.GetComponent<CharacterController>()));
+                    Check(!visualColliders, $"{name} visual pieces are collider-free");
+
+                    EnemyRangedAttack ranged = prefab.GetComponent<EnemyRangedAttack>();
+                    Check(ranged != null && ranged.projectileMaterial != null &&
+                          ranged.telegraphMaterial != null,
+                        $"{name} has ranged attack materials");
+                }
 
                 Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
 
@@ -234,14 +276,6 @@ namespace Shooter.EditorTools
                     Check(cache != null, "ammo cache prefab has an AmmoPickup");
                     Check(cache != null && cache.AmmoAmount > 0, "ammo cache prefab carries ammo");
                 }
-
-                Renderer[] prefabRenderers = prefab.GetComponentsInChildren<Renderer>();
-                Check(prefabRenderers.Length >= 8, "enemy prefab has a detailed multi-part model");
-
-                // Visual pieces must not carry colliders; only the CharacterController should.
-                bool visualColliders = prefab.GetComponentsInChildren<Collider>()
-                    .Any(collider => !ReferenceEquals(collider, prefab.GetComponent<CharacterController>()));
-                Check(!visualColliders, "enemy visual pieces are collider-free");
             }
 
             Weapon sceneWeapon = Object.FindAnyObjectByType<Weapon>();

@@ -269,14 +269,22 @@ namespace Shooter.Enemies
             }
         }
 
+        private static readonly string[] GlowMarkers =
+        {
+            "Eye", "Visor", "Glow", "Lens", "Core", "Rune",
+        };
+
         private void CacheComponents()
         {
             if (renderers == null || renderers.Length == 0)
             {
-                // Visor/eye pieces keep their own glow: they are excluded from hit flashes
-                // and elite tints so a dark red enemy always shows the same bright eye.
+                // Emissive parts keep their own colour: they are excluded from hit
+                // flashes and tints so every variant always shows the same bright eye.
                 renderers = GetComponentsInChildren<Renderer>();
-                renderers = renderers.Where(renderer => renderer != null && !renderer.name.Contains("Eye")).ToArray();
+                renderers = renderers
+                    .Where(renderer => renderer != null &&
+                        !GlowMarkers.Any(marker => renderer.name.Contains(marker)))
+                    .ToArray();
             }
 
             if (bodyCollider == null)

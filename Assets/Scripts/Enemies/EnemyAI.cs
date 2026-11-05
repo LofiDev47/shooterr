@@ -50,6 +50,7 @@ namespace Shooter.Enemies
 
         private CharacterController controller;
         private EnemyHealth health;
+        private EnemyAnimator animator;
         private PlayerHealth target;
         private Transform model;
         private Vector3 planarVelocity;
@@ -76,6 +77,7 @@ namespace Shooter.Enemies
         {
             controller = GetComponent<CharacterController>();
             health = GetComponent<EnemyHealth>();
+            animator = GetComponent<EnemyAnimator>();
             model = transform.Find("Model");
             lastPosition = transform.position;
 
@@ -119,6 +121,7 @@ namespace Shooter.Enemies
         {
             // A gunshot should register in the enemy's body, not just on the HP bar.
             flinchTimer = Mathf.Max(flinchTimer, flinchDuration);
+            animator?.TriggerHit();
 
             if (controller == null)
             {
@@ -185,6 +188,7 @@ namespace Shooter.Enemies
             UpdateMeleeSwing(deltaTime);
             Move(deltaTime);
             UpdateStuckDetection(deltaTime);
+            animator?.SetLocomotion(planarVelocity.magnitude, moveSpeed);
         }
 
         private void Steer(Vector3 direction, float deltaTime)
@@ -289,6 +293,7 @@ namespace Shooter.Enemies
 
             nextAttackTime = Time.time + attackCooldown;
             attackStrikeTime = Time.time + attackWindup;
+            animator?.TriggerAttack(attackWindup);
             AudioManager.Instance?.PlayEnemyAttack(transform.position);
         }
 

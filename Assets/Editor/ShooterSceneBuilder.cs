@@ -39,7 +39,7 @@ namespace Shooter.EditorTools
             EnsureFolder(ScenesFolder);
 
             ArenaMaterials materials = CreateMaterials();
-            GameObject enemyPrefab = CreateEnemyPrefab(materials);
+            EnemyPrefabRig enemyPrefabs = CreateEnemyPrefabs(materials);
             GameObject ammoCachePrefab = CreateAmmoCachePrefab(materials);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -49,7 +49,7 @@ namespace Shooter.EditorTools
             PlayerRig rig = BuildPlayer(materials);
             BuildPostProcessing(rig);
             List<Transform> spawnPoints = BuildSpawnPoints();
-            ManagersRig managers = BuildManagers(enemyPrefab, ammoCachePrefab, rig, spawnPoints);
+            ManagersRig managers = BuildManagers(enemyPrefabs, ammoCachePrefab, rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
 
             // Wired after the HUD exists, so these components can raise UI feedback.
@@ -78,6 +78,21 @@ namespace Shooter.EditorTools
             public Material CoverAlt;
             public Material Enemy;
             public Material EnemyEye;
+            public Material TrooperBody;
+            public Material TrooperDark;
+            public Material TrooperGlow;
+            public Material RunnerBody;
+            public Material RunnerDark;
+            public Material RunnerGlow;
+            public Material BulwarkBody;
+            public Material BulwarkDark;
+            public Material BulwarkGlow;
+            public Material MarksmanBody;
+            public Material MarksmanDark;
+            public Material MarksmanGlow;
+            public Material EliteBody;
+            public Material EliteDark;
+            public Material EliteGlow;
             public Material Gun;
             public Material GunAccent;
             public Material Impact;
@@ -108,6 +123,21 @@ namespace Shooter.EditorTools
                 CoverAlt = GetOrCreateLitMaterial("CoverAlt", new Color(0.20f, 0.36f, 0.28f), 0.25f, 0f),
                 Enemy = GetOrCreateLitMaterial("Enemy", new Color(0.62f, 0.15f, 0.17f), 0.35f, 0f),
                 EnemyEye = GetOrCreateUnlitMaterial("EnemyEye", new Color(1f, 0.72f, 0.2f)),
+                TrooperBody = GetOrCreateLitMaterial("TrooperBody", new Color(0.42f, 0.075f, 0.085f), 0.35f, 0f),
+                TrooperDark = GetOrCreateLitMaterial("TrooperDark", new Color(0.030f, 0.030f, 0.035f), 0.15f, 0f),
+                TrooperGlow = GetOrCreateUnlitMaterial("TrooperGlow", new Color(1f, 0.55f, 0.18f)),
+                RunnerBody = GetOrCreateLitMaterial("RunnerBody", new Color(0.38f, 0.08f, 0.48f), 0.3f, 0f),
+                RunnerDark = GetOrCreateLitMaterial("RunnerDark", new Color(0.025f, 0.022f, 0.035f), 0.15f, 0f),
+                RunnerGlow = GetOrCreateUnlitMaterial("RunnerGlow", new Color(1f, 0.26f, 0.82f)),
+                BulwarkBody = GetOrCreateLitMaterial("BulwarkBody", new Color(0.18f, 0.33f, 0.38f), 0.45f, 0.35f),
+                BulwarkDark = GetOrCreateLitMaterial("BulwarkDark", new Color(0.028f, 0.032f, 0.04f), 0.2f, 0.1f),
+                BulwarkGlow = GetOrCreateUnlitMaterial("BulwarkGlow", new Color(0.16f, 0.85f, 1f)),
+                MarksmanBody = GetOrCreateLitMaterial("MarksmanBody", new Color(0.07f, 0.32f, 0.24f), 0.35f, 0f),
+                MarksmanDark = GetOrCreateLitMaterial("MarksmanDark", new Color(0.025f, 0.03f, 0.03f), 0.15f, 0f),
+                MarksmanGlow = GetOrCreateUnlitMaterial("MarksmanGlow", new Color(0.30f, 1f, 0.52f)),
+                EliteBody = GetOrCreateLitMaterial("EliteBody", new Color(0.50f, 0.30f, 0.06f), 0.5f, 0.25f),
+                EliteDark = GetOrCreateLitMaterial("EliteDark", new Color(0.035f, 0.028f, 0.020f), 0.2f, 0f),
+                EliteGlow = GetOrCreateUnlitMaterial("EliteGlow", new Color(1f, 0.58f, 0.14f)),
                 Gun = GetOrCreateLitMaterial("Gun", new Color(0.11f, 0.11f, 0.13f), 0.55f, 0.6f),
                 GunAccent = GetOrCreateLitMaterial("GunAccent", new Color(0.38f, 0.38f, 0.43f), 0.5f, 0.7f),
                 Impact = GetOrCreateUnlitMaterial("Impact", new Color(0.03f, 0.03f, 0.03f)),
@@ -1179,9 +1209,41 @@ namespace Shooter.EditorTools
 
         // ---------------------------------------------------------------- enemies
 
-        private static GameObject CreateEnemyPrefab(ArenaMaterials materials)
+        private sealed class EnemyPrefabRig
         {
-            var root = new GameObject("Enemy");
+            public GameObject Trooper;
+            public GameObject Runner;
+            public GameObject Bulwark;
+            public GameObject Marksman;
+            public GameObject Elite;
+        }
+
+        private sealed class EnemyPalette
+        {
+            public Material Body;
+            public Material Dark;
+            public Material Glow;
+        }
+
+        private static EnemyPrefabRig CreateEnemyPrefabs(ArenaMaterials materials)
+        {
+            return new EnemyPrefabRig
+            {
+                Trooper = CreateEnemyPrefab("Trooper", materials),
+                Runner = CreateEnemyPrefab("Runner", materials),
+                Bulwark = CreateEnemyPrefab("Bulwark", materials),
+                Marksman = CreateEnemyPrefab("Marksman", materials),
+                Elite = CreateEnemyPrefab("Elite", materials),
+            };
+        }
+
+        /// <summary>
+        /// Builds one enemy prefab around a Blender model. All five models share
+        /// the same named joint hierarchy, so EnemyAnimator works on every variant.
+        /// </summary>
+        private static GameObject CreateEnemyPrefab(string variant, ArenaMaterials materials)
+        {
+            var root = new GameObject("Enemy" + variant);
 
             CharacterController controller = root.AddComponent<CharacterController>();
             controller.height = 1.8f;
@@ -1190,95 +1252,143 @@ namespace Shooter.EditorTools
             controller.slopeLimit = 45f;
             controller.stepOffset = 0.3f;
 
-            // All visuals live under one child so the CharacterController defines the physics
-            // shape and the parts never contribute colliders. Roughly 0.06..1.77 in height.
+            // The model lives under one child so the CharacterController defines
+            // the physics shape and no visual piece contributes a collider.
             var model = new GameObject("Model");
             model.transform.SetParent(root.transform, false);
 
-            // Hips and lower torso.
-            CreatePrimitive("Hips", PrimitiveType.Cube, new Vector3(0f, 0.72f, 0f),
-                new Vector3(0.5f, 0.26f, 0.34f), materials.Enemy, model.transform);
-            CreatePrimitive("Spine Pack", PrimitiveType.Cube, new Vector3(0f, 1.18f, -0.24f),
-                new Vector3(0.4f, 0.5f, 0.18f), materials.GunAccent, model.transform);
+            GameObject source = LoadEnemyAsset(variant);
 
-            // Chest: tapered capsule with an armour plate over it.
-            CreatePrimitive("Torso", PrimitiveType.Capsule, new Vector3(0f, 1.1f, 0f),
-                new Vector3(0.72f, 0.32f, 0.5f), materials.Enemy, model.transform);
-            CreatePrimitive("Chest Plate", PrimitiveType.Cube, new Vector3(0f, 1.12f, 0.24f),
-                new Vector3(0.6f, 0.44f, 0.16f), materials.Enemy, model.transform);
-            CreatePrimitive("Chest Core", PrimitiveType.Cube, new Vector3(0f, 1.1f, 0.33f),
-                new Vector3(0.22f, 0.16f, 0.03f), materials.EnemyEye, model.transform);
-
-            // Shoulder pads push the silhouette wider than the capsule collider.
-            CreatePrimitive("Shoulder L", PrimitiveType.Cube, new Vector3(-0.5f, 1.32f, 0f),
-                new Vector3(0.26f, 0.2f, 0.36f), materials.Enemy, model.transform,
-                Quaternion.Euler(0f, 0f, 10f));
-            CreatePrimitive("Shoulder R", PrimitiveType.Cube, new Vector3(0.5f, 1.32f, 0f),
-                new Vector3(0.26f, 0.2f, 0.36f), materials.Enemy, model.transform,
-                Quaternion.Euler(0f, 0f, -10f));
-
-            // Arms hang and angle outward, ending in claw pieces.
-            CreatePrimitive("Arm L", PrimitiveType.Capsule, new Vector3(-0.56f, 0.92f, 0.04f),
-                new Vector3(0.24f, 0.28f, 0.24f), materials.Enemy, model.transform,
-                Quaternion.Euler(6f, 0f, 10f));
-            CreatePrimitive("Arm R", PrimitiveType.Capsule, new Vector3(0.56f, 0.92f, 0.04f),
-                new Vector3(0.24f, 0.28f, 0.24f), materials.Enemy, model.transform,
-                Quaternion.Euler(6f, 0f, -10f));
-            CreatePrimitive("Claw L", PrimitiveType.Cube, new Vector3(-0.62f, 0.6f, 0.12f),
-                new Vector3(0.16f, 0.2f, 0.2f), materials.GunAccent, model.transform,
-                Quaternion.Euler(0f, 0f, 20f));
-            CreatePrimitive("Claw R", PrimitiveType.Cube, new Vector3(0.62f, 0.6f, 0.12f),
-                new Vector3(0.16f, 0.2f, 0.2f), materials.GunAccent, model.transform,
-                Quaternion.Euler(0f, 0f, -20f));
-
-            // Legs slightly apart, with forward-extending feet for a planted stance.
-            CreatePrimitive("Leg L", PrimitiveType.Capsule, new Vector3(-0.19f, 0.42f, 0f),
-                new Vector3(0.28f, 0.26f, 0.28f), materials.Enemy, model.transform);
-            CreatePrimitive("Leg R", PrimitiveType.Capsule, new Vector3(0.19f, 0.42f, 0f),
-                new Vector3(0.28f, 0.26f, 0.28f), materials.Enemy, model.transform);
-            CreatePrimitive("Foot L", PrimitiveType.Cube, new Vector3(-0.2f, 0.06f, 0.06f),
-                new Vector3(0.28f, 0.12f, 0.42f), materials.GunAccent, model.transform);
-            CreatePrimitive("Foot R", PrimitiveType.Cube, new Vector3(0.2f, 0.06f, 0.06f),
-                new Vector3(0.28f, 0.12f, 0.42f), materials.GunAccent, model.transform);
-
-            // Helmet perched on a short neck, with an emissive visor strip.
-            CreatePrimitive("Neck", PrimitiveType.Cube, new Vector3(0f, 1.44f, 0f),
-                new Vector3(0.22f, 0.14f, 0.22f), materials.GunAccent, model.transform);
-            CreatePrimitive("Head", PrimitiveType.Cube, new Vector3(0f, 1.61f, 0f),
-                new Vector3(0.36f, 0.32f, 0.34f), materials.Enemy, model.transform);
-            CreatePrimitive("EyeVisor", PrimitiveType.Cube, new Vector3(0f, 1.62f, 0.19f),
-                new Vector3(0.34f, 0.1f, 0.05f), materials.EnemyEye, model.transform);
-            CreatePrimitive("Crest", PrimitiveType.Cube, new Vector3(0f, 1.78f, -0.04f),
-                new Vector3(0.08f, 0.1f, 0.3f), materials.Enemy, model.transform);
-
-            foreach (Transform visual in model.transform)
+            if (source == null)
             {
-                StripCollider(visual.gameObject);
+                throw new System.InvalidOperationException(
+                    $"Missing Assets/Models/Enemies/Enemy{variant}.fbx. " +
+                    "Run Tools/Blender/build_enemies.py first.");
             }
 
-            EnemyHealth enemyHealth = root.AddComponent<EnemyHealth>();
-            enemyHealth.debrisMaterial = materials.EnemyDebris;
+            GameObject rig = (GameObject)Object.Instantiate(source, model.transform, false);
+            rig.name = "Rig";
+
+            EnemyPalette palette = EnemyPaletteFor(variant, materials);
+
+            foreach (MeshRenderer renderer in rig.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                renderer.sharedMaterial = EnemyMaterialFor(renderer.gameObject.name, palette);
+            }
+
+            foreach (Transform part in rig.GetComponentsInChildren<Transform>(true))
+            {
+                part.gameObject.layer = 2; // Ignore Raycast, matching the player rig.
+
+                Collider collider = part.GetComponent<Collider>();
+
+                if (collider != null)
+                {
+                    Object.DestroyImmediate(collider);
+                }
+            }
+
+            EnemyHealth health = root.AddComponent<EnemyHealth>();
+            health.debrisMaterial = palette.Body;
+
             root.AddComponent<EnemyAI>();
 
-            // Every enemy carries the marksman component, but only the spawner
-            // initialises it for ranged variants. That keeps one prefab family.
+            EnemyAnimator animator = root.AddComponent<EnemyAnimator>();
+            animator.model = model.transform;
+
             EnemyRangedAttack ranged = root.AddComponent<EnemyRangedAttack>();
             ranged.projectileMaterial = materials.EnemyBolt;
             ranged.telegraphMaterial = materials.EnemyBolt;
             ranged.sparkMaterial = materials.Spark;
 
-            string path = $"{PrefabsFolder}/Enemy.prefab";
+            string path = $"{PrefabsFolder}/Enemy{variant}.prefab";
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
 
-            Debug.Log($"[Shooter] Enemy prefab saved to {path}.");
+            Debug.Log($"[Shooter] Enemy{variant} prefab saved to {path}.");
             return prefab;
         }
 
-        /// <summary>
-        /// Builds the ammo cache that elites drop. It is a one-shot pickup (it does not
-        /// respawn) and carries more rounds than the fixed arena crates.
-        /// </summary>
+        private static GameObject LoadEnemyAsset(string variant)
+        {
+            string path = $"Assets/Models/Enemies/Enemy{variant}.fbx";
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            if (AssetImporter.GetAtPath(path) is ModelImporter importer)
+            {
+                bool dirty = false;
+
+                if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
+                {
+                    importer.materialImportMode = ModelImporterMaterialImportMode.None;
+                    dirty = true;
+                }
+
+                if (importer.importAnimation)
+                {
+                    importer.importAnimation = false;
+                    dirty = true;
+                }
+
+                if (dirty)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
+
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        }
+
+        private static EnemyPalette EnemyPaletteFor(string variant, ArenaMaterials materials)
+        {
+            return variant switch
+            {
+                "Runner" => new EnemyPalette
+                {
+                    Body = materials.RunnerBody, Dark = materials.RunnerDark, Glow = materials.RunnerGlow,
+                },
+                "Bulwark" => new EnemyPalette
+                {
+                    Body = materials.BulwarkBody, Dark = materials.BulwarkDark, Glow = materials.BulwarkGlow,
+                },
+                "Marksman" => new EnemyPalette
+                {
+                    Body = materials.MarksmanBody, Dark = materials.MarksmanDark, Glow = materials.MarksmanGlow,
+                },
+                "Elite" => new EnemyPalette
+                {
+                    Body = materials.EliteBody, Dark = materials.EliteDark, Glow = materials.EliteGlow,
+                },
+                _ => new EnemyPalette
+                {
+                    Body = materials.TrooperBody, Dark = materials.TrooperDark, Glow = materials.TrooperGlow,
+                },
+            };
+        }
+
+        private static Material EnemyMaterialFor(string partName, EnemyPalette palette)
+        {
+            if (partName.Contains("Visor") || partName.Contains("Lens") ||
+                partName.Contains("Glow") || partName.Contains("Core") ||
+                partName.Contains("Eye") || partName.Contains("Rune"))
+            {
+                return palette.Glow;
+            }
+
+            if (partName.Contains("Dark") || partName.Contains("Boot") ||
+                partName.Contains("Claw") || partName.Contains("Horn") ||
+                partName.Contains("Spike") || partName.Contains("Cape") ||
+                partName.Contains("Joint") || partName.Contains("Crest") ||
+                partName.Contains("ChestPlate") || partName.Contains("Backpack") ||
+                partName.Contains("Trim") || partName.Contains("Antenna") ||
+                partName.Contains("Knee"))
+            {
+                return palette.Dark;
+            }
+
+            return palette.Body;
+        }
+
         private static GameObject CreateAmmoCachePrefab(ArenaMaterials materials)
         {
             var root = new GameObject("AmmoCache");
@@ -1316,7 +1426,7 @@ namespace Shooter.EditorTools
             public UpgradeManager Upgrades;
         }
 
-        private static ManagersRig BuildManagers(GameObject enemyPrefab, GameObject ammoCachePrefab, PlayerRig rig,
+        private static ManagersRig BuildManagers(EnemyPrefabRig enemyPrefabs, GameObject ammoCachePrefab, PlayerRig rig,
             List<Transform> spawnPoints)
         {
             var managers = new GameObject("Managers");
@@ -1326,7 +1436,12 @@ namespace Shooter.EditorTools
             AudioManager audioManager = managers.AddComponent<AudioManager>();
             UpgradeManager upgradeManager = managers.AddComponent<UpgradeManager>();
 
-            waveSpawner.enemyPrefab = enemyPrefab;
+            waveSpawner.enemyPrefab = enemyPrefabs.Trooper;
+            waveSpawner.trooperPrefab = enemyPrefabs.Trooper;
+            waveSpawner.runnerPrefab = enemyPrefabs.Runner;
+            waveSpawner.bulwarkPrefab = enemyPrefabs.Bulwark;
+            waveSpawner.marksmanPrefab = enemyPrefabs.Marksman;
+            waveSpawner.elitePrefab = enemyPrefabs.Elite;
             waveSpawner.ammoCachePrefab = ammoCachePrefab;
             waveSpawner.playerTarget = rig.Health;
             waveSpawner.spawnPoints = spawnPoints.ToArray();

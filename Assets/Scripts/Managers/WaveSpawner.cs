@@ -22,7 +22,13 @@ namespace Shooter.Managers
     public sealed class WaveSpawner : MonoBehaviour
     {
         [Header("Wiring (scene builder)")]
+        [Tooltip("Fallback prefab; also used by older tests.")]
         public GameObject enemyPrefab;
+        public GameObject trooperPrefab;
+        public GameObject runnerPrefab;
+        public GameObject bulwarkPrefab;
+        public GameObject marksmanPrefab;
+        public GameObject elitePrefab;
         public GameObject ammoCachePrefab;
         public PlayerHealth playerTarget;
         public Transform[] spawnPoints;
@@ -34,12 +40,11 @@ namespace Shooter.Managers
         [Range(0f, 1f)]
         [SerializeField] private float eliteChance = 0.18f;
         [SerializeField] private float eliteHealthMultiplier = 2.6f;
-        [SerializeField] private float eliteScale = 1.35f;
+        [SerializeField] private float eliteScale = 1.15f;
         [Tooltip("How much slower than a normal enemy an elite moves.")]
         [SerializeField] private float eliteSpeedPenalty = 1.1f;
         [SerializeField] private float eliteDamageBonus = 6f;
         [SerializeField] private int eliteScoreValue = 25;
-        [SerializeField] private Color eliteTint = new Color(1f, 0.5f, 0.12f);
 
         [Header("Variants")]
         [SerializeField] private int runnerFromWave = 2;
@@ -50,8 +55,7 @@ namespace Shooter.Managers
         [SerializeField] private float runnerSpeedBonus = 1.8f;
         [SerializeField] private float runnerDamagePenalty = 0.55f;
         [SerializeField] private int runnerScoreValue = 15;
-        [SerializeField] private float runnerScale = 0.72f;
-        [SerializeField] private Color runnerTint = new Color(1.55f, 0.28f, 0.9f);
+        [SerializeField] private float runnerScale = 0.80f;
 
         [Header("Marksman variant")]
         [SerializeField] private int marksmanFromWave = 2;
@@ -61,7 +65,6 @@ namespace Shooter.Managers
         [Tooltip("How much slower than a normal enemy a marksman moves.")]
         [SerializeField] private float marksmanSpeedPenalty = 0.5f;
         [SerializeField] private int marksmanScoreValue = 18;
-        [SerializeField] private Color marksmanTint = new Color(0.75f, 1.35f, 0.55f);
 
         [Header("Marksman spacing")]
         [Tooltip("Preferred distance a ranged enemy keeps from the player.")]
@@ -72,8 +75,7 @@ namespace Shooter.Managers
         [SerializeField] private float bulwarkSpeedPenalty = 1.4f;
         [SerializeField] private float bulwarkDamageBonus = 5f;
         [SerializeField] private int bulwarkScoreValue = 20;
-        [SerializeField] private float bulwarkScale = 1.28f;
-        [SerializeField] private Color bulwarkTint = new Color(0.25f, 0.95f, 1.55f);
+        [SerializeField] private float bulwarkScale = 1.18f;
 
         [Header("Elite drops")]
         [Tooltip("Ammo cache dropped when an elite dies. Null disables the drop.")]
@@ -170,19 +172,31 @@ namespace Shooter.Managers
             }
 
             Transform point = PickSpawnPoint();
-            GameObject instance = Instantiate(enemyPrefab, point.position, Quaternion.identity);
-
             float waveIndex = CurrentWave - 1;
 
             bool elite = CurrentWave >= eliteFromWave && Random.value < eliteChance;
             bool marksman = !elite && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
             bool runner = !elite && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
             bool bulwark = !elite && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
+
+            // Pick the dedicated model for this variant. enemyPrefab stays as a
+            // fallback for older scenes and tests.
+            GameObject prefab = elite ? elitePrefab
+                : marksman ? marksmanPrefab
+                : runner ? runnerPrefab
+                : bulwark ? bulwarkPrefab
+                : trooperPrefab;
+
+            if (prefab == null)
+            {
+                prefab = enemyPrefab;
+            }
+
+            GameObject instance = Instantiate(prefab, point.position, Quaternion.identity);
             float healthMultiplier = 1f + waveIndex * healthPerWave;
             float speedBonus = waveIndex * speedPerWave;
             float damageBonus = waveIndex * damagePerWave;
             float scale = 1f;
-            Color? tint = null;
             int scoreValue = 10;
 
             if (elite)
@@ -192,7 +206,6 @@ namespace Shooter.Managers
                 speedBonus -= eliteSpeedPenalty;
                 damageBonus += eliteDamageBonus;
                 scale = eliteScale;
-                tint = eliteTint;
                 scoreValue = eliteScoreValue;
             }
             else if (marksman)
@@ -201,7 +214,6 @@ namespace Shooter.Managers
                 // the player to break line of sight instead of backpedalling forever.
                 healthMultiplier *= marksmanHealthMultiplier;
                 speedBonus -= marksmanSpeedPenalty;
-                tint = marksmanTint;
                 scoreValue = marksmanScoreValue;
             }
             else if (runner)
@@ -211,7 +223,6 @@ namespace Shooter.Managers
                 speedBonus += runnerSpeedBonus;
                 damageBonus *= runnerDamagePenalty;
                 scale = runnerScale;
-                tint = runnerTint;
                 scoreValue = runnerScoreValue;
             }
             else if (bulwark)
@@ -221,7 +232,6 @@ namespace Shooter.Managers
                 speedBonus -= bulwarkSpeedPenalty;
                 damageBonus += bulwarkDamageBonus;
                 scale = bulwarkScale;
-                tint = bulwarkTint;
                 scoreValue = bulwarkScoreValue;
             }
 
@@ -231,7 +241,7 @@ namespace Shooter.Managers
 
             if (health != null)
             {
-                health.Initialize(healthMultiplier, scale, tint, elite);
+                health.Initialize(healthMultiplier, scale, null, elite);
                 health.SetScoreValue(scoreValue);
 
                 health.Died += HandleEnemyDied;

@@ -38,6 +38,7 @@ namespace Shooter.Enemies
 
         private PlayerHealth target;
         private EnemyHealth health;
+        private EnemyAnimator animator;
         private LineRenderer telegraph;
         private float nextShotAt;
         private float chargeStartedAt;
@@ -55,6 +56,7 @@ namespace Shooter.Enemies
         private void Awake()
         {
             health = GetComponent<EnemyHealth>();
+            animator = GetComponent<EnemyAnimator>();
             BuildTelegraph();
             active = false;
         }
@@ -87,6 +89,8 @@ namespace Shooter.Enemies
                 CancelCharge();
                 return;
             }
+
+            animator?.SetAiming(charging);
 
             if (charging)
             {
@@ -156,6 +160,7 @@ namespace Shooter.Enemies
         {
             charging = false;
             windUpEndsAt = -1f;
+            animator?.SetAiming(false);
 
             if (telegraph != null)
             {
