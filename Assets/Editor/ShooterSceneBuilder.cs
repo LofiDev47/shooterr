@@ -41,6 +41,7 @@ namespace Shooter.EditorTools
             ArenaMaterials materials = CreateMaterials();
             EnemyPrefabRig enemyPrefabs = CreateEnemyPrefabs(materials);
             GameObject ammoCachePrefab = CreateAmmoCachePrefab(materials);
+            GameObject healthCachePrefab = CreateHealthCachePrefab(materials);
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -49,12 +50,14 @@ namespace Shooter.EditorTools
             PlayerRig rig = BuildPlayer(materials);
             BuildPostProcessing(rig);
             List<Transform> spawnPoints = BuildSpawnPoints();
-            ManagersRig managers = BuildManagers(enemyPrefabs, ammoCachePrefab, rig, spawnPoints);
+            ManagersRig managers = BuildManagers(enemyPrefabs, ammoCachePrefab, healthCachePrefab, rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
 
             // Wired after the HUD exists, so these components can raise UI feedback.
             rig.Weapon.hud = hud;
             managers.Waves.hud = hud;
+
+            MenuController menu = BuildMenus(rig, managers, hud);
 
             BuildAmmoPickups(materials, rig, hud);
 
@@ -103,6 +106,7 @@ namespace Shooter.EditorTools
             public Material EnemyDebris;
             public Material Accent;
             public Material AmmoCache;
+            public Material HealthCache;
             public Material Skybox;
             public Material DarkMetal;
             public Material Stone;
@@ -150,6 +154,8 @@ namespace Shooter.EditorTools
                     new Color(0.15f, 0.75f, 1f) * 1.6f),
                 AmmoCache = GetOrCreateEmissiveMaterial("AmmoCache", new Color(0.24f, 0.16f, 0.05f),
                     new Color(1f, 0.68f, 0.2f) * 1.7f),
+                HealthCache = GetOrCreateEmissiveMaterial("HealthCache", new Color(0.05f, 0.22f, 0.08f),
+                    new Color(0.25f, 1f, 0.35f) * 1.7f),
                 DarkMetal = GetOrCreateLitMaterial("DarkMetal", new Color(0.10f, 0.12f, 0.15f), 0.28f, 0.7f),
                 Stone = GetOrCreateLitMaterial("Stone", new Color(0.37f, 0.38f, 0.42f), 0.08f, 0f),
                 Hazard = GetOrCreateEmissiveMaterial("Hazard", new Color(0.85f, 0.23f, 0.04f),
@@ -1301,6 +1307,12 @@ namespace Shooter.EditorTools
             ranged.telegraphMaterial = materials.EnemyBolt;
             ranged.sparkMaterial = materials.Spark;
 
+            // Every enemy also carries the exploder component, inert until the
+            // spawner initialises it for the Boomer variant.
+            EnemyExploder exploder = root.AddComponent<EnemyExploder>();
+            exploder.explosionMaterial = materials.Muzzle;
+            exploder.sparkMaterial = materials.Spark;
+
             string path = $"{PrefabsFolder}/Enemy{variant}.prefab";
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
@@ -1417,6 +1429,43 @@ namespace Shooter.EditorTools
             return prefab;
         }
 
+        /// <summary>
+        /// Builds the medikit that bosses, elites and regular kills drop.
+        /// One-shot, glowing green so it reads at a distance in fog.
+        /// </summary>
+        private static GameObject CreateHealthCachePrefab(ArenaMaterials materials)
+        {
+            var root = new GameObject("HealthCache");
+
+            GameObject box = CreatePrimitive("Box", PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
+                new Vector3(0.5f, 0.32f, 0.5f), materials.HealthCache, root.transform);
+            StripCollider(box);
+
+            GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
+                new Vector3(0.34f, 0.3f, 0.34f), materials.HealthCache, root.transform,
+                Quaternion.Euler(0f, 45f, 0f));
+            StripCollider(lid);
+
+            // Cross on top so it reads as health, not ammo, in a glance.
+            GameObject crossA = CreatePrimitive("CrossA", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                new Vector3(0.22f, 0.08f, 0.08f), materials.HealthCache, root.transform);
+            StripCollider(crossA);
+
+            GameObject crossB = CreatePrimitive("CrossB", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
+                new Vector3(0.08f, 0.08f, 0.22f), materials.HealthCache, root.transform);
+            StripCollider(crossB);
+
+            HealthPickup pickup = root.AddComponent<HealthPickup>();
+            pickup.Configure(25f);
+
+            string path = $"{PrefabsFolder}/HealthCache.prefab";
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+
+            Debug.Log($"[Shooter] Health cache prefab saved to {path}.");
+            return prefab;
+        }
+
         // ---------------------------------------------------------------- managers
         private sealed class ManagersRig
         {
@@ -1424,13 +1473,15 @@ namespace Shooter.EditorTools
             public WaveSpawner Waves;
             public AudioManager Audio;
             public UpgradeManager Upgrades;
+            public SettingsManager Settings;
         }
 
-        private static ManagersRig BuildManagers(EnemyPrefabRig enemyPrefabs, GameObject ammoCachePrefab, PlayerRig rig,
+        private static ManagersRig BuildManagers(EnemyPrefabRig enemyPrefabs, GameObject ammoCachePrefab, GameObject healthCachePrefab, PlayerRig rig,
             List<Transform> spawnPoints)
         {
             var managers = new GameObject("Managers");
 
+            SettingsManager settingsManager = managers.AddComponent<SettingsManager>();
             GameManager gameManager = managers.AddComponent<GameManager>();
             WaveSpawner waveSpawner = managers.AddComponent<WaveSpawner>();
             AudioManager audioManager = managers.AddComponent<AudioManager>();
@@ -1443,6 +1494,7 @@ namespace Shooter.EditorTools
             waveSpawner.marksmanPrefab = enemyPrefabs.Marksman;
             waveSpawner.elitePrefab = enemyPrefabs.Elite;
             waveSpawner.ammoCachePrefab = ammoCachePrefab;
+            waveSpawner.healthCachePrefab = healthCachePrefab;
             waveSpawner.playerTarget = rig.Health;
             waveSpawner.spawnPoints = spawnPoints.ToArray();
 
@@ -1456,7 +1508,7 @@ namespace Shooter.EditorTools
             upgradeManager.playerHealth = rig.Health;
 
             return new ManagersRig { Game = gameManager, Waves = waveSpawner, Audio = audioManager,
-                Upgrades = upgradeManager };
+                Upgrades = upgradeManager, Settings = settingsManager };
         }
 
         // ---------------------------------------------------------------- HUD
@@ -1658,6 +1710,24 @@ namespace Shooter.EditorTools
             return hud;
         }
 
+        // ---------------------------------------------------------------- menus
+
+        /// <summary>
+        /// Main menu + pause + settings. The controller builds its Canvas at
+        /// runtime (see MenuController), so the builder only wires references;
+        /// this keeps the scene reproducible without hand-building a Menu Canvas.
+        /// </summary>
+        private static MenuController BuildMenus(PlayerRig rig, ManagersRig managers, HUDController hud)
+        {
+            GameObject menuObject = new GameObject("Menu");
+            MenuController menu = menuObject.AddComponent<MenuController>();
+            menu.gameManager = managers.Game;
+            menu.settings = managers.Settings;
+            menu.hud = hud;
+            menu.player = rig.Controller;
+            return menu;
+        }
+
         /// <summary>Everything the upgrade manager needs from the pick-augment screen.</summary>
         private sealed class UpgradePanelRig
         {
@@ -1742,13 +1812,13 @@ namespace Shooter.EditorTools
                     new Color(0.05f, 0.06f, 0.09f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56f, 56f), font, FontStyle.Bold);
 
+                result.Rarities[i] = CreateText(card, "CardRarity", "STANDARD", 15, Color.white,
+                    TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                    new Vector2(0f, -68f), new Vector2(300f, 22f), font, FontStyle.Bold);
+
                 result.Titles[i] = CreateText(card, "CardTitle", "AUGMENT", 28, Color.white,
                     TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, 55f), new Vector2(360f, 44f), font, FontStyle.Bold);
-
-                result.Rarities[i] = CreateText(card, "CardRarity", "STANDARD", 13, Color.white,
-                    TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, 20f), new Vector2(300f, 18f), font, FontStyle.Bold);
+                    new Vector2(0f, 105f), new Vector2(340f, 56f), font, FontStyle.Bold);
 
                 Text description = CreateText(card, "CardDescription", "DESCRIBE THE CARD HERE", 20,
                     Color.white, TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),

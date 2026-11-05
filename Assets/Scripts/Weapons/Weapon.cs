@@ -341,6 +341,14 @@ namespace Shooter.Weapons
 
         private void HandleReloadInput(float now)
         {
+            SettingsManager settings = SettingsManager.Instance;
+
+            if (settings != null && settings.WasPressed(SettingsManager.ActionReload))
+            {
+                TryReload();
+                return;
+            }
+
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
                 TryReload();
@@ -381,7 +389,10 @@ namespace Shooter.Weapons
 
         private void HandleShotgunInput()
         {
-            if (Keyboard.current == null || !Keyboard.current.fKey.wasPressedThisFrame)
+            SettingsManager settings = SettingsManager.Instance;
+            bool pressed = settings != null && settings.WasPressed(SettingsManager.ActionShotgun);
+
+            if (!pressed && (Keyboard.current == null || !Keyboard.current.fKey.wasPressedThisFrame))
             {
                 return;
             }
@@ -401,7 +412,10 @@ namespace Shooter.Weapons
 
         private void HandleMeleeInput()
         {
-            if (Keyboard.current == null || !Keyboard.current.vKey.wasPressedThisFrame)
+            SettingsManager settings = SettingsManager.Instance;
+            bool pressed = settings != null && settings.WasPressed(SettingsManager.ActionMelee);
+
+            if (!pressed && (Keyboard.current == null || !Keyboard.current.vKey.wasPressedThisFrame))
             {
                 return;
             }

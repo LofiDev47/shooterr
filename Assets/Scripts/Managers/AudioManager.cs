@@ -42,6 +42,11 @@ namespace Shooter.Managers
         private void Awake()
         {
             Instance = this;
+            if (SettingsManager.Instance != null)
+            {
+                masterVolume = SettingsManager.Instance.MasterVolume;
+            }
+
             EnsureProceduralClips();
         }
 

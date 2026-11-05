@@ -47,6 +47,8 @@ namespace Shooter.EditorTools
             DamageFlash damageFlash = Object.FindAnyObjectByType<DamageFlash>();
             UpgradeManager upgradeManager = Object.FindAnyObjectByType<UpgradeManager>();
             Camera camera = Object.FindAnyObjectByType<Camera>();
+            SettingsManager settingsManager = Object.FindAnyObjectByType<SettingsManager>();
+            MenuController menuController = Object.FindAnyObjectByType<MenuController>();
 
             Check(scene.IsValid(), "arena scene opens");
             Check(gameManager != null, "scene contains a GameManager");
@@ -58,6 +60,20 @@ namespace Shooter.EditorTools
             Check(damageFlash != null, "scene contains the damage flash");
             Check(upgradeManager != null, "scene contains an UpgradeManager");
             Check(camera != null, "scene contains a camera");
+            Check(settingsManager != null, "scene contains a SettingsManager");
+            Check(menuController != null, "scene contains a MenuController");
+
+            if (menuController != null)
+            {
+                Check(menuController.gameManager != null, "MenuController is wired to GameManager");
+                Check(menuController.settings != null, "MenuController is wired to SettingsManager");
+                Check(menuController.hud != null, "MenuController is wired to the HUD");
+            }
+
+            if (gameManager != null)
+            {
+                Check(gameManager.State == GameState.Menu, "game starts in the main menu");
+            }
 
             if (upgradeManager != null)
             {
@@ -266,9 +282,20 @@ namespace Shooter.EditorTools
                     Check(ranged != null && ranged.projectileMaterial != null &&
                           ranged.telegraphMaterial != null,
                         $"{name} has ranged attack materials");
+
+                    Check(prefab.GetComponent<EnemyExploder>() != null,
+                        $"{name} can run as an exploder");
                 }
 
                 Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
+                Check(waveSpawner.healthCachePrefab != null, "wave spawner has a health cache prefab");
+
+                if (waveSpawner.healthCachePrefab != null)
+                {
+                    HealthPickup heal = waveSpawner.healthCachePrefab.GetComponent<HealthPickup>();
+                    Check(heal != null, "health cache prefab has a HealthPickup");
+                    Check(heal != null && heal.HealAmount > 0f, "health cache prefab carries heal");
+                }
 
                 if (waveSpawner.ammoCachePrefab != null)
                 {

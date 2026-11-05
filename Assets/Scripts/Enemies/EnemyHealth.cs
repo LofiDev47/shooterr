@@ -31,6 +31,9 @@ namespace Shooter.Enemies
         /// <summary>True for elite enemies, which drop an ammo cache when they die.</summary>
         public bool IsElite { get; private set; }
 
+        /// <summary>True for boss enemies (every 5th wave), which drop a cache like elites.</summary>
+        public bool IsBoss { get; private set; }
+
         /// <summary>Raised once when the enemy dies, used by the wave spawner to count survivors.</summary>
         public event Action<EnemyHealth> Died;
 
@@ -64,7 +67,7 @@ namespace Shooter.Enemies
         /// <param name="scale">Uniform size multiplier (CharacterController scales with it).</param>
         /// <param name="tint">Optional body colour override used to mark elites.</param>
         /// <param name="isElite">True for elites, which drop an ammo cache on death.</param>
-        public void Initialize(float healthMultiplier, float scale = 1f, Color? tint = null, bool isElite = false)
+        public void Initialize(float healthMultiplier, float scale = 1f, Color? tint = null, bool isElite = false, bool isBoss = false)
         {
             CacheComponents();
 
@@ -72,6 +75,7 @@ namespace Shooter.Enemies
             CurrentHealth = MaxHealth;
             IsDead = false;
             IsElite = isElite;
+            IsBoss = isBoss;
             deathTimer = -1f;
             transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 

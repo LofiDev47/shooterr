@@ -59,9 +59,9 @@ namespace Shooter.UI
         [SerializeField] private float crosshairMaxSpread = 14f;
 
         private const string HintBase =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC free cursor";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC pause";
         private const string HintWithShotgun =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC free cursor";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC pause";
 
         private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
@@ -116,8 +116,17 @@ namespace Shooter.UI
             markerFont = healthText != null ? healthText.font : toastText != null ? toastText.font : null;
         }
 
+        private void ResolveSettingsFlag()
+        {
+            if (SettingsManager.Instance != null)
+            {
+                showDamageNumbers = SettingsManager.Instance.ShowDamageNumbers;
+            }
+        }
+
         private void Update()
         {
+            ResolveSettingsFlag();
             UpdateHealth();
             UpdateWeapon();
             UpdateShotgun();
@@ -389,7 +398,21 @@ namespace Shooter.UI
 
             if (wave != lastWave && waveText != null)
             {
-                waveText.text = wave <= 0 ? "GET READY" : $"WAVE {wave}";
+                if (wave <= 0)
+                {
+                    waveText.text = "GET READY";
+                }
+                else if (waveSpawner.IsBossWave)
+                {
+                    waveText.text = $"BOSS WAVE {wave}";
+                    waveText.color = new Color(1f, 0.45f, 0.25f);
+                }
+                else
+                {
+                    waveText.text = $"WAVE {wave}";
+                    waveText.color = Color.white;
+                }
+
                 lastWave = wave;
             }
 
@@ -404,6 +427,11 @@ namespace Shooter.UI
             {
                 int seconds = Mathf.Max(0, Mathf.CeilToInt(waveSpawner.CountdownRemaining));
                 status = wave <= 0 ? $"FIRST WAVE IN {seconds}" : $"NEXT WAVE IN {seconds}";
+
+                if (WaveSpawner.IsBossWaveNumber(wave + 1))
+                {
+                    status = $"BOSS WAVE NEXT IN {seconds}";
+                }
             }
             else
             {

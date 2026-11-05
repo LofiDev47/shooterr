@@ -1,3 +1,4 @@
+using Shooter.Managers;
 using Shooter.Upgrades;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -175,7 +176,22 @@ namespace Shooter.Player
 
         private void Start()
         {
-            LockCursor(true);
+            // GameManager starts in Menu; only lock the cursor once the run begins.
+            if (GameManager.Instance != null && GameManager.Instance.IsPlaying)
+            {
+                ControlsEnabled = true;
+                LockCursor(true);
+            }
+            else if (GameManager.Instance != null)
+            {
+                ControlsEnabled = false;
+                LockCursor(false);
+            }
+            else
+            {
+                ControlsEnabled = false;
+                LockCursor(false);
+            }
         }
 
         private void OnEnable()
@@ -202,6 +218,11 @@ namespace Shooter.Player
         /// <summary>Adds a short camera shake. Strength is in degrees.</summary>
         public void AddShake(float strength)
         {
+            if (SettingsManager.Instance != null && !SettingsManager.Instance.ShakeEnabled)
+            {
+                return;
+            }
+
             shakeAmount = Mathf.Min(maxShake, Mathf.Max(shakeAmount, strength));
         }
 
@@ -254,9 +275,17 @@ namespace Shooter.Player
 
         private void HandleCursor()
         {
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            bool playing = GameManager.Instance != null && GameManager.Instance.IsPlaying;
+
+            if (!playing)
             {
-                LockCursor(false);
+                return;
+            }
+
+            // Escape now pauses via GameManager; do not just unlock the cursor here.
+            if (Keyboard.current != null && (Keyboard.current.escapeKey.wasPressedThisFrame || Keyboard.current.pKey.wasPressedThisFrame))
+            {
+                GameManager.Instance?.Pause();
             }
             else if (!cursorLocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
             {
@@ -282,10 +311,17 @@ namespace Shooter.Player
             if (Mouse.current != null && cursorLocked)
             {
                 delta = Mouse.current.delta.ReadValue();
-                float sensitivity = lookSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
+                float baseSensitivity = SettingsManager.Instance != null ? SettingsManager.Instance.Sensitivity : lookSensitivity;
+                float sensitivity = baseSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
+                float pitchDelta = delta.y * sensitivity;
+
+                if (SettingsManager.Instance != null && SettingsManager.Instance.InvertY)
+                {
+                    pitchDelta = -pitchDelta;
+                }
 
                 yaw += delta.x * sensitivity;
-                pitch = Mathf.Clamp(pitch - delta.y * sensitivity, -pitchLimit, pitchLimit);
+                pitch = Mathf.Clamp(pitch - pitchDelta, -pitchLimit, pitchLimit);
 
                 transform.rotation = Quaternion.Euler(0f, yaw, 0f);
             }
@@ -303,28 +339,30 @@ namespace Shooter.Player
             bool sprintHeld = false;
             bool crouchHeld = false;
 
+            SettingsManager settings = SettingsManager.Instance;
+
             if (Keyboard.current != null)
             {
-                if (Keyboard.current.wKey.isPressed) input.y += 1f;
-                if (Keyboard.current.sKey.isPressed) input.y -= 1f;
-                if (Keyboard.current.dKey.isPressed) input.x += 1f;
-                if (Keyboard.current.aKey.isPressed) input.x -= 1f;
+                if (IsHeld(settings, SettingsManager.ActionForward)) input.y += 1f;
+                if (IsHeld(settings, SettingsManager.ActionBackward)) input.y -= 1f;
+                if (IsHeld(settings, SettingsManager.ActionStrafeRight)) input.x += 1f;
+                if (IsHeld(settings, SettingsManager.ActionStrafeLeft)) input.x -= 1f;
 
                 if (input.sqrMagnitude > 1f)
                 {
                     input.Normalize();
                 }
 
-                sprintHeld = Keyboard.current.leftShiftKey.isPressed;
-                crouchHeld = Keyboard.current.cKey.isPressed;
+                sprintHeld = IsHeld(settings, SettingsManager.ActionSprint);
+                crouchHeld = IsHeld(settings, SettingsManager.ActionSlide);
 
-                if (Keyboard.current.spaceKey.wasPressedThisFrame)
+                if (WasPressed(settings, SettingsManager.ActionJump))
                 {
                     jumpBufferedUntil = Time.time + jumpBufferTime;
                     UpgradeManager.Instance?.OnJumpPressed();
                 }
 
-                if (Keyboard.current.spaceKey.wasReleasedThisFrame && verticalVelocity > 0f)
+                if (WasReleased(settings, SettingsManager.ActionJump) && verticalVelocity > 0f)
                 {
                     verticalVelocity *= jumpCutMultiplier;
                 }
@@ -570,19 +608,22 @@ namespace Shooter.Player
             // --- FOV: wider when sprinting or sliding, narrower when aiming.
             if (playerCamera != null)
             {
-                float targetFov = baseFov;
+                float effectiveBaseFov = SettingsManager.Instance != null ? SettingsManager.Instance.FieldOfView : baseFov;
+                float effectiveSprintFov = effectiveBaseFov + (sprintFov - baseFov);
+                float effectiveAimFov = effectiveBaseFov + (aimFov - baseFov);
+                float targetFov = effectiveBaseFov;
 
                 if (IsAiming)
                 {
-                    targetFov = aimFov;
+                    targetFov = effectiveAimFov;
                 }
                 else if (isSliding)
                 {
-                    targetFov = sprintFov + 4f;
+                    targetFov = effectiveSprintFov + 4f;
                 }
                 else if (IsSprinting)
                 {
-                    targetFov = sprintFov;
+                    targetFov = effectiveSprintFov;
                 }
 
                 float blend = 1f - Mathf.Exp(-fovBlendSpeed * deltaTime);
@@ -630,6 +671,57 @@ namespace Shooter.Player
                 float baseHeight = controller.height - 0.18f;
                 cameraPivot.localPosition = new Vector3(bobX, baseHeight + bobY - landingOffset, 0f);
             }
+        }
+
+        private static bool IsHeld(SettingsManager settings, string action)
+        {
+            if (settings == null)
+            {
+                return false;
+            }
+
+            Key key = settings.GetKey(action);
+
+            if (key == Key.None || Keyboard.current == null)
+            {
+                return false;
+            }
+
+            return Keyboard.current[key].isPressed;
+        }
+
+        private static bool WasPressed(SettingsManager settings, string action)
+        {
+            if (settings == null)
+            {
+                return false;
+            }
+
+            Key key = settings.GetKey(action);
+
+            if (key == Key.None || Keyboard.current == null)
+            {
+                return false;
+            }
+
+            return Keyboard.current[key].wasPressedThisFrame;
+        }
+
+        private static bool WasReleased(SettingsManager settings, string action)
+        {
+            if (settings == null)
+            {
+                return false;
+            }
+
+            Key key = settings.GetKey(action);
+
+            if (key == Key.None || Keyboard.current == null)
+            {
+                return false;
+            }
+
+            return Keyboard.current[key].wasReleasedThisFrame;
         }
     }
 }

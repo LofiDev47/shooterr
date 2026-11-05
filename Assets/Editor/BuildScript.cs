@@ -7,17 +7,33 @@ using UnityEngine;
 namespace Shooter.EditorTools
 {
     /// <summary>
-    /// Command-line build entry point:
+    /// Command-line build entry points:
     /// Unity -batchmode -quit -projectPath . -executeMethod Shooter.EditorTools.ShooterBuild.BuildLinux
     /// Produces Builds/Linux/Shooter.x86_64 and exits with a non-zero code on failure.
+    /// Unity -batchmode -quit -projectPath . -executeMethod Shooter.EditorTools.ShooterBuild.BuildWindows
+    /// Produces Builds/Windows/Shooter.exe and exits with a non-zero code on failure.
     /// </summary>
     public static class ShooterBuild
     {
-        private const string BuildDirectory = "Builds/Linux";
-        private const string ExecutableName = "Shooter.x86_64";
+        private const string LinuxBuildDirectory = "Builds/Linux";
+        private const string LinuxExecutableName = "Shooter.x86_64";
+
+        private const string WindowsBuildDirectory = "Builds/Windows";
+        private const string WindowsExecutableName = "Shooter.exe";
 
         [MenuItem("Shooter/Build Linux Player")]
         public static void BuildLinux()
+        {
+            BuildPlatform(BuildTarget.StandaloneLinux64, LinuxBuildDirectory, LinuxExecutableName);
+        }
+
+        [MenuItem("Shooter/Build Windows Player")]
+        public static void BuildWindows()
+        {
+            BuildPlatform(BuildTarget.StandaloneWindows64, WindowsBuildDirectory, WindowsExecutableName);
+        }
+
+        private static void BuildPlatform(BuildTarget target, string buildDirectory, string executableName)
         {
             int exitCode = 0;
 
@@ -31,13 +47,13 @@ namespace Shooter.EditorTools
                     ShooterSceneBuilder.Build();
                 }
 
-                Directory.CreateDirectory(BuildDirectory);
+                Directory.CreateDirectory(buildDirectory);
 
                 var options = new BuildPlayerOptions
                 {
                     scenes = new[] { ShooterSceneBuilder.ScenePath },
-                    locationPathName = Path.Combine(BuildDirectory, ExecutableName),
-                    target = BuildTarget.StandaloneLinux64,
+                    locationPathName = Path.Combine(buildDirectory, executableName),
+                    target = target,
                     options = BuildOptions.None,
                 };
 

@@ -30,6 +30,7 @@ namespace Shooter.Managers
         public GameObject marksmanPrefab;
         public GameObject elitePrefab;
         public GameObject ammoCachePrefab;
+        public GameObject healthCachePrefab;
         public PlayerHealth playerTarget;
         public Transform[] spawnPoints;
         public HUDController hud;
@@ -81,6 +82,38 @@ namespace Shooter.Managers
         [Tooltip("Ammo cache dropped when an elite dies. Null disables the drop.")]
         [SerializeField] private int eliteDropAmmo = 90;
 
+        [Header("Boss waves")]
+        [Tooltip("Every 5th wave fields one giant. Keep in sync with HUD countdown.")]
+        [SerializeField] private float bossHealthMultiplier = 6.5f;
+        [SerializeField] private float bossScale = 2.1f;
+        [Tooltip("How much slower than a normal enemy the boss moves.")]
+        [SerializeField] private float bossSpeedPenalty = 1.1f;
+        [SerializeField] private float bossDamageBonus = 12f;
+        [SerializeField] private int bossScoreValue = 150;
+        [Tooltip("Health restored by the heal cache the boss drops.")]
+        [SerializeField] private float bossDropHeal = 40f;
+
+        [Header("Exploder variant")]
+        [SerializeField] private int exploderFromWave = 3;
+        [Range(0f, 1f)]
+        [SerializeField] private float exploderChance = 0.14f;
+        [SerializeField] private float exploderHealthMultiplier = 0.5f;
+        [Tooltip("How much faster than a normal enemy an exploder moves.")]
+        [SerializeField] private float exploderSpeedBonus = 1.2f;
+        [SerializeField] private float exploderScale = 0.85f;
+        [SerializeField] private int exploderScoreValue = 12;
+        [SerializeField] private Color exploderTint = new Color(1.6f, 1.25f, 0.15f);
+
+        [Header("Heal drops (heal on kills)")]
+        [Tooltip("Chance for any kill to drop a small heal cache.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float healDropChance = 0.10f;
+        [SerializeField] private float healDropAmount = 15f;
+        [Tooltip("Chance for an elite kill to drop a heal cache.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float eliteHealDropChance = 0.35f;
+        [SerializeField] private float eliteDropHeal = 25f;
+
         [Header("Waves")]
         [SerializeField] private int startingEnemies = 4;
         [SerializeField] private int enemiesAddedPerWave = 2;
@@ -101,9 +134,16 @@ namespace Shooter.Managers
         public int AliveCount { get; private set; }
         public float CountdownRemaining { get; private set; }
 
+        /// <summary>True when the current wave is a boss wave.</summary>
+        public bool IsBossWave => IsBossWaveNumber(CurrentWave);
+
+        /// <summary>Every 5th wave (5, 10, 15...) is a boss wave. Pure for tests.</summary>
+        public static bool IsBossWaveNumber(int wave) => wave > 0 && wave % 5 == 0;
+
         private int spawnedThisWave;
         private float spawnTimer;
         private int lastSpawnIndex = -1;
+        private bool bossSpawnedThisWave;
 
         private void Start()
         {
@@ -158,10 +198,17 @@ namespace Shooter.Managers
             WaveSize = Mathf.Min(maxEnemiesPerWave, startingEnemies + (CurrentWave - 1) * enemiesAddedPerWave);
             spawnedThisWave = 0;
             spawnTimer = 0f;
+            bossSpawnedThisWave = false;
             Phase = WavePhase.Active;
 
             AudioManager.Instance?.PlayWaveStart();
-            Debug.Log($"[Shooter] Wave {CurrentWave} started with {WaveSize} enemies.");
+
+            if (IsBossWave)
+            {
+                hud?.ShowToast($"BOSS WAVE {CurrentWave} INBOUND");
+            }
+
+            Debug.Log($"[Shooter] Wave {CurrentWave} started with {WaveSize} enemies." + (IsBossWave ? " (boss wave)" : ""));
         }
 
         private void SpawnEnemy()
@@ -174,14 +221,18 @@ namespace Shooter.Managers
             Transform point = PickSpawnPoint();
             float waveIndex = CurrentWave - 1;
 
-            bool elite = CurrentWave >= eliteFromWave && Random.value < eliteChance;
-            bool marksman = !elite && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
-            bool runner = !elite && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
-            bool bulwark = !elite && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
+            bool boss = IsBossWave && !bossSpawnedThisWave;
+            bool elite = !boss && CurrentWave >= eliteFromWave && Random.value < eliteChance;
+            bool exploder = !boss && !elite && CurrentWave >= exploderFromWave && Random.value < exploderChance;
+            bool marksman = !boss && !elite && !exploder && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
+            bool runner = !boss && !elite && !exploder && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
+            bool bulwark = !boss && !elite && !exploder && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
 
             // Pick the dedicated model for this variant. enemyPrefab stays as a
-            // fallback for older scenes and tests.
-            GameObject prefab = elite ? elitePrefab
+            // fallback for older scenes and tests. Bosses reuse the elite model,
+            // exploders reuse the trooper model with an amber tint.
+            GameObject prefab = boss ? elitePrefab
+                : elite ? elitePrefab
                 : marksman ? marksmanPrefab
                 : runner ? runnerPrefab
                 : bulwark ? bulwarkPrefab
@@ -197,9 +248,21 @@ namespace Shooter.Managers
             float speedBonus = waveIndex * speedPerWave;
             float damageBonus = waveIndex * damagePerWave;
             float scale = 1f;
+            Color? tint = null;
             int scoreValue = 10;
 
-            if (elite)
+            if (boss)
+            {
+                // Boss rules: huge, tanky, slow, hits hard, and shoots as well as
+                // charging. It rewards focus fire and punishes greed.
+                healthMultiplier *= bossHealthMultiplier;
+                speedBonus -= bossSpeedPenalty;
+                damageBonus += bossDamageBonus;
+                scale = bossScale;
+                scoreValue = bossScoreValue;
+                bossSpawnedThisWave = true;
+            }
+            else if (elite)
             {
                 // Elites are bigger, tougher and hit harder, but slower.
                 healthMultiplier *= eliteHealthMultiplier;
@@ -207,6 +270,17 @@ namespace Shooter.Managers
                 damageBonus += eliteDamageBonus;
                 scale = eliteScale;
                 scoreValue = eliteScoreValue;
+            }
+            else if (exploder)
+            {
+                // Exploders are fast, fragile, and turn a kill into a blast.
+                // They force the player to kill at range or burn dash/slide.
+                healthMultiplier *= exploderHealthMultiplier;
+                speedBonus += exploderSpeedBonus;
+                damageBonus += 4f;
+                scale = exploderScale;
+                tint = exploderTint;
+                scoreValue = exploderScoreValue;
             }
             else if (marksman)
             {
@@ -238,10 +312,11 @@ namespace Shooter.Managers
             EnemyHealth health = instance.GetComponent<EnemyHealth>();
             EnemyAI ai = instance.GetComponent<EnemyAI>();
             EnemyRangedAttack ranged = instance.GetComponent<EnemyRangedAttack>();
+            EnemyExploder exploderComp = instance.GetComponent<EnemyExploder>();
 
             if (health != null)
             {
-                health.Initialize(healthMultiplier, scale, null, elite);
+                health.Initialize(healthMultiplier, scale, tint, elite, boss);
                 health.SetScoreValue(scoreValue);
 
                 health.Died += HandleEnemyDied;
@@ -252,13 +327,28 @@ namespace Shooter.Managers
                 ai.Initialize(playerTarget, speedBonus, damageBonus);
             }
 
-            if (marksman && ranged != null)
+            if ((marksman || boss) && ranged != null)
             {
-                ai?.SetRanged(marksmanHoldDistance, marksmanStrafeSpeed);
-                ranged.Initialize(playerTarget, waveIndex * 0.4f);
+                if (marksman)
+                {
+                    ai?.SetRanged(marksmanHoldDistance, marksmanStrafeSpeed);
+                }
+
+                // Boss keeps melee behaviour *and* shoots, so it stays a threat
+                // at any range instead of turning into a stationary turret.
+                ranged.Initialize(playerTarget, boss ? waveIndex * 0.6f + 4f : waveIndex * 0.4f);
             }
 
-            if (elite)
+            if (exploder && exploderComp != null)
+            {
+                exploderComp.Initialize(playerTarget, damageBonus);
+            }
+
+            if (boss)
+            {
+                hud?.ShowToast("BOSS INBOUND");
+            }
+            else if (elite)
             {
                 hud?.ShowToast("ELITE INBOUND");
             }
@@ -297,9 +387,28 @@ namespace Shooter.Managers
             enemy.Died -= HandleEnemyDied;
             AliveCount = Mathf.Max(0, AliveCount - 1);
 
+            if (enemy.IsBoss)
+            {
+                // Boss rules: both drops are guaranteed, so the reward is not RNG.
+                DropAmmoCache(enemy.transform.position);
+                DropHealthCache(enemy.transform.position, bossDropHeal);
+                hud?.ShowToast("BOSS DOWN  ·  +AMMO +HEAL");
+                return;
+            }
+
             if (enemy.IsElite)
             {
                 DropAmmoCache(enemy.transform.position);
+
+                if (Random.value < eliteHealDropChance)
+                {
+                    DropHealthCache(enemy.transform.position, eliteDropHeal);
+                }
+            }
+            else if (Random.value < healDropChance)
+            {
+                // Heal on kills: aggression heals, so passive play starves.
+                DropHealthCache(enemy.transform.position, healDropAmount);
             }
         }
 
@@ -327,6 +436,34 @@ namespace Shooter.Managers
 
             hud?.ShowToast("ELITE DOWN  ·  AMMO CACHE DROPPED");
             Debug.Log($"[Shooter] Elite dropped an ammo cache at {dropPosition}.");
+        }
+
+        /// <summary>
+        /// Spawns a medikit where the enemy fell. Offset a little from the ammo
+        /// cache so they don't overlap visually. Stays until the player actually
+        /// needs health.
+        /// </summary>
+        private void DropHealthCache(Vector3 position, float heal)
+        {
+            if (healthCachePrefab == null || heal <= 0f)
+            {
+                return;
+            }
+
+            Vector3 dropPosition = new Vector3(
+                position.x + Random.Range(-0.6f, 0.6f), 0.55f, position.z + Random.Range(-0.6f, 0.6f));
+            GameObject cache = Instantiate(healthCachePrefab, dropPosition, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+
+            HealthPickup pickup = cache.GetComponent<HealthPickup>();
+
+            if (pickup != null)
+            {
+                pickup.HealAmount = heal;
+                pickup.playerHealth = null; // Resolved at runtime.
+                pickup.player = null;
+            }
+
+            Debug.Log($"[Shooter] Dropped heal cache (+{heal} HP) at {dropPosition}.");
         }
     }
 }

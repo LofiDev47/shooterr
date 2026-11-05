@@ -1,3 +1,4 @@
+using System;
 using Shooter.Combat;
 using Shooter.Player;
 using UnityEngine;
@@ -8,14 +9,16 @@ namespace Shooter.Managers
 {
     public enum GameState
     {
+        Menu,
         Playing,
-        GameOver
+        Paused,
+        GameOver,
     }
 
     /// <summary>
-    /// Owns run-level state: score, kill chains, hit-stop and playing/game-over
-    /// transitions. The HUD reads these values directly (pull model) so there is
-    /// exactly one source of truth for the run.
+    /// Owns run-level state: score, kill chains, hit-stop and menu / playing /
+    /// paused / game-over transitions. The HUD reads these values directly
+    /// (pull model) so there is exactly one source of truth for the run.
     /// </summary>
     public sealed class GameManager : MonoBehaviour
     {
@@ -39,20 +42,45 @@ namespace Shooter.Managers
         [Range(0.01f, 1f)]
         [SerializeField] private float killHitStopScale = 0.12f;
 
-        public GameState State { get; private set; } = GameState.Playing;
+        public GameState State { get; private set; } = GameState.Menu;
         public bool IsPlaying => State == GameState.Playing;
         public int Score { get; private set; }
+
+        public event Action<GameState> StateChanged;
 
         /// <summary>Live kill-chain state, read by the HUD.</summary>
         public ComboTracker Combo { get; private set; }
 
         private float hitStopUntil;
+        private static bool autoStartNextRun;
 
         private void Awake()
         {
             Instance = this;
             Combo = new ComboTracker(comboWindow, comboTierStep, comboMaxMultiplier);
-            Time.timeScale = 1f;
+            State = GameState.Menu;
+            Score = 0;
+        }
+
+        private void Start()
+        {
+            if (autoStartNextRun)
+            {
+                autoStartNextRun = false;
+                StartGame();
+                return;
+            }
+
+            State = GameState.Menu;
+            Time.timeScale = 0f;
+
+            if (playerController != null)
+            {
+                playerController.ControlsEnabled = false;
+                playerController.LockCursor(false);
+            }
+
+            StateChanged?.Invoke(State);
         }
 
         private void OnEnable()
@@ -84,15 +112,144 @@ namespace Shooter.Managers
             Combo?.Tick(Time.time);
             UpdateHitStop();
 
-            if (State != GameState.GameOver || Keyboard.current == null)
+            if (Keyboard.current == null)
             {
                 return;
             }
 
-            if (Keyboard.current.rKey.wasPressedThisFrame || Keyboard.current.enterKey.wasPressedThisFrame)
+            SettingsManager settings = SettingsManager.Instance;
+
+            switch (State)
             {
-                Restart();
+                case GameState.GameOver:
+                    if ((settings != null && settings.WasPressed(SettingsManager.ActionRestart)) ||
+                        Keyboard.current.rKey.wasPressedThisFrame ||
+                        Keyboard.current.enterKey.wasPressedThisFrame)
+                    {
+                        Restart();
+                    }
+                    break;
+
+                case GameState.Menu:
+                    if (Keyboard.current.enterKey.wasPressedThisFrame ||
+                        Keyboard.current.numpadEnterKey.wasPressedThisFrame ||
+                        Keyboard.current.spaceKey.wasPressedThisFrame)
+                    {
+                        // Don't start from a stray Space that was still held from a previous run.
+                        // Unity still reports wasPressedThisFrame only on the edge, so this is safe.
+                        StartGame();
+                    }
+                    break;
+
+                case GameState.Playing:
+                    if ((settings != null && settings.WasPressed(SettingsManager.ActionPause)) ||
+                        Keyboard.current.escapeKey.wasPressedThisFrame ||
+                        Keyboard.current.pKey.wasPressedThisFrame)
+                    {
+                        Pause();
+                    }
+                    break;
+
+                case GameState.Paused:
+                    if ((settings != null && settings.WasPressed(SettingsManager.ActionPause)) ||
+                        Keyboard.current.escapeKey.wasPressedThisFrame ||
+                        Keyboard.current.pKey.wasPressedThisFrame)
+                    {
+                        Resume();
+                    }
+                    break;
             }
+        }
+
+        /// <summary>Moves from the main menu into the run. Also used after a quit to menu.</summary>
+        public void StartGame()
+        {
+            if (State != GameState.Menu && State != GameState.Paused)
+            {
+                return;
+            }
+
+            SetState(GameState.Playing);
+            Time.timeScale = 1f;
+
+            if (playerController != null)
+            {
+                playerController.ControlsEnabled = true;
+                playerController.LockCursor(true);
+            }
+        }
+
+        /// <summary>Pauses the run: freezes time, releases the cursor, shows the pause menu.</summary>
+        public void Pause()
+        {
+            if (State != GameState.Playing)
+            {
+                return;
+            }
+
+            SetState(GameState.Paused);
+            Time.timeScale = 0f;
+
+            if (playerController != null)
+            {
+                playerController.ControlsEnabled = false;
+                playerController.LockCursor(false);
+            }
+        }
+
+        /// <summary>Resumes from the pause menu.</summary>
+        public void Resume()
+        {
+            if (State != GameState.Paused)
+            {
+                return;
+            }
+
+            SetState(GameState.Playing);
+            Time.timeScale = 1f;
+
+            if (playerController != null)
+            {
+                playerController.ControlsEnabled = true;
+                playerController.LockCursor(true);
+            }
+        }
+
+        /// <summary>Reloads the arena so the menu owns a fresh run.</summary>
+        public void QuitToMenu()
+        {
+            autoStartNextRun = false;
+            Time.timeScale = 1f;
+            State = GameState.Menu;
+            LoadActiveScene();
+        }
+
+        /// <summary>Reloads the active scene and jumps straight back into play.</summary>
+        public void Restart()
+        {
+            autoStartNextRun = true;
+            Time.timeScale = 1f;
+            LoadActiveScene();
+        }
+
+        private void LoadActiveScene()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+
+            if (scene.buildIndex >= 0)
+            {
+                SceneManager.LoadScene(scene.buildIndex);
+            }
+            else
+            {
+                SceneManager.LoadScene(scene.name);
+            }
+        }
+
+        private void SetState(GameState next)
+        {
+            State = next;
+            StateChanged?.Invoke(State);
         }
 
         /// <summary>Awards points for a kill, multiplied by the current chain.</summary>
@@ -161,7 +318,10 @@ namespace Shooter.Managers
                 return;
             }
 
-            State = GameState.GameOver;
+            int waveReached = waveSpawner != null ? Mathf.Max(1, waveSpawner.CurrentWave) : 1;
+            SettingsManager.Instance?.RecordRun(Score, waveReached);
+
+            SetState(GameState.GameOver);
             hitStopUntil = 0f;
             Combo?.Reset();
 
@@ -174,22 +334,6 @@ namespace Shooter.Managers
             // Freeze gameplay, but the HUD keeps updating because Unity still ticks Update.
             Time.timeScale = 0f;
             AudioManager.Instance?.PlayGameOver();
-        }
-
-        /// <summary>Reloads the active scene and resets time scale.</summary>
-        public void Restart()
-        {
-            Time.timeScale = 1f;
-            Scene scene = SceneManager.GetActiveScene();
-
-            if (scene.buildIndex >= 0)
-            {
-                SceneManager.LoadScene(scene.buildIndex);
-            }
-            else
-            {
-                SceneManager.LoadScene(scene.name);
-            }
         }
     }
 }

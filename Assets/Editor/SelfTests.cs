@@ -1,5 +1,6 @@
 using Shooter.Combat;
 using Shooter.Enemies;
+using Shooter.Managers;
 using Shooter.Player;
 using Shooter.Upgrades;
 using Shooter.Weapons;
@@ -42,6 +43,7 @@ namespace Shooter.EditorTools
             TestShotgunState();
             TestRangeFalloffAndMelee();
             TestBallisticsAugments();
+            TestBossWaveNumbers();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -464,6 +466,16 @@ namespace Shooter.EditorTools
             Check(!Weapon.IsHeadshot(bounds, new Vector3(0f, 1.2f, 0f)), "centre mass is not a headshot");
             Check(!Weapon.IsHeadshot(new Bounds(Vector3.zero, Vector3.zero), Vector3.zero),
                 "degenerate bounds never headshot");
+        }
+
+        private static void TestBossWaveNumbers()
+        {
+            Check(!WaveSpawner.IsBossWaveNumber(0), "wave 0 is not a boss wave");
+            Check(!WaveSpawner.IsBossWaveNumber(1), "wave 1 is not a boss wave");
+            Check(!WaveSpawner.IsBossWaveNumber(4), "wave 4 is not a boss wave");
+            Check(WaveSpawner.IsBossWaveNumber(5), "wave 5 is a boss wave");
+            Check(WaveSpawner.IsBossWaveNumber(10), "wave 10 is a boss wave");
+            Check(!WaveSpawner.IsBossWaveNumber(6), "wave 6 is not a boss wave");
         }
 
         private static void Check(bool condition, string description)
