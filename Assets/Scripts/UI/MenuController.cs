@@ -28,7 +28,27 @@ namespace Shooter.UI
         public GameObject pausePanel;
         public GameObject settingsPanel;
 
+        /// <summary>
+        /// True while a menu-owned page owns the keyboard. GameManager checks this so
+        /// Enter/Space cannot start a run behind the settings screen and Esc cannot
+        /// resume one underneath it. It stays true for the frame the page closes on,
+        /// so the closing key cannot leak into the game when Update order puts this
+        /// component before GameManager.
+        /// </summary>
+        public bool IsModalOpen => settingsOpen || Time.frameCount <= inputBlockedUntilFrame;
+
         private Font font;
+
+        private Button playButton;
+        private Button resumeButton;
+        private Button settingsBackButton;
+        private Button gameOverRestartButton;
+        private Text menuHint;
+
+        private bool consumedInputThisFrame;
+        private int inputBlockedUntilFrame = -1;
+        private GameObject pendingSelection;
+        private MenuScreen lastScreen = MenuScreen.None;
 
         private Text bestLabel;
         private Slider sensitivitySlider;
@@ -59,6 +79,16 @@ namespace Shooter.UI
             (1920, 1080),
             (2560, 1440),
         };
+
+        /// <summary>Which menu page is on screen; focus is placed once per change.</summary>
+        private enum MenuScreen
+        {
+            None,
+            Main,
+            Paused,
+            Settings,
+            GameOver,
+        }
 
         private void Awake()
         {
@@ -94,8 +124,33 @@ namespace Shooter.UI
         private void Update()
         {
             ResolveReferences();
+
+            consumedInputThisFrame = false;
             UpdateRebindCapture();
+
+            if (!consumedInputThisFrame)
+            {
+                HandleMenuInput();
+            }
+
             SyncPanels();
+        }
+
+        /// <summary>
+        /// Esc backs out of the settings page. GameManager ignores its own keys while
+        /// <see cref="IsModalOpen"/> is true, so this is the keyboard way out.
+        /// </summary>
+        private void HandleMenuInput()
+        {
+            if (!settingsOpen || Keyboard.current == null)
+            {
+                return;
+            }
+
+            if (Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                CloseSettings();
+            }
         }
 
         private void ResolveReferences()
@@ -171,8 +226,17 @@ namespace Shooter.UI
 
         public void CloseSettings()
         {
+            bool wasOpen = settingsOpen || !string.IsNullOrEmpty(listeningActionId);
             settingsOpen = false;
             listeningActionId = null;
+
+            // Hold the modal flag for this frame so the key that closed the page
+            // cannot also pause/resume/start the game behind it.
+            if (wasOpen)
+            {
+                inputBlockedUntilFrame = Time.frameCount;
+            }
+
             RefreshKeybindLabels();
         }
 
@@ -202,38 +266,43 @@ namespace Shooter.UI
                 return;
             }
 
-            if (settingsPanel != null)
-            {
-                settingsPanel.SetActive(settingsOpen);
-            }
+            GameState state = gameManager != null ? gameManager.State : GameState.Menu;
+            MenuScreen screen;
 
             if (settingsOpen)
             {
-                if (mainMenuPanel != null)
-                {
-                    mainMenuPanel.SetActive(false);
-                }
-
-                if (pausePanel != null)
-                {
-                    pausePanel.SetActive(false);
-                }
-
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                return;
+                screen = MenuScreen.Settings;
+            }
+            else if (state == GameState.Menu)
+            {
+                screen = MenuScreen.Main;
+            }
+            else if (state == GameState.Paused)
+            {
+                screen = MenuScreen.Paused;
+            }
+            else if (state == GameState.GameOver)
+            {
+                screen = MenuScreen.GameOver;
+            }
+            else
+            {
+                screen = MenuScreen.None;
             }
 
-            GameState state = gameManager != null ? gameManager.State : GameState.Menu;
+            if (settingsPanel != null)
+            {
+                settingsPanel.SetActive(screen == MenuScreen.Settings);
+            }
 
             if (mainMenuPanel != null)
             {
-                mainMenuPanel.SetActive(state == GameState.Menu);
+                mainMenuPanel.SetActive(screen == MenuScreen.Main);
             }
 
             if (pausePanel != null)
             {
-                pausePanel.SetActive(state == GameState.Paused);
+                pausePanel.SetActive(screen == MenuScreen.Paused);
             }
 
             if (bestLabel != null && settings != null)
@@ -241,23 +310,76 @@ namespace Shooter.UI
                 bestLabel.text = $"BEST SCORE {settings.BestScore}  ·  BEST WAVE {settings.BestWave}";
             }
 
-            if (state == GameState.Playing)
+            if (screen == MenuScreen.None)
             {
-                if (gameManager != null && gameManager.IsPlaying && player != null && player.ControlsEnabled)
+                if (gameManager != null && gameManager.IsPlaying && player != null && player.ControlsEnabled && Cursor.visible)
                 {
                     // GameManager owns the lock; MenuController just makes sure the
                     // cursor is hidden while playing if something left it visible.
-                    if (Cursor.visible)
-                    {
-                        player.LockCursor(true);
-                    }
+                    player.LockCursor(true);
                 }
             }
-            else if (state == GameState.Menu || state == GameState.Paused || state == GameState.GameOver)
+            else
             {
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
+
+            UpdateSelection(screen);
+            ApplyPendingSelection();
+        }
+
+        /// <summary>
+        /// Gives each page a focused element when the page changes. Doing this every
+        /// frame would fight arrow-key navigation, so it only fires on a transition.
+        /// </summary>
+        private void UpdateSelection(MenuScreen screen)
+        {
+            if (screen == lastScreen)
+            {
+                return;
+            }
+
+            lastScreen = screen;
+
+            switch (screen)
+            {
+                case MenuScreen.Main:
+                    QueueSelection(playButton);
+                    break;
+                case MenuScreen.Paused:
+                    QueueSelection(resumeButton);
+                    break;
+                case MenuScreen.Settings:
+                    QueueSelection(settingsBackButton);
+                    break;
+                case MenuScreen.GameOver:
+                    QueueSelection(gameOverRestartButton);
+                    break;
+                default:
+                    pendingSelection = null;
+                    break;
+            }
+        }
+
+        private void QueueSelection(Button button)
+        {
+            pendingSelection = button != null ? button.gameObject : null;
+        }
+
+        /// <summary>
+        /// Applied while the target is actually visible: the game-over panel belongs
+        /// to the HUD and may switch on a frame after the state change.
+        /// </summary>
+        private void ApplyPendingSelection()
+        {
+            if (pendingSelection == null || EventSystem.current == null || !pendingSelection.activeInHierarchy)
+            {
+                return;
+            }
+
+            EventSystem.current.SetSelectedGameObject(pendingSelection);
+            pendingSelection = null;
         }
 
         // ---------------------------------------------------------------- settings sync
@@ -346,6 +468,42 @@ namespace Shooter.UI
             }
 
             RefreshKeybindLabels();
+            RefreshMenuHint();
+        }
+
+        /// <summary>
+        /// The control hint is generated from the live bindings, so a rebind cannot
+        /// leave the main menu advertising the old keys.
+        /// </summary>
+        private void RefreshMenuHint()
+        {
+            if (menuHint == null)
+            {
+                return;
+            }
+
+            if (settings == null)
+            {
+                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · V melee · C slide · R reload · F shotgun · ESC pause";
+                return;
+            }
+
+            string K(string actionId)
+            {
+                return SettingsManager.PrettyKey(settings.GetKey(actionId));
+            }
+
+            menuHint.text =
+                $"{K(SettingsManager.ActionForward)}{K(SettingsManager.ActionStrafeLeft)}" +
+                $"{K(SettingsManager.ActionBackward)}{K(SettingsManager.ActionStrafeRight)} move" +
+                $" · {K(SettingsManager.ActionSprint)} sprint" +
+                $" · {K(SettingsManager.ActionJump)} jump" +
+                " · LMB fire · RMB aim" +
+                $" · {K(SettingsManager.ActionMelee)} melee" +
+                $" · {K(SettingsManager.ActionSlide)} slide" +
+                $" · {K(SettingsManager.ActionReload)} reload" +
+                $" · {K(SettingsManager.ActionShotgun)} shotgun" +
+                $" · {K(SettingsManager.ActionPause)} pause";
         }
 
         private static string QualityName(int index)
@@ -395,6 +553,10 @@ namespace Shooter.UI
                 {
                     continue;
                 }
+
+                // This keystroke belongs to the capture: it must not also be read as
+                // menu navigation or as a pause toggle on the same frame.
+                consumedInputThisFrame = true;
 
                 // Esc cancels any rebinding except Pausing itself, where Esc is a valid target.
                 if (key == Key.Escape && listeningActionId != SettingsManager.ActionPause && listeningActionId != SettingsManager.ActionRestart)
@@ -529,7 +691,7 @@ namespace Shooter.UI
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -160f), new Vector2(360f, 64f), PlayRestart);
             _ = CreateButton(panel, "MenuButtonMenu", "MAIN MENU",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -240f), new Vector2(360f, 64f), () => QuitToMenu());
-            _ = restart;
+            gameOverRestartButton = restart;
         }
 
         private void PlayRestart()
@@ -554,17 +716,17 @@ namespace Shooter.UI
                 new Color(1f, 0.82f, 0.3f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 160f), new Vector2(1200f, 36f), font);
 
-            CreateButton(bg.transform, "PlayButton", "PLAY",
+            playButton = CreateButton(bg.transform, "PlayButton", "PLAY",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(420f, 76f), Play);
             CreateButton(bg.transform, "SettingsButton", "SETTINGS",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(420f, 64f), OpenSettingsFromMenu);
             CreateButton(bg.transform, "QuitButton", "QUIT",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -146f), new Vector2(420f, 64f), QuitGame);
 
-            CreateText(bg.transform, "MenuHint",
-                "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · V melee · C slide · R reload · F shotgun · ESC pause",
+            menuHint = CreateText(bg.transform, "MenuHint", "",
                 16, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f), new Vector2(0f, -260f), new Vector2(1500f, 30f), font);
+            RefreshMenuHint();
 
             _ = title;
             _ = subtitle;
@@ -579,7 +741,7 @@ namespace Shooter.UI
                 TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 260f),
                 new Vector2(1200f, 100f), font, FontStyle.Bold);
 
-            CreateButton(bg.transform, "ResumeButton", "RESUME",
+            resumeButton = CreateButton(bg.transform, "ResumeButton", "RESUME",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 120f), new Vector2(420f, 72f), Resume);
             CreateButton(bg.transform, "PauseSettingsButton", "SETTINGS",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 28f), new Vector2(420f, 64f), OpenSettingsFromPause);
@@ -599,7 +761,7 @@ namespace Shooter.UI
                 TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 460f),
                 new Vector2(1200f, 80f), font, FontStyle.Bold);
 
-            CreateButton(bg.transform, "SettingsBack", "← BACK",
+            settingsBackButton = CreateButton(bg.transform, "SettingsBack", "← BACK",
                 new Vector2(0f, 1f), new Vector2(150f, -60f), new Vector2(240f, 60f), CloseSettings);
             CreateButton(bg.transform, "SettingsReset", "RESET TO DEFAULTS",
                 new Vector2(1f, 1f), new Vector2(-180f, -60f), new Vector2(300f, 60f), ResetSettings);

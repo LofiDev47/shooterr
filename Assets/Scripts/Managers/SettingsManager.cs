@@ -90,14 +90,20 @@ namespace Shooter.Managers
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
+            // Deliberately NOT DontDestroyOnLoad and deliberately no "destroy the
+            // duplicate" guard. This component sits on the shared "Managers" object
+            // next to GameManager, WaveSpawner, AudioManager and UpgradeManager, so
+            // DontDestroyOnLoad(gameObject) moves the whole manager graph across
+            // loads -- and Restart / QuitToMenu are scene reloads that need a fresh
+            // graph bound to the new player, spawn points and HUD. The old graph
+            // then outlived its scene and the reloaded copy was destroyed instead.
+            //
+            // Assigning unconditionally is also what makes the reload safe in both
+            // engine call orders: if the outgoing instance is destroyed after this
+            // Awake, its OnDestroy sees a different Instance and leaves it alone.
+            // Settings themselves are replayed from PlayerPrefs by Load(), so
+            // nothing here needs to survive a load.
             Instance = this;
-            DontDestroyOnLoad(gameObject);
             Load();
         }
 
@@ -107,6 +113,15 @@ namespace Shooter.Managers
             {
                 Instance = null;
             }
+        }
+
+        private void Start()
+        {
+            // Awake order across the manager object is not guaranteed, and
+            // AudioManager reads MasterVolume from Instance in its own Awake.
+            // Re-apply once every Awake has run so a scene reload cannot leave
+            // audio or quality at a default.
+            Apply();
         }
 
         public static BindingDef[] AllBindings => DefaultBindings;
