@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Shooter.Combat;
+using Shooter.Enemies;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.Upgrades;
@@ -42,6 +43,19 @@ namespace Shooter.UI
 
         [Header("Hit marker")]
         public CanvasGroup hitMarkerGroup;
+
+        [Header("Boss bar (shown only while The Warden is alive)")]
+        public GameObject bossBarRoot;
+        public Image bossBarFill;
+        public Text bossNameText;
+        public Text bossPhaseText;
+        [Tooltip("One pip per phase; lit pips show the phase the boss is in.")]
+        public Image[] bossPhasePips;
+
+        [SerializeField] private Color bossPhaseOneColor = new Color(0.92f, 0.35f, 0.14f);
+        [SerializeField] private Color bossPhaseTwoColor = new Color(1f, 0.55f, 0.12f);
+        [SerializeField] private Color bossPhaseThreeColor = new Color(1f, 0.82f, 0.25f);
+        [SerializeField] private Color bossExposedColor = new Color(1f, 0.95f, 0.6f);
 
         [SerializeField] private float hitMarkerDuration = 0.18f;
 
@@ -132,6 +146,7 @@ namespace Shooter.UI
             UpdateShotgun();
             UpdateHint();
             UpdateWave();
+            UpdateBossBar();
             UpdateScore();
             UpdateCombo();
             UpdateState();
@@ -445,9 +460,88 @@ namespace Shooter.UI
             }
         }
 
-        private void UpdateScore()
+        /// <summary>
+        /// Boss bar: name, phase label and pip row above a single wide fill. It
+        /// pulls from <see cref="BossController.Current"/> so no extra wiring is
+        /// needed when a boss spawns mid-wave, and hides itself once it dies.
+        /// </summary>
+        private void UpdateBossBar()
         {
-            if (gameManager == null || scoreText == null)
+            if (bossBarRoot == null)
+            {
+                return;
+            }
+
+            BossController boss = BossController.Current;
+            bool visible = boss != null && !boss.IsDefeated;
+
+            if (bossBarRoot.activeSelf != visible)
+            {
+                bossBarRoot.SetActive(visible);
+            }
+
+            if (!visible)
+            {
+                return;
+            }
+
+            float ratio = boss.HealthRatio;
+
+            if (bossBarFill != null)
+            {
+                // Fast snap while taking damage, so chip damage reads immediately.
+                bossBarFill.fillAmount = Mathf.Lerp(bossBarFill.fillAmount, ratio,
+                    1f - Mathf.Exp(-9f * Time.unscaledDeltaTime));
+                bossBarFill.color = boss.CoreExposed
+                    ? bossExposedColor
+                    : boss.Phase >= 3 ? bossPhaseThreeColor
+                    : boss.Phase >= 2 ? bossPhaseTwoColor
+                    : bossPhaseOneColor;
+            }
+
+            if (bossNameText != null && bossNameText.text != boss.BossName)
+            {
+                bossNameText.text = boss.BossName;
+            }
+
+            if (bossPhaseText != null)
+            {
+                Color phaseColor = boss.CoreExposed ? bossExposedColor : new Color(1f, 0.8f, 0.6f);
+                bossPhaseText.color = phaseColor;
+
+                if (bossPhaseText.text != boss.PhaseLabel)
+                {
+                    bossPhaseText.text = boss.PhaseLabel;
+                }
+            }
+
+            if (bossPhasePips == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < bossPhasePips.Length; i++)
+            {
+                Image pip = bossPhasePips[i];
+
+                if (pip == null)
+                {
+                    continue;
+                }
+
+                Color pipColor = i < boss.Phase
+                    ? Color.Lerp(bossPhaseOneColor, bossPhaseThreeColor, i / 2f)
+                    : new Color(1f, 1f, 1f, 0.15f);
+
+                if (pip.color != pipColor)
+                {
+                    pip.color = pipColor;
+                }
+            }
+        }
+
+        private void UpdateScore()
+        {            if (gameManager == null || scoreText == null)
             {
                 return;
             }

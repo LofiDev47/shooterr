@@ -201,6 +201,14 @@ namespace Shooter.EditorTools
                 Check(hud.hitMarkerGroup != null, "HUD hit marker is wired");
                 Check(hud.player != null, "HUD is wired to the player controller");
 
+                bool bossBarWired = hud.bossBarRoot != null && hud.bossBarFill != null &&
+                    hud.bossNameText != null && hud.bossPhaseText != null &&
+                    hud.bossPhasePips != null && hud.bossPhasePips.Length == 3;
+
+                Check(bossBarWired, "HUD has a boss bar with name, phase label and three pips");
+                Check(hud.bossBarRoot != null && !hud.bossBarRoot.activeSelf,
+                    "the boss bar starts hidden");
+
                 bool crosshairWired = hud.crosshairBars != null && hud.crosshairBars.Length == 4;
 
                 if (crosshairWired)
@@ -289,6 +297,13 @@ namespace Shooter.EditorTools
 
                 Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
                 Check(waveSpawner.healthCachePrefab != null, "wave spawner has a health cache prefab");
+
+                Check(waveSpawner.bossPrefab != null, "wave spawner has The Warden boss prefab");
+
+                if (waveSpawner.bossPrefab != null)
+                {
+                    ValidateBossPrefab(waveSpawner.bossPrefab);
+                }
 
                 if (waveSpawner.healthCachePrefab != null)
                 {
@@ -393,6 +408,79 @@ namespace Shooter.EditorTools
 
             Debug.Log($"[Validate] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
             Exit(failures == 0 ? 0 : 1);
+        }
+
+        /// <summary>
+        /// Structural checks for The Warden's prefab: it must be a real boss rig
+        /// (own controller, authored clips, boss-sized collider) and not a rescaled grunt.
+        /// </summary>
+        private static void ValidateBossPrefab(GameObject boss)
+        {
+            BossController controller = boss.GetComponent<BossController>();
+            BossAnimator animator = boss.GetComponent<BossAnimator>();
+
+            Check(controller != null, "the boss has a BossController");
+            Check(animator != null, "the boss has a BossAnimator");
+            Check(boss.GetComponent<EnemyHealth>() != null, "the boss has EnemyHealth");
+            Check(boss.GetComponent<EnemyAI>() == null, "the boss does not reuse the grunt AI");
+            Check(boss.GetComponent<EnemyAnimator>() == null, "the boss does not reuse the sine animator");
+
+            CharacterController body = boss.GetComponent<CharacterController>();
+
+            if (body != null)
+            {
+                Check(body.height >= 3.5f && body.radius >= 0.8f,
+                    "the boss collider is boss-sized (3.5 m+ tall, 0.8 m+ wide)");
+                Check(Mathf.Abs(body.center.y - body.height * 0.5f) < 0.1f,
+                    "the boss collider is centred on its body");
+            }
+            else
+            {
+                Check(false, "the boss has a CharacterController");
+            }
+
+            Transform rig = boss.transform.Find("Model/Rig");
+            Check(rig != null, "the boss has an imported model rig");
+
+            if (rig != null)
+            {
+                Check(rig.GetComponent<Animation>() != null, "the boss rig carries an Animation component");
+
+                Transform[] parts = rig.GetComponentsInChildren<Transform>(true);
+
+                // These are the joints the authored clips actually bind against.
+                // The boss legs are named Thigh (it carries a hip plate), unlike
+                // the grunt rig's Leg naming.
+                string[] joints = { "Torso", "Head", "ArmL", "ArmR", "ThighL", "ThighR",
+                    "KneeL", "KneeR", "ElbowL", "ElbowR" };
+                string missing = string.Join(", ", joints.Where(joint =>
+                    !parts.Any(part => part.name == joint)));
+
+                Check(missing.Length == 0,
+                    "the boss rig exposes torso, head, arms, thighs, knees and elbows" +
+                    (missing.Length == 0 ? string.Empty : $"; missing: {missing}"));
+
+                Check(rig.GetComponentsInChildren<Renderer>().Length >= 40,
+                    "the boss model is a detailed multi-part build");
+            }
+
+            if (animator != null)
+            {
+                bool clipsWired = animator.idle != null && animator.walk != null &&
+                    animator.slam != null && animator.volley != null && animator.roar != null &&
+                    animator.hit != null && animator.death != null;
+
+                Check(clipsWired, "all seven authored boss clips are wired");
+            }
+
+            Check(controller != null && controller.ringMaterial != null && controller.boltMaterial != null &&
+                  controller.sparkMaterial != null, "the boss has telegraph, bolt and spark materials");
+            Check(controller != null && controller.summonPrefabs != null && controller.summonPrefabs.Length >= 2 &&
+                  controller.summonPrefabs.All(prefab => prefab != null), "the boss can summon wave enemies");
+
+            bool visualColliders = boss.GetComponentsInChildren<Collider>()
+                .Any(collider => !ReferenceEquals(collider, body));
+            Check(!visualColliders, "the boss visual pieces are collider-free");
         }
 
         /// <summary>

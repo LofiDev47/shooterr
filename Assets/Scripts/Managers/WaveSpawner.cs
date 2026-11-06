@@ -29,6 +29,7 @@ namespace Shooter.Managers
         public GameObject bulwarkPrefab;
         public GameObject marksmanPrefab;
         public GameObject elitePrefab;
+        public GameObject bossPrefab;
         public GameObject ammoCachePrefab;
         public GameObject healthCachePrefab;
         public PlayerHealth playerTarget;
@@ -83,9 +84,11 @@ namespace Shooter.Managers
         [SerializeField] private int eliteDropAmmo = 90;
 
         [Header("Boss waves")]
-        [Tooltip("Every 5th wave fields one giant. Keep in sync with HUD countdown.")]
-        [SerializeField] private float bossHealthMultiplier = 6.5f;
-        [SerializeField] private float bossScale = 2.1f;
+        [Tooltip("Every 5th wave fields The Warden. Keep in sync with HUD countdown.")]
+        [SerializeField] private float bossHealthMultiplier = 22f;
+        [Tooltip("The authored boss model is already ~4.6 m tall, so it spawns at 1x. " +
+                 "Raising this would also enlarge its CharacterController.")]
+        [SerializeField] private float bossScale = 1f;
         [Tooltip("How much slower than a normal enemy the boss moves.")]
         [SerializeField] private float bossSpeedPenalty = 1.1f;
         [SerializeField] private float bossDamageBonus = 12f;
@@ -229,9 +232,10 @@ namespace Shooter.Managers
             bool bulwark = !boss && !elite && !exploder && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
 
             // Pick the dedicated model for this variant. enemyPrefab stays as a
-            // fallback for older scenes and tests. Bosses reuse the elite model,
+            // fallback for older scenes and tests. The boss has its own rig,
             // exploders reuse the trooper model with an amber tint.
-            GameObject prefab = boss ? elitePrefab
+            GameObject prefab = boss && bossPrefab != null ? bossPrefab
+                : boss ? elitePrefab
                 : elite ? elitePrefab
                 : marksman ? marksmanPrefab
                 : runner ? runnerPrefab
@@ -313,6 +317,7 @@ namespace Shooter.Managers
             EnemyAI ai = instance.GetComponent<EnemyAI>();
             EnemyRangedAttack ranged = instance.GetComponent<EnemyRangedAttack>();
             EnemyExploder exploderComp = instance.GetComponent<EnemyExploder>();
+            BossController bossController = instance.GetComponent<BossController>();
 
             if (health != null)
             {
@@ -320,6 +325,12 @@ namespace Shooter.Managers
                 health.SetScoreValue(scoreValue);
 
                 health.Died += HandleEnemyDied;
+            }
+
+            if (boss && bossController != null)
+            {
+                // The Warden runs its own movement, attacks and phases.
+                bossController.Initialize(playerTarget, this, Mathf.RoundToInt(waveIndex), damageBonus, speedBonus);
             }
 
             if (ai != null)
@@ -346,7 +357,7 @@ namespace Shooter.Managers
 
             if (boss)
             {
-                hud?.ShowToast("BOSS INBOUND");
+                hud?.ShowToast("THE WARDEN INBOUND");
             }
             else if (elite)
             {
@@ -382,6 +393,22 @@ namespace Shooter.Managers
             return spawnPoints[index];
         }
 
+        /// <summary>
+        /// Registers an enemy summoned mid-wave by the boss. Summons join the wave
+        /// so they count toward clearing it, award score and drop like any other kill.
+        /// </summary>
+        public void RegisterSummon(EnemyHealth enemy)
+        {
+            if (enemy == null || enemy.IsDead)
+            {
+                return;
+            }
+
+            enemy.Died -= HandleEnemyDied;
+            enemy.Died += HandleEnemyDied;
+            AliveCount++;
+        }
+
         private void HandleEnemyDied(EnemyHealth enemy)
         {
             enemy.Died -= HandleEnemyDied;
@@ -392,7 +419,7 @@ namespace Shooter.Managers
                 // Boss rules: both drops are guaranteed, so the reward is not RNG.
                 DropAmmoCache(enemy.transform.position);
                 DropHealthCache(enemy.transform.position, bossDropHeal);
-                hud?.ShowToast("BOSS DOWN  ·  +AMMO +HEAL");
+                hud?.ShowToast("THE WARDEN FALLS  ·  +AMMO +HEAL");
                 return;
             }
 

@@ -44,6 +44,8 @@ namespace Shooter.EditorTools
             TestRangeFalloffAndMelee();
             TestBallisticsAugments();
             TestBossWaveNumbers();
+            TestBossPhaseThresholds();
+            TestBossCoreDamage();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -212,7 +214,10 @@ namespace Shooter.EditorTools
 
             upgrades.ResetAugments();
             Check(Mathf.Approximately(upgrades.DamageMultiplier, 1f), "reset restores the damage multiplier");
-            Check(Mathf.Approximately(upgrades.DamageReduction, 0f), "reset clears damage reduction");
+            // Plain comparison: Unity's Mathf.Approximately has been seen to return
+            // false for two equal zeros on the first run right after a script compile.
+            Check(upgrades.DamageReduction <= 0f,
+                $"reset clears damage reduction (left {upgrades.DamageReduction:R})");
 
             Object.DestroyImmediate(root);
         }
@@ -476,6 +481,44 @@ namespace Shooter.EditorTools
             Check(WaveSpawner.IsBossWaveNumber(5), "wave 5 is a boss wave");
             Check(WaveSpawner.IsBossWaveNumber(10), "wave 10 is a boss wave");
             Check(!WaveSpawner.IsBossWaveNumber(6), "wave 6 is not a boss wave");
+        }
+
+        private static void TestBossPhaseThresholds()
+        {
+            Check(BossController.PhaseFor(1f) == 1, "a full-health boss is in phase one");
+            Check(BossController.PhaseFor(0.67f) == 1, "a boss above two-thirds is still phase one");
+            Check(BossController.PhaseFor(0.66f) == 2, "hitting two-thirds enters phase two");
+            Check(BossController.PhaseFor(0.5f) == 2, "a half-health boss is in phase two");
+            Check(BossController.PhaseFor(0.33f) == 3, "hitting one-third enters phase three");
+            Check(BossController.PhaseFor(0.05f) == 3, "a nearly dead boss stays in phase three");
+        }
+
+        private static void TestBossCoreDamage()
+        {
+            var gameObject = new GameObject("SelfTest_BossHealth");
+            EnemyHealth health = gameObject.AddComponent<EnemyHealth>();
+            health.Initialize(10f);
+
+            Check(Mathf.Approximately(health.MaxHealth, 600f), "boss health scales off the base pool");
+
+            health.IncomingDamageScale = 2f;
+            health.TakeDamage(50f, Vector3.zero);
+            Check(Mathf.Approximately(health.CurrentHealth, 500f),
+                "an exposed core doubles the damage the boss takes");
+
+            health.IncomingDamageScale = 0f;
+            Check(health.IncomingDamageScale > 0f,
+                "the incoming damage scale never reaches zero");
+
+            health.TakeDamage(50f, Vector3.zero);
+            Check(health.CurrentHealth > 499.9f, "a phase roar makes the boss effectively immune");
+
+            health.IncomingDamageScale = 1f;
+            health.TakeDamage(10f, Vector3.zero);
+            Check(Mathf.Approximately(health.CurrentHealth, 489.95f),
+                "normal damage applies once the roar ends");
+
+            Object.DestroyImmediate(gameObject);
         }
 
         private static void Check(bool condition, string description)

@@ -40,6 +40,7 @@ namespace Shooter.EditorTools
 
             ArenaMaterials materials = CreateMaterials();
             EnemyPrefabRig enemyPrefabs = CreateEnemyPrefabs(materials);
+            GameObject bossPrefab = CreateBossPrefab(materials, enemyPrefabs);
             GameObject ammoCachePrefab = CreateAmmoCachePrefab(materials);
             GameObject healthCachePrefab = CreateHealthCachePrefab(materials);
 
@@ -50,7 +51,8 @@ namespace Shooter.EditorTools
             PlayerRig rig = BuildPlayer(materials);
             BuildPostProcessing(rig);
             List<Transform> spawnPoints = BuildSpawnPoints();
-            ManagersRig managers = BuildManagers(enemyPrefabs, ammoCachePrefab, healthCachePrefab, rig, spawnPoints);
+            ManagersRig managers = BuildManagers(enemyPrefabs, bossPrefab, ammoCachePrefab, healthCachePrefab,
+                rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
 
             // Wired after the HUD exists, so these components can raise UI feedback.
@@ -96,6 +98,10 @@ namespace Shooter.EditorTools
             public Material EliteBody;
             public Material EliteDark;
             public Material EliteGlow;
+            public Material BossBody;
+            public Material BossDark;
+            public Material BossTrim;
+            public Material BossGlow;
             public Material Gun;
             public Material GunAccent;
             public Material Impact;
@@ -142,6 +148,13 @@ namespace Shooter.EditorTools
                 EliteBody = GetOrCreateLitMaterial("EliteBody", new Color(0.50f, 0.30f, 0.06f), 0.5f, 0.25f),
                 EliteDark = GetOrCreateLitMaterial("EliteDark", new Color(0.035f, 0.028f, 0.020f), 0.2f, 0f),
                 EliteGlow = GetOrCreateUnlitMaterial("EliteGlow", new Color(1f, 0.58f, 0.14f)),
+                // The Warden: dark lacquered carapace, blackened plate and bronze
+                // trim, with a furnace core that doubles as its weak point.
+                BossBody = GetOrCreateLitMaterial("BossBody", new Color(0.34f, 0.085f, 0.10f), 0.52f, 0.55f),
+                BossDark = GetOrCreateLitMaterial("BossDark", new Color(0.075f, 0.070f, 0.080f), 0.42f, 0.45f),
+                BossTrim = GetOrCreateLitMaterial("BossTrim", new Color(0.47f, 0.21f, 0.11f), 0.70f, 0.88f),
+                BossGlow = GetOrCreateEmissiveMaterial("BossGlow", new Color(0.20f, 0.07f, 0.02f),
+                    new Color(1f, 0.44f, 0.10f) * 2.2f),
                 Gun = GetOrCreateLitMaterial("Gun", new Color(0.11f, 0.11f, 0.13f), 0.55f, 0.6f),
                 GunAccent = GetOrCreateLitMaterial("GunAccent", new Color(0.38f, 0.38f, 0.43f), 0.5f, 0.7f),
                 Impact = GetOrCreateUnlitMaterial("Impact", new Color(0.03f, 0.03f, 0.03f)),
@@ -1401,6 +1414,223 @@ namespace Shooter.EditorTools
             return palette.Body;
         }
 
+        // ------------------------------------------------------------ boss prefab
+
+        /// <summary>
+        /// Builds The Warden's prefab around the authored Blender rig. The boss owns
+        /// its own controller and clip player, so it shares only health and the
+        /// spawner's wave bookkeeping with the grunts.
+        /// </summary>
+        private static GameObject CreateBossPrefab(ArenaMaterials materials, EnemyPrefabRig enemyPrefabs)
+        {
+            var root = new GameObject("BossWarden");
+
+            CharacterController controller = root.AddComponent<CharacterController>();
+            // Sized to the torso, not to the shoulder spikes: a capsule wide enough
+            // to cover the pauldrons snags on the arena's pillars and cover, and the
+            // grunts use the same torso-sized convention.
+            controller.height = 4.5f;
+            controller.radius = 1.05f;
+            controller.center = new Vector3(0f, 2.25f, 0f);
+            controller.slopeLimit = 45f;
+            controller.stepOffset = 0.6f;
+
+            var model = new GameObject("Model");
+            model.transform.SetParent(root.transform, false);
+            // The authored feet reach y = -0.10, so the visual is lifted to stand
+            // on the floor instead of sinking into it.
+            model.transform.localPosition = new Vector3(0f, 0.1f, 0f);
+
+            GameObject source = LoadBossModel();
+
+            if (source == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Missing Assets/Models/Boss/BossWarden_Idle.fbx. " +
+                    "Run Tools/Blender/build_boss.py first.");
+            }
+
+            // The rig root carries the Animation component: legacy clips bind by
+            // path relative to it ("Torso/ArmL/ElbowL"), so it must stay the root.
+            GameObject rig = (GameObject)Object.Instantiate(source, model.transform, false);
+            rig.name = "Rig";
+
+            foreach (MeshRenderer renderer in rig.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                renderer.sharedMaterial = BossMaterialFor(renderer.gameObject.name, materials);
+                renderer.shadowCastingMode = ShadowCastingMode.On;
+            }
+
+            foreach (Transform part in rig.GetComponentsInChildren<Transform>(true))
+            {
+                part.gameObject.layer = 2; // Ignore Raycast, matching the player rig.
+
+                Collider collider = part.GetComponent<Collider>();
+
+                if (collider != null)
+                {
+                    Object.DestroyImmediate(collider);
+                }
+            }
+
+            Animation animation = rig.GetComponent<Animation>();
+
+            if (animation == null)
+            {
+                animation = rig.AddComponent<Animation>();
+            }
+
+            animation.playAutomatically = false;
+            animation.cullingType = AnimationCullingType.AlwaysAnimate;
+
+            EnemyHealth health = root.AddComponent<EnemyHealth>();
+            health.debrisMaterial = materials.BossDark;
+
+            BossAnimator animator = root.AddComponent<BossAnimator>();
+            animator.idle = LoadBossClip("Idle");
+            animator.walk = LoadBossClip("Walk");
+            animator.slam = LoadBossClip("Slam");
+            animator.volley = LoadBossClip("Volley");
+            animator.roar = LoadBossClip("Roar");
+            animator.hit = LoadBossClip("Hit");
+            animator.death = LoadBossClip("Death");
+
+            if (animator.idle == null || animator.death == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Boss clips failed to import as legacy animations. " +
+                    "Re-run Tools/Blender/build_boss.py and rebuild the scene.");
+            }
+
+            BossController boss = root.AddComponent<BossController>();
+            boss.ringMaterial = materials.Hazard;
+            boss.boltMaterial = materials.EnemyBolt;
+            boss.sparkMaterial = materials.Spark;
+            boss.summonPrefabs = new[] { enemyPrefabs.Trooper, enemyPrefabs.Runner };
+
+            string path = $"{PrefabsFolder}/BossWarden.prefab";
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+
+            Debug.Log($"[Shooter] BossWarden prefab saved to {path}.");
+            return prefab;
+        }
+
+        /// <summary>Imports one boss FBX as a legacy-animation model and returns it.</summary>
+        private static GameObject LoadBossModel()
+        {
+            const string path = "Assets/Models/Boss/BossWarden_Idle.fbx";
+            ImportBossFbx(path);
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        }
+
+        /// <summary>Loads the single baked clip inside a per-clip boss FBX.</summary>
+        /// <remarks>
+        /// Unity also exposes a generated <c>__preview__Scene</c> clip next to the real
+        /// take. It looks identical when inspected but makes <see cref="Animation.AddClip"/>
+        /// log "Source and Destination Types do not match" at runtime, so the real
+        /// <c>Scene</c> take is preferred and the preview is only a fallback.
+        /// </remarks>
+        private static AnimationClip LoadBossClip(string clipName)
+        {
+            string path = $"Assets/Models/Boss/BossWarden_{clipName}.fbx";
+            ImportBossFbx(path);
+
+            AnimationClip fallback = null;
+
+            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
+            {
+                if (!(asset is AnimationClip clip) || clip.name.StartsWith("__preview__"))
+                {
+                    continue;
+                }
+
+                if (clip.name == "Scene")
+                {
+                    return clip;
+                }
+
+                if (fallback == null)
+                {
+                    fallback = clip;
+                }
+            }
+
+            return fallback;
+        }
+
+        /// <summary>
+        /// Imports a boss FBX with legacy animation and no generated materials.
+        /// Legacy is required: the boss plays clips through an Animation component.
+        /// </summary>
+        private static void ImportBossFbx(string path)
+        {
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            if (!(AssetImporter.GetAtPath(path) is ModelImporter importer))
+            {
+                return;
+            }
+
+            bool dirty = false;
+
+            if (importer.animationType != ModelImporterAnimationType.Legacy)
+            {
+                importer.animationType = ModelImporterAnimationType.Legacy;
+                dirty = true;
+            }
+
+            if (!importer.importAnimation)
+            {
+                importer.importAnimation = true;
+                dirty = true;
+            }
+
+            if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
+            {
+                importer.materialImportMode = ModelImporterMaterialImportMode.None;
+                dirty = true;
+            }
+
+            if (dirty)
+            {
+                importer.SaveAndReimport();
+            }
+        }
+
+        /// <summary>
+        /// Part-name to material map for the boss. It mirrors the authoring palette
+        /// in Tools/Blender/build_boss.py: glow first, then trim, then blackened plate.
+        /// </summary>
+        private static Material BossMaterialFor(string partName, ArenaMaterials materials)
+        {
+            if (partName.Contains("Glow") || partName.Contains("Visor") ||
+                partName.Contains("Rune") || partName.Contains("Vent"))
+            {
+                return materials.BossGlow;
+            }
+
+            if (partName.Contains("Trim") || partName.Contains("Collar") ||
+                partName.Contains("Brake") || partName.Contains("BladeEdge") ||
+                partName.Contains("BladeGuard"))
+            {
+                return materials.BossTrim;
+            }
+
+            if (partName.Contains("Guard") || partName.Contains("Claw") ||
+                partName.Contains("Skirt") || partName.Contains("ChestPlate") ||
+                partName.Contains("Housing") || partName.Contains("SpinePlate") ||
+                partName.Contains("Exhaust") || partName.Contains("Banner") ||
+                partName.Contains("Spike") || partName.Contains("Crown") ||
+                partName.Contains("Brow") || partName.Contains("Jaw") ||
+                partName.Contains("BladeSpine") || partName.Contains("Barrel"))
+            {
+                return materials.BossDark;
+            }
+
+            return materials.BossBody;
+        }
+
         private static GameObject CreateAmmoCachePrefab(ArenaMaterials materials)
         {
             var root = new GameObject("AmmoCache");
@@ -1476,7 +1706,8 @@ namespace Shooter.EditorTools
             public SettingsManager Settings;
         }
 
-        private static ManagersRig BuildManagers(EnemyPrefabRig enemyPrefabs, GameObject ammoCachePrefab, GameObject healthCachePrefab, PlayerRig rig,
+        private static ManagersRig BuildManagers(EnemyPrefabRig enemyPrefabs, GameObject bossPrefab,
+            GameObject ammoCachePrefab, GameObject healthCachePrefab, PlayerRig rig,
             List<Transform> spawnPoints)
         {
             var managers = new GameObject("Managers");
@@ -1493,6 +1724,7 @@ namespace Shooter.EditorTools
             waveSpawner.bulwarkPrefab = enemyPrefabs.Bulwark;
             waveSpawner.marksmanPrefab = enemyPrefabs.Marksman;
             waveSpawner.elitePrefab = enemyPrefabs.Elite;
+            waveSpawner.bossPrefab = bossPrefab;
             waveSpawner.ammoCachePrefab = ammoCachePrefab;
             waveSpawner.healthCachePrefab = healthCachePrefab;
             waveSpawner.playerTarget = rig.Health;
@@ -1588,6 +1820,45 @@ namespace Shooter.EditorTools
                 new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, new Vector2(0.5f, 1f),
                 new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(700f, 26f), font);
 
+            // Boss bar (top center, under the wave label). Hidden until a boss spawns;
+            // the HUD controller toggles the whole group.
+            RectTransform bossPanel = CreateRect("BossBar", canvasObject.transform, new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(780f, 60f));
+
+            Text bossNameText = CreateText(bossPanel, "BossName", "THE WARDEN", 20,
+                new Color(1f, 0.86f, 0.72f), TextAnchor.MiddleCenter, new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f), Vector2.zero, new Vector2(460f, 24f), font, FontStyle.Bold);
+
+            Text bossPhaseText = CreateText(bossPanel, "BossPhase", "PHASE I", 15,
+                new Color(1f, 0.8f, 0.6f), TextAnchor.MiddleRight, new Vector2(1f, 1f),
+                new Vector2(1f, 1f), Vector2.zero, new Vector2(300f, 22f), font, FontStyle.Bold);
+
+            RectTransform bossBarRect = CreateRect("BossTrack", bossPanel, new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(0f, -26f), new Vector2(780f, 20f));
+            AddImage(bossBarRect, new Color(0f, 0f, 0f, 0.62f));
+
+            RectTransform bossFillRect = CreateRect("BossFill", bossBarRect, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+            bossFillRect.offsetMin = new Vector2(2f, 2f);
+            bossFillRect.offsetMax = new Vector2(-2f, -2f);
+            Image bossFill = AddImage(bossFillRect, new Color(0.92f, 0.35f, 0.14f));
+            bossFill.type = Image.Type.Filled;
+            bossFill.fillMethod = Image.FillMethod.Horizontal;
+            bossFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            bossFill.fillAmount = 1f;
+
+            // One pip per phase: they light up as the fight escalates.
+            Image[] bossPhasePips = new Image[3];
+
+            for (int i = 0; i < bossPhasePips.Length; i++)
+            {
+                RectTransform pip = CreateRect("BossPhasePip" + i, bossPanel, new Vector2(0.5f, 1f),
+                    new Vector2(0.5f, 1f), new Vector2((i - 1) * 54f, -50f), new Vector2(48f, 5f));
+                bossPhasePips[i] = AddImage(pip, new Color(1f, 1f, 1f, 0.15f));
+            }
+
+            bossPanel.gameObject.SetActive(false);
+
             // Score (top right).
             Text scoreText = CreateText(canvasObject.transform, "ScoreText", "SCORE 0", 26, Color.white,
                 TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-36f, -24f),
@@ -1680,6 +1951,11 @@ namespace Shooter.EditorTools
             hud.hintText = hintText;
             hud.toastText = toastText;
             hud.hitMarkerGroup = hitMarkerGroup;
+            hud.bossBarRoot = bossPanel.gameObject;
+            hud.bossBarFill = bossFill;
+            hud.bossNameText = bossNameText;
+            hud.bossPhaseText = bossPhaseText;
+            hud.bossPhasePips = bossPhasePips;
             hud.crosshairBars = new[] { crosshairTop, crosshairBottom, crosshairLeft, crosshairRight };
             hud.player = rig.Controller;
 

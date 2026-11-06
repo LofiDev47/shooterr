@@ -226,6 +226,22 @@ namespace Shooter.Player
             shakeAmount = Mathf.Min(maxShake, Mathf.Max(shakeAmount, strength));
         }
 
+        /// <summary>
+        /// Shoves the player a fixed distance without touching their input, used by
+        /// the boss slam. Vertical motion is clamped upward so a slam can never
+        /// drive the player through the floor.
+        /// </summary>
+        public void ApplyKnockback(Vector3 impulse)
+        {
+            if (controller == null || !controller.enabled)
+            {
+                return;
+            }
+
+            impulse.y = Mathf.Max(0f, impulse.y);
+            controller.Move(impulse + Vector3.up * 0.15f);
+        }
+
         private void Update()
         {
             float deltaTime = Time.deltaTime;

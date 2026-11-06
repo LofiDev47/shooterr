@@ -11,7 +11,7 @@ namespace Shooter.Enemies
     /// Health, hit feedback and death handling for a capsule enemy.
     /// Implements <see cref="IDamageable"/> so the weapon can damage it without knowing its type.
     /// </summary>
-    public sealed class EnemyHealth : MonoBehaviour, IDamageable
+    public sealed class EnemyHealth : MonoBehaviour, IDamageable, IDamageScale
     {
         [SerializeField] private float baseMaxHealth = 60f;
         [SerializeField] private int scoreValue = 10;
@@ -33,6 +33,20 @@ namespace Shooter.Enemies
 
         /// <summary>True for boss enemies (every 5th wave), which drop a cache like elites.</summary>
         public bool IsBoss { get; private set; }
+
+        /// <summary>
+        /// Multiplier applied to every incoming hit. Bosses use it for phase
+        /// invulnerability (0) and the exposed-core window (2). Never below a
+        /// sliver, so a zero cannot become a heal and damage still reads.
+        /// </summary>
+        public float IncomingDamageScale
+        {
+            get => incomingDamageScale;
+            set => incomingDamageScale = Mathf.Max(0.001f, value);
+        }
+
+        private float incomingDamageScale = 1f;
+        private float holdDeathSeconds;
 
         /// <summary>Raised once when the enemy dies, used by the wave spawner to count survivors.</summary>
         public event Action<EnemyHealth> Died;
@@ -77,6 +91,8 @@ namespace Shooter.Enemies
             IsElite = isElite;
             IsBoss = isBoss;
             deathTimer = -1f;
+            incomingDamageScale = 1f;
+            holdDeathSeconds = 0f;
             transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 
             hasTint = tint.HasValue;
@@ -95,6 +111,16 @@ namespace Shooter.Enemies
             scoreValue = Mathf.Max(0, value);
         }
 
+        /// <summary>
+        /// Keeps the corpse in place for <paramref name="seconds"/> after death
+        /// instead of shrinking away. The boss uses it so its authored death clip
+        /// plays to the end. Zero restores the normal shrink.
+        /// </summary>
+        public void SetDeathHold(float seconds)
+        {
+            holdDeathSeconds = Mathf.Max(0f, seconds);
+        }
+
         /// <inheritdoc />
         public void TakeDamage(float amount, Vector3 hitPoint)
         {
@@ -103,6 +129,7 @@ namespace Shooter.Enemies
                 return;
             }
 
+            amount *= incomingDamageScale;
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
             lastHitDamage = amount;
             Flash();
@@ -139,7 +166,18 @@ namespace Shooter.Enemies
         {
             IsDead = true;
             deathScale = transform.localScale;
-            deathTimer = 0f;
+
+            // A held corpse keeps its pose: deathTimer stays negative so Update
+            // never shrinks it, and the object removes itself after the hold.
+            if (holdDeathSeconds > 0f)
+            {
+                deathTimer = -1f;
+                Destroy(gameObject, holdDeathSeconds);
+            }
+            else
+            {
+                deathTimer = 0f;
+            }
 
             if (bodyCollider != null)
             {

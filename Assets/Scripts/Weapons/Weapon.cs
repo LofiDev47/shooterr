@@ -490,7 +490,7 @@ namespace Shooter.Weapons
                 Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (meleeRange * 0.5f));
                 target.TakeDamage(appliedDamage, hitPoint);
                 hud?.ShowHitMarker(false);
-                hud?.ShowDamageNumber(hitPoint, appliedDamage, false, false);
+                hud?.ShowDamageNumber(hitPoint, ReportedDamage(target, appliedDamage), false, false);
                 AudioManager.Instance?.PlayEnemyHit(hitPoint);
             }
 
@@ -603,7 +603,7 @@ namespace Shooter.Weapons
 
                     target.TakeDamage(appliedDamage, hit.point);
                     hud?.ShowHitMarker(headshot);
-                    hud?.ShowDamageNumber(hit.point, appliedDamage, headshot, critical);
+                    hud?.ShowDamageNumber(hit.point, ReportedDamage(target, appliedDamage), headshot, critical);
                     AudioManager.Instance?.PlayWeaponHit(hit.point);
 
                     if (upgrades != null && upgrades.ExplosionRadius > 0f)
@@ -681,6 +681,15 @@ namespace Shooter.Weapons
             }
 
             return Vector3.Dot(forward.normalized, toTarget.normalized) >= minimumDot;
+        }
+
+        /// <summary>
+        /// The damage the target will actually lose, so floated numbers stay
+        /// honest against armoured or exposed targets (see <see cref="IDamageScale"/>).
+        /// </summary>
+        private static float ReportedDamage(IDamageable target, float amount)
+        {
+            return target is IDamageScale scaled ? amount * scaled.IncomingDamageScale : amount;
         }
 
         private float BulletExplosionBaseDamage(float distance, UpgradeManager upgrades)
@@ -894,7 +903,7 @@ namespace Shooter.Weapons
 
                 pair.Key.TakeDamage(pair.Value, point);
                 hud?.ShowHitMarker(headshot);
-                hud?.ShowDamageNumber(point, pair.Value, headshot, anyCrit);
+                hud?.ShowDamageNumber(point, ReportedDamage(pair.Key, pair.Value), headshot, anyCrit);
                 upgrades?.TakeSpeedPenalty();
             }
 
