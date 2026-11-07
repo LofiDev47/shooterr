@@ -281,6 +281,7 @@ namespace Shooter.Weapons
         public void RebuildState()
         {
             UpgradeManager upgrades = UpgradeManager.Instance;
+            WeaponState previous = State;
 
             int magazine = Mathf.Max(1, Mathf.CeilToInt(magazineSize * (upgrades != null ? upgrades.MagazineMultiplier : 1f)));
             float interval = Mathf.Max(0.02f, fireInterval / (upgrades != null ? upgrades.EffectiveFireRateMultiplier : 1f));
@@ -289,14 +290,20 @@ namespace Shooter.Weapons
             int inMagazine = magazine;
             int reserve = reserveAmmo;
 
-            if (State != null)
+            if (previous != null)
             {
-                inMagazine = State.AmmoInMagazine;
-                reserve = State.ReserveAmmo;
+                inMagazine = previous.AmmoInMagazine;
+                reserve = previous.ReserveAmmo;
             }
 
             State = new WeaponState(magazine, reserve, interval, reload, effectiveMaxReserve);
             State.SetMagazineAmmo(inMagazine);
+
+            // Fire cooldown and reload progress survive the rebuild. Winded calls
+            // this on every accepted hit, so dropping the cooldown would let the
+            // rifle fire as fast as the trigger is tapped, and a card pick would
+            // silently refund an in-flight reload.
+            State.CarryTimingFrom(previous);
         }
 
         /// <summary>Called by the upgrade manager after an augment changes weapon stats.</summary>
@@ -487,6 +494,11 @@ namespace Shooter.Weapons
                     continue;
                 }
 
+                if (IsImmune(target))
+                {
+                    continue;
+                }
+
                 Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (meleeRange * 0.5f));
                 target.TakeDamage(appliedDamage, hitPoint);
                 hud?.ShowHitMarker(false);
@@ -575,6 +587,13 @@ namespace Shooter.Weapons
                         continue; // a second collider on the same enemy.
                     }
 
+                    if (IsImmune(target))
+                    {
+                        // Telegraphed immunity: the shot stops on the body but nothing
+                        // is recorded, so no marker, number, crit or Winded penalty.
+                        break;
+                    }
+
                     float appliedDamage = damage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
                     appliedDamage *= RangeDamageMultiplier(hit.distance, velocity,
                         falloffStart, falloffEnd, falloffMinimum);
@@ -598,7 +617,7 @@ namespace Shooter.Weapons
 
                     if (critical)
                     {
-                        appliedDamage *= upgrades.CritMultiplier;
+                        appliedDamage *= upgrades.CriticalDamageMultiplier;
                     }
 
                     target.TakeDamage(appliedDamage, hit.point);
@@ -691,6 +710,14 @@ namespace Shooter.Weapons
         {
             return target is IDamageScale scaled ? amount * scaled.IncomingDamageScale : amount;
         }
+
+        /// <summary>
+        /// True when the target is currently immune (a boss mid-roar). Damage is
+        /// discarded inside TakeDamage, so every piece of firing feedback has to be
+        /// skipped as well or the player is told they hit for full damage for nothing.
+        /// </summary>
+        private static bool IsImmune(IDamageable target) =>
+            target is EnemyHealth health && health.IsInvulnerable;
 
         private float BulletExplosionBaseDamage(float distance, UpgradeManager upgrades)
         {
@@ -864,6 +891,12 @@ namespace Shooter.Weapons
                     float appliedDamage = shotgunDamage * falloff *
                         (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
 
+                    if (IsImmune(target))
+                    {
+                        tracerEnd = hit.point;
+                        break; // immune body stops the pellet; nothing is recorded
+                    }
+
                     bool headshot = target is EnemyHealth && IsHeadshot(hit.collider.bounds, hit.point);
 
                     if (headshot)
@@ -873,7 +906,7 @@ namespace Shooter.Weapons
 
                     if (upgrades != null && Random.value < upgrades.EffectiveCritChance)
                     {
-                        appliedDamage *= upgrades.CritMultiplier;
+                        appliedDamage *= upgrades.CriticalDamageMultiplier;
                         anyCrit = true;
                     }
 

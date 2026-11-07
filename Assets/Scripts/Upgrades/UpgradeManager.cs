@@ -426,6 +426,15 @@ namespace Shooter.Upgrades
             critWindowEnd = 0f;
             fireRateBoostUntil = 0f;
             airborneStartedAt = -1e9f;
+            MovementFactor = 0f;
+
+            // Weapon-mode / ballistics cards: forgetting these leaves a restarted
+            // run with the shotgun already unlocked and rounds still ricocheting.
+            shotgunUnlocked = false;
+            ricochetBounces = 0;
+            bulletVelocityMultiplier = 1f;
+            explosionRadius = 0f;
+            explosionDamageFraction = 0f;
         }
 
         // ---------------------------------------------------------------- synergy modifiers
@@ -476,11 +485,33 @@ namespace Shooter.Upgrades
 
         // --- derived multipliers read by the weapon ---------------------------------
 
-        /// <summary>Total damage multiplier at this moment (base cards + speed + crits).</summary>
+        /// <summary>
+        /// How fast the player is actually moving, 0 (standing) to 1 (full sprint).
+        /// Kinetic Rounds reads this instead of the speed stat, so the card pays for
+        /// movement rather than for owning Track Shoes. <see cref="PlayerController"/>
+        /// writes it every frame; it defaults to 0 so a missing writer cannot hand
+        /// out a free damage bonus.
+        /// </summary>
+        public float MovementFactor { get; private set; }
+
+        /// <summary>Reports the player's current movement, 0..1, for movement-gated cards.</summary>
+        public void SetMovementFactor(float value)
+        {
+            MovementFactor = Mathf.Clamp01(value);
+        }
+
+        /// <summary>
+        /// Total damage multiplier at this moment (base cards + movement + crits +
+        /// the per-kill adrenaline feed). Everything is read live at use time.
+        /// </summary>
         public float EffectiveDamageMultiplier =>
             damageMultiplier *
-            (1f + damageFromSpeed * SpeedMultiplier) *
+            (1f + damageFromSpeed * MovementFactor) *
+            (1f + AdrenalineDamagePerKill) *
             (1f + (consecutiveCrits > 0 && Time.time <= critWindowEnd ? damageFromCrits : 0f));
+
+        /// <summary>Damage multiplier applied on a critical hit (Scalpel Rounds included).</summary>
+        public float CriticalDamageMultiplier => critMultiplier * (1f + scalpelDamagePerCrit);
 
         /// <summary>Fire-rate multiplier, including Chain Crits' rapid window.</summary>
         public float EffectiveFireRateMultiplier =>

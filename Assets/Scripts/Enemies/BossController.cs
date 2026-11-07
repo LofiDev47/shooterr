@@ -55,6 +55,8 @@ namespace Shooter.Enemies
         [Tooltip("Seconds from impact until the boss can move again.")]
         [SerializeField] private float slamRecover = 1.1f;
         [SerializeField] private float slamCooldown = 5.2f;
+        [Tooltip("How far above or below the boss's feet the shockwave still reaches.")]
+        [SerializeField] private float slamVerticalTolerance = 1.6f;
         [SerializeField] private float coreExposedSeconds = 2.8f;
         [SerializeField] private float coreDamageMultiplier = 2f;
 
@@ -129,6 +131,9 @@ namespace Shooter.Enemies
         private int waveIndex;
         private bool dying;
 
+        /// <summary>Phase roars still owed after the last health threshold.</summary>
+        private int pendingPhaseRoars;
+
         // Obstacle steering state: which way the boss is currently going around
         // something (-1 | +1, 0 when clear) and how long it stays committed.
         private float avoidanceSide;
@@ -196,14 +201,33 @@ namespace Shooter.Enemies
             if (health != null)
             {
                 health.SetDeathHold(DeathHoldSeconds);
+                health.Damaged += OnDamaged;
             }
         }
 
         private void OnDestroy()
         {
+            if (health != null)
+            {
+                health.Damaged -= OnDamaged;
+            }
+
             if (Current == this)
             {
                 Current = null;
+            }
+        }
+
+        /// <summary>
+        /// The Hit clip is flinch, so it only plays from neutral. Cutting to it
+        /// during a slam or volley wind-up would erase the telegraph the fight is
+        /// built on, so those get super armour instead.
+        /// </summary>
+        private void OnDamaged(float amount, Vector3 hitPoint)
+        {
+            if (state == BossState.Idle && !dying)
+            {
+                animator?.PlayHit();
             }
         }
 
@@ -222,6 +246,7 @@ namespace Shooter.Enemies
 
             Phase = 1;
             dying = false;
+            pendingPhaseRoars = 0;
             coreExposedUntil = -1f;
             stateUntil = 0f;
             nextSlamAt = Time.time + 2.6f;
@@ -231,6 +256,7 @@ namespace Shooter.Enemies
             if (health != null)
             {
                 health.IncomingDamageScale = 1f;
+                health.SetInvulnerable(false);
                 health.SetDeathHold(DeathHoldSeconds);
             }
         }
@@ -246,6 +272,14 @@ namespace Shooter.Enemies
             {
                 EnterDying();
                 return;
+            }
+
+            // The exposed core is a window, not a buff. Nothing else closes it, so
+            // if it is not closed here the boss spends the rest of the run taking
+            // double damage while the HUD bar reads a normal phase.
+            if (!CoreExposed && health.IncomingDamageScale > 1f)
+            {
+                health.IncomingDamageScale = 1f;
             }
 
             if (target == null || target.IsDead)
@@ -470,7 +504,14 @@ namespace Shooter.Enemies
                 toPlayer.y = 0f;
                 float distance = toPlayer.magnitude;
 
-                if (distance <= slamRadius)
+                // The slam is a ground shockwave, not a sphere. Cover blocks it and a
+                // player standing on a platform is above it, so a planar distance
+                // check alone would hit through walls the ring cannot reach.
+                bool inReach = distance <= slamRadius &&
+                    Mathf.Abs(target.transform.position.y - transform.position.y) <= slamVerticalTolerance &&
+                    HasShockwavePath();
+
+                if (inReach)
                 {
                     target.TakeDamage(slamDamage);
 
@@ -489,6 +530,42 @@ namespace Shooter.Enemies
             {
                 health.IncomingDamageScale = coreDamageMultiplier;
             }
+        }
+
+        /// <summary>
+        /// True when nothing solid stands between the boss and the player. Both rigs
+        /// live on the Ignore Raycast layer, so anything this finds is cover; enemy
+        /// bodies are skipped because a grunt should not shield the player from a
+        /// shockwave that visibly passes under it.
+        /// </summary>
+        private bool HasShockwavePath()
+        {
+            if (target == null)
+            {
+                return false;
+            }
+
+            Vector3 from = transform.position + Vector3.up * 0.7f;
+            Vector3 to = target.transform.position + Vector3.up * 1.0f;
+            Vector3 delta = to - from;
+
+            if (delta.sqrMagnitude < 0.0001f)
+            {
+                return true;
+            }
+
+            RaycastHit[] hits = Physics.RaycastAll(from, delta.normalized, delta.magnitude,
+                AvoidMask, QueryTriggerInteraction.Ignore);
+
+            foreach (RaycastHit hit in hits)
+            {
+                if (hit.collider.GetComponentInParent<EnemyHealth>() == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void BeginVolley()
@@ -541,9 +618,18 @@ namespace Shooter.Enemies
 
         // --------------------------------------------------------------- phases
 
+        /// <summary>
+        /// How many phase roars the boss still owes. A burst can cross two health
+        /// thresholds at once (66% and 33%); each phase keeps its own escalation
+        /// step and its own summon wave, so the count is the distance between the
+        /// current and wanted phase rather than a jump to the furthest one.
+        /// </summary>
+        public static int PendingPhaseRoars(int currentPhase, int healthPhase) =>
+            Mathf.Max(0, healthPhase - currentPhase);
+
         private void CheckPhaseChange()
         {
-            if (state == BossState.Roar || state == BossState.Dying)
+            if (state == BossState.Dying)
             {
                 return;
             }
@@ -552,44 +638,56 @@ namespace Shooter.Enemies
 
             if (wanted > Phase)
             {
-                BeginPhase(wanted);
+                pendingPhaseRoars = Mathf.Max(pendingPhaseRoars, PendingPhaseRoars(Phase, wanted));
+            }
+
+            // A roar never interrupts a telegraph: a slam that vanishes mid-wind-up
+            // removes the player's cue and reads as a broken attack. The owed roar
+            // starts as soon as the boss is back to Idle.
+            if (pendingPhaseRoars > 0 && state == BossState.Idle)
+            {
+                BeginPhaseRoar();
             }
         }
 
-        private void BeginPhase(int phase)
+        private void BeginPhaseRoar()
         {
-            Phase = phase;
+            pendingPhaseRoars = Mathf.Max(0, pendingPhaseRoars - 1);
+            Phase = Mathf.Min(3, Phase + 1);
             state = BossState.Roar;
             stateUntil = Time.time + roarInvulnerability;
 
-            if (health != null)
-            {
-                health.IncomingDamageScale = 0f;
-            }
+            health?.SetInvulnerable(true);
 
             animator?.PlayRoar();
             BossRing.Spawn(transform.position, 1.5f, slamRadius * 1.3f, 0.7f, 0.18f,
                 new Color(1f, 0.25f, 0.08f), ringMaterial);
             AudioManager.Instance?.PlayEnemyAttack(transform.position);
-            spawner?.hud?.ShowToast($"THE WARDEN · PHASE {(phase == 2 ? "II" : "III")}");
+            spawner?.hud?.ShowToast($"THE WARDEN · PHASE {(Phase == 2 ? "II" : "III")}");
         }
 
         private void FinishRoar()
         {
-            state = BossState.Idle;
-            coreExposedUntil = Time.time;
+            // Escalation belongs to the phase that was just announced, once per phase.
             moveSpeed += phaseSpeedGain;
             slamDamage += phaseDamageGain;
             volleyDamage += phaseDamageGain * 0.5f;
-            nextSlamAt = Time.time + 1.1f;
-            nextVolleyAt = Time.time + 1.6f;
 
-            if (health != null)
-            {
-                health.IncomingDamageScale = 1f;
-            }
+            health?.SetInvulnerable(false);
 
             SummonAdds(Phase >= 3 ? phaseThreeSummons : phaseTwoSummons);
+
+            if (pendingPhaseRoars > 0)
+            {
+                // Crossed two thresholds at once: the second roar follows immediately.
+                BeginPhaseRoar();
+                return;
+            }
+
+            state = BossState.Idle;
+            coreExposedUntil = Time.time;
+            nextSlamAt = Time.time + 1.1f;
+            nextVolleyAt = Time.time + 1.6f;
         }
 
         private void SummonAdds(int count)

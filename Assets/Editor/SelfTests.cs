@@ -35,6 +35,7 @@ namespace Shooter.EditorTools
             TestAugmentAirJumps();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
+            TestWeaponStateRebuildTiming();
             TestSynergyDerivedMultipliers();
             TestSynergyCritHooks();
             TestSynergyKillHooks();
@@ -45,6 +46,7 @@ namespace Shooter.EditorTools
             TestBallisticsAugments();
             TestBossWaveNumbers();
             TestBossPhaseThresholds();
+            TestBossPhaseStepping();
             TestBossCoreDamage();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
@@ -283,35 +285,83 @@ namespace Shooter.EditorTools
             Check(deep.ReserveAmmo == 420, "the reserve bonus fits inside the raised cap");
         }
 
+        private static void TestWeaponStateRebuildTiming()
+        {
+            // Rebuilding stats mid-fight must keep the fire cooldown: Winded calls this
+            // on every accepted hit, so dropping it lets the rifle fire at tap speed.
+            var state = new WeaponState(30, 150, 0.1f, 1.5f);
+            Check(state.TryFire(0f), "timing fixture fires its first round");
+
+            var rebuilt = new WeaponState(40, 150, 0.1f, 1.5f);
+            rebuilt.SetMagazineAmmo(state.AmmoInMagazine);
+            rebuilt.CarryTimingFrom(state);
+            Check(!rebuilt.CanFire(0.05f), "a stat rebuild keeps the fire cooldown");
+            Check(rebuilt.CanFire(0.1f), "the rebuilt weapon fires once the original cooldown elapses");
+
+            var reloading = new WeaponState(30, 150, 0.1f, 1.5f);
+            reloading.TryFire(0f);
+            Check(reloading.TryStartReload(0.2f), "timing fixture starts a reload");
+
+            var rebuiltReload = new WeaponState(40, 150, 0.1f, 1.2f);
+            rebuiltReload.SetMagazineAmmo(reloading.AmmoInMagazine);
+            rebuiltReload.CarryTimingFrom(reloading);
+            Check(rebuiltReload.IsReloading, "a stat rebuild keeps an in-flight reload");
+            Check(!rebuiltReload.CanFire(0.5f), "a rebuilt weapon cannot fire mid-reload");
+            Check(rebuiltReload.Tick(reloading.ReloadEndTime), "a carried reload still completes");
+            Check(rebuiltReload.AmmoInMagazine == 40 && rebuiltReload.ReserveAmmo == 139,
+                "a carried reload tops up into the new magazine and spends the reserve");
+        }
+
         private static void TestSynergyDerivedMultipliers()
         {
             var root = new GameObject("SynergyTestRoot");
             var upgrades = root.AddComponent<UpgradeManager>();
 
-            // Kinetic Rounds: damage scales with speed, but only while moving at speed.
+            // Kinetic Rounds: damage scales with real movement, not with the speed stat.
             upgrades.AddSpeedMultiplier(0.2f);
             upgrades.AddDamageFromSpeed(0.35f);
-            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f * (1f + 0.35f * upgrades.SpeedMultiplier)),
-                "Kinetic Rounds scale damage with move speed");
+            upgrades.SetMovementFactor(0f);
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f),
+                "Kinetic Rounds pay nothing while standing still");
+
+            upgrades.SetMovementFactor(1f);
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1.35f),
+                "Kinetic Rounds reach +35% at a full sprint");
 
             upgrades.AddCrit(0.2f, 2f);
             upgrades.AddDamageFromCrits(0.45f);
             // Not in a crit window: the crit bonus should not apply.
-            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f * (1f + 0.35f * upgrades.SpeedMultiplier)),
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1.35f),
                 "crit-fed damage only applies inside the window");
 
             upgrades.OnCrit(); // opens the window
-            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier,
-                1f * (1f + 0.35f * upgrades.SpeedMultiplier) * 1.45f),
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1.35f * 1.45f),
                 "crit-fed damage applies during the window");
+
+            // Scalpel Rounds ride the critical multiplier itself.
+            upgrades.AddScalpelDamage(0.25f);
+            Check(Mathf.Approximately(upgrades.CriticalDamageMultiplier, 2.5f),
+                "Scalpel Rounds add 25% on a critical hit");
 
             upgrades.AddCritFeedsFireRate(0.2f);
             Check(Mathf.Approximately(upgrades.EffectiveFireRateMultiplier, 1.2f),
                 "crit-fed fire rate applies during the window");
 
+            // Every reset must drop the weapon-mode cards too, not only the stats.
+            upgrades.UnlockShotgun();
+            upgrades.AddRicochetBounce();
+            upgrades.AddBulletVelocity(0.2f);
+            upgrades.AddBulletExplosion(2.4f, 0.35f);
+
             upgrades.ResetAugments();
             Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1f), "synergy damage resets cleanly");
             Check(Mathf.Approximately(upgrades.EffectiveFireRateMultiplier, 1f), "synergy fire rate resets cleanly");
+            Check(!upgrades.ShotgunUnlocked && upgrades.RicochetBounces == 0 &&
+                  Mathf.Approximately(upgrades.BulletVelocityMultiplier, 1f) &&
+                  upgrades.ExplosionRadius == 0f &&
+                  upgrades.ExplosionDamageFraction == 0f &&
+                  upgrades.MovementFactor == 0f,
+                "reset clears the weapon-mode and ballistics cards");
 
             Object.DestroyImmediate(root);
         }
@@ -362,6 +412,8 @@ namespace Shooter.EditorTools
             }
 
             Check(Mathf.Approximately(upgrades.AdrenalineDamagePerKill, 0.16f), "Adrenaline Surge caps at eight kills");
+            Check(Mathf.Approximately(upgrades.EffectiveDamageMultiplier, 1.16f),
+                "Adrenaline Surge reaches +16% damage at the cap");
 
             Object.DestroyImmediate(root);
         }
@@ -493,6 +545,19 @@ namespace Shooter.EditorTools
             Check(BossController.PhaseFor(0.05f) == 3, "a nearly dead boss stays in phase three");
         }
 
+        private static void TestBossPhaseStepping()
+        {
+            // A burst can cross both thresholds at once. The boss then owes one roar
+            // per phase, so phase two's stat step and summon wave are not skipped.
+            Check(BossController.PendingPhaseRoars(1, 2) == 1, "crossing one threshold owes one roar");
+            Check(BossController.PendingPhaseRoars(1, 3) == 2, "crossing two thresholds owes two roars");
+            Check(BossController.PendingPhaseRoars(2, 2) == 0, "staying in the same phase owes nothing");
+            Check(BossController.PendingPhaseRoars(2, 1) == 0, "healing up never owes a roar");
+            Check(BossController.PendingPhaseRoars(1, 2) + BossController.PendingPhaseRoars(2, 3) ==
+                  BossController.PendingPhaseRoars(1, 3),
+                "stepping one phase at a time adds up to the same escalation");
+        }
+
         private static void TestBossCoreDamage()
         {
             var gameObject = new GameObject("SelfTest_BossHealth");
@@ -510,12 +575,25 @@ namespace Shooter.EditorTools
             Check(health.IncomingDamageScale > 0f,
                 "the incoming damage scale never reaches zero");
 
+            // The roar is hard immunity, not a tiny multiplier: hits must not move
+            // the bar, flash the model or raise Damaged the way a scaled hit does.
+            int hitsWhileImmune = 0;
+            System.Action<float, Vector3> onDamaged = (_, _) => hitsWhileImmune++;
+            health.Damaged += onDamaged;
+
+            float beforeRoar = health.CurrentHealth;
+            health.SetInvulnerable(true);
             health.TakeDamage(50f, Vector3.zero);
-            Check(health.CurrentHealth > 499.9f, "a phase roar makes the boss effectively immune");
+            Check(Mathf.Approximately(health.CurrentHealth, beforeRoar),
+                "a phase roar makes the boss immune");
+            Check(hitsWhileImmune == 0, "an immune boss does not raise the hit event");
+
+            health.SetInvulnerable(false);
+            health.Damaged -= onDamaged;
 
             health.IncomingDamageScale = 1f;
             health.TakeDamage(10f, Vector3.zero);
-            Check(Mathf.Approximately(health.CurrentHealth, 489.95f),
+            Check(Mathf.Approximately(health.CurrentHealth, 490f),
                 "normal damage applies once the roar ends");
 
             Object.DestroyImmediate(gameObject);

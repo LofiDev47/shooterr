@@ -35,15 +35,23 @@ namespace Shooter.Enemies
         public bool IsBoss { get; private set; }
 
         /// <summary>
-        /// Multiplier applied to every incoming hit. Bosses use it for phase
-        /// invulnerability (0) and the exposed-core window (2). Never below a
-        /// sliver, so a zero cannot become a heal and damage still reads.
+        /// Multiplier applied to every incoming hit. Bosses use it for the
+        /// exposed-core window (2). Never below a sliver, so a zero cannot become
+        /// a heal and damage still reads. Immunity is <see cref="IsInvulnerable"/>,
+        /// not a near-zero scale: a scaled hit would still flash the model, play
+        /// audio and raise <see cref="Damaged"/>.
         /// </summary>
         public float IncomingDamageScale
         {
             get => incomingDamageScale;
             set => incomingDamageScale = Mathf.Max(0.001f, value);
         }
+
+        /// <summary>
+        /// Hard immunity, used by boss phase roars. A hit is discarded before any
+        /// health, flash, audio or <see cref="Damaged"/> feedback is produced.
+        /// </summary>
+        public bool IsInvulnerable { get; private set; }
 
         private float incomingDamageScale = 1f;
         private float holdDeathSeconds;
@@ -92,6 +100,7 @@ namespace Shooter.Enemies
             IsBoss = isBoss;
             deathTimer = -1f;
             incomingDamageScale = 1f;
+            IsInvulnerable = false;
             holdDeathSeconds = 0f;
             transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 
@@ -121,10 +130,19 @@ namespace Shooter.Enemies
             holdDeathSeconds = Mathf.Max(0f, seconds);
         }
 
+        /// <summary>
+        /// Turns hard immunity on or off. While on, hits are discarded silently,
+        /// which is what a boss phase roar should look like.
+        /// </summary>
+        public void SetInvulnerable(bool value)
+        {
+            IsInvulnerable = value;
+        }
+
         /// <inheritdoc />
         public void TakeDamage(float amount, Vector3 hitPoint)
         {
-            if (IsDead || amount <= 0f)
+            if (IsDead || IsInvulnerable || amount <= 0f)
             {
                 return;
             }

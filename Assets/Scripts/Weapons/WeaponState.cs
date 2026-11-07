@@ -108,5 +108,28 @@ namespace Shooter.Weapons
 
             return Mathf.Clamp01(1f - (ReloadEndTime - now) / ReloadDuration);
         }
+
+        /// <summary>
+        /// Carries the time-sensitive state (fire cooldown and any in-flight reload)
+        /// over from an earlier state. Rebuilding stats mid-fight must not hand out a
+        /// free shot or cancel a reload the player already paid for.
+        /// </summary>
+        public void CarryTimingFrom(WeaponState previous)
+        {
+            if (previous == null)
+            {
+                return;
+            }
+
+            nextFireTime = previous.nextFireTime;
+
+            if (!previous.IsReloading)
+            {
+                return;
+            }
+
+            IsReloading = true;
+            ReloadEndTime = previous.ReloadEndTime;
+        }
     }
 }

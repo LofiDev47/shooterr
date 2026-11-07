@@ -209,27 +209,34 @@ namespace Shooter.EditorTools
             Check(Mathf.Approximately(coreLoss, 20f),
                 $"10 damage into an exposed core removes 20 health (removed {coreLoss:0.0})");
 
-            // --- phase two ------------------------------------------------------
-            bossHealth.IncomingDamageScale = 1f;
-            SetHealthRatio(bossHealth, 0.62f);
-            yield return WaitFor(() => boss.Phase >= 2, 3f);
-            Check(boss.Phase == 2, "dropping to two-thirds enters phase two");
+            // The window has to close on its own: nothing else resets the multiplier,
+            // so a leak here doubles every hit for the rest of the fight while the
+            // bar reads a normal phase.
+            yield return WaitFor(() => !boss.CoreExposed, 5f);
+            yield return null;
+            Check(Mathf.Approximately(boss.CurrentDamageScale, 1f),
+                $"the exposed core closes when its window ends (scale {boss.CurrentDamageScale:0.00})");
+
+            // --- phases: one burst across both thresholds -----------------------
+            // Dropping straight to phase three must still announce phase two first,
+            // with its own roar, stat step and summon wave: jumping to the furthest
+            // phase silently loses one escalation step and one wave of adds.
+            int aliveBeforeSummons = spawner.AliveCount;
+            SetHealthRatio(bossHealth, 0.28f);
+
+            yield return WaitFor(() => boss.Phase >= 2, 8f);
+            Check(boss.Phase == 2, "crossing both thresholds announces phase two first");
             Check(boss.Invulnerable, "the phase roar makes the boss invulnerable");
             Check(clipsSeen.Contains(BossAnimator.RoarClip) || boss.Invulnerable, "the roar clip plays");
 
-            int aliveBeforeSummons = spawner.AliveCount;
-            yield return WaitFor(() => boss.Phase == 2 && !boss.Invulnerable, 5f);
-            Check(!boss.Invulnerable, "the roar ends and the boss is vulnerable again");
-            Check(spawner.AliveCount > aliveBeforeSummons,
-                $"phase two summons adds (alive {aliveBeforeSummons} -> {spawner.AliveCount})");
-
-            // --- phase three ----------------------------------------------------
-            SetHealthRatio(bossHealth, 0.28f);
-            yield return WaitFor(() => boss.Phase >= 3, 3f);
-            Check(boss.Phase == 3, "dropping to one-third enters phase three");
+            yield return WaitFor(() => boss.Phase >= 3, 8f);
+            Check(boss.Phase == 3, "the owed second roar reaches phase three");
             Check(boss.PhaseLabel == "PHASE III", "the boss bar reports phase three");
 
-            yield return WaitFor(() => !boss.Invulnerable, 5f);
+            yield return WaitFor(() => !boss.Invulnerable, 8f);
+            Check(!boss.Invulnerable, "the roar ends and the boss is vulnerable again");
+            Check(spawner.AliveCount >= aliveBeforeSummons + 5,
+                $"both phases summon adds (alive {aliveBeforeSummons} -> {spawner.AliveCount})");
 
             // --- HUD bar --------------------------------------------------------
             yield return null;
@@ -240,7 +247,7 @@ namespace Shooter.EditorTools
 
             // Force the vulnerable state first: the blow must not land inside a
             // roar window, which is a test-timing accident, not a fight bug.
-            bossHealth.IncomingDamageScale = 1f;
+            bossHealth.SetInvulnerable(false);
             float healthBeforeKill = bossHealth.CurrentHealth;
             bossHealth.TakeDamage(bossHealth.CurrentHealth + 100f, boss.transform.position);
 
@@ -248,7 +255,7 @@ namespace Shooter.EditorTools
             {
                 log.AppendLine($"[BossSim] retry kill: hp {healthBeforeKill:0} -> {bossHealth.CurrentHealth:0}, " +
                     $"scale={boss.CurrentDamageScale:0.000} invuln={boss.Invulnerable} phase={boss.Phase}");
-                bossHealth.IncomingDamageScale = 1f;
+                bossHealth.SetInvulnerable(false);
                 bossHealth.TakeDamage(bossHealth.CurrentHealth + 100f, boss.transform.position);
             }
 

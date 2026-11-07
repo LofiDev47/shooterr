@@ -266,6 +266,25 @@ namespace Shooter.Player
 
             RecoverRecoil();
             UpdateCameraRig(deltaTime);
+            ReportMovementToAugments();
+        }
+
+        /// <summary>
+        /// Feeds actual horizontal speed to the movement-gated cards (Kinetic
+        /// Rounds). It reads velocity, not the speed stats, so standing still is
+        /// worth nothing no matter how many speed cards are owned.
+        /// </summary>
+        private void ReportMovementToAugments()
+        {
+            UpgradeManager upgrades = UpgradeManager.Instance;
+
+            if (upgrades == null)
+            {
+                return;
+            }
+
+            float speed = new Vector2(planarVelocity.x, planarVelocity.z).magnitude;
+            upgrades.SetMovementFactor(speed / Mathf.Max(0.01f, sprintSpeed));
         }
 
         /// <summary>Locks or releases the mouse cursor. Releasing also blocks firing briefly.</summary>
