@@ -31,6 +31,7 @@ namespace Shooter.EditorTools
             TestAmmoPickups();
             TestPlayerHealth();
             TestEnemyHealth();
+            TestExploderInertUntilArmed();
             TestAugmentMultipliersAndCaps();
             TestAugmentAirJumps();
             TestAugmentsOnPlayerHealth();
@@ -182,6 +183,23 @@ namespace Shooter.EditorTools
 
             health.TakeDamage(10f, Vector3.zero);
             Check(deathCount == 1, "damage after death is ignored");
+
+            Object.DestroyImmediate(gameObject);
+        }
+
+        /// <summary>
+        /// Every enemy prefab carries an EnemyExploder; only the ones the spawner arms
+        /// through Initialize() may detonate. Without the guard an ordinary grunt's
+        /// death event fires the blast and damages its neighbours.
+        /// </summary>
+        private static void TestExploderInertUntilArmed()
+        {
+            var gameObject = new GameObject("SelfTest_Exploder");
+            EnemyExploder exploder = gameObject.AddComponent<EnemyExploder>();
+
+            exploder.Detonate();
+            Check(!exploder.IsExploded, "an unarmed exploder does not detonate");
+            Check(!exploder.IsFusing, "an unarmed exploder never starts a fuse");
 
             Object.DestroyImmediate(gameObject);
         }

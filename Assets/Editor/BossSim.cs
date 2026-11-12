@@ -180,6 +180,30 @@ namespace Shooter.EditorTools
             Check(clipsSeen.Contains(BossAnimator.IdleClip) || clipsSeen.Contains(BossAnimator.WalkClip),
                 "the boss plays its authored locomotion clips");
 
+            // --- animator: an action ending while idle must resume locomotion ---
+            // Drive the animator directly with the controller paused. Mid-chase the boss
+            // is nearly always walking, so a Walk->Walk frame transition hides a missing
+            // return fade; the freeze only shows when the boss is idle before and after
+            // (for example taking a hit while standing).
+            boss.enabled = false;
+            animator.SetLocomotion(0f, 1f, true);
+            yield return null;
+            yield return null;
+
+            bool idleBeforeAction = animator.IsLocomotionPlaying;
+            animator.PlaySlam();
+
+            yield return WaitFor(() => !animator.IsActionPlaying, 3f);
+            yield return null;
+            yield return null;
+
+            Check(idleBeforeAction, "the boss idles before the scripted action");
+            Check(animator.IsLocomotionPlaying,
+                "locomotion resumes after an action that ends while the boss is idle");
+
+            boss.enabled = true;
+            yield return null;
+
             // --- slam: telegraph, damage, exposed core -------------------------
             // Stand in slam range so the boss commits to the ground attack.
             float slamDeadline = Time.realtimeSinceStartup + 14f;
@@ -216,6 +240,18 @@ namespace Shooter.EditorTools
             yield return null;
             Check(Mathf.Approximately(boss.CurrentDamageScale, 1f),
                 $"the exposed core closes when its window ends (scale {boss.CurrentDamageScale:0.00})");
+
+            // The slam clip must hand the rig back to locomotion. PlayAction fades with
+            // StopAll and the action clip clamps on its last frame, so a missing return
+            // fade leaves the boss frozen in the slam pose for the rest of the fight.
+            yield return WaitFor(() => !animator.IsActionPlaying, 3f);
+            yield return null;
+
+            Check(!string.IsNullOrEmpty(animator.CurrentClip) &&
+                  (animator.CurrentClip == BossAnimator.IdleClip || animator.CurrentClip == BossAnimator.WalkClip),
+                $"the boss returns to locomotion after the slam (clip {animator.CurrentClip})");
+            Check(animator.IsLocomotionPlaying,
+                "the locomotion clip is actually playing again, not just selected after the slam");
 
             // --- phases: one burst across both thresholds -----------------------
             // Dropping straight to phase three must still announce phase two first,

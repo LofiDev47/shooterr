@@ -43,6 +43,7 @@ namespace Shooter.Enemies
         private Animation animation;
         private string locomotionClip = IdleClip;
         private string activeAction;
+        private bool resumeLocomotion;
         private float actionEndsAt = -1f;
         private float planarSpeed;
         private float referenceSpeed = 2.4f;
@@ -53,6 +54,25 @@ namespace Shooter.Enemies
 
         /// <summary>Name of the clip currently driving the rig, exposed for tests.</summary>
         public string CurrentClip => activeAction ?? locomotionClip;
+
+        /// <summary>
+        /// True when the Animation component is actually playing the locomotion clip,
+        /// not merely holding it as the intended one. PlayAction fades with StopAll, so
+        /// after an action the locomotion state stays disabled until something fades it
+        /// back in — CurrentClip cannot see that.
+        /// </summary>
+        public bool IsLocomotionPlaying
+        {
+            get
+            {
+                if (animation == null || locomotionClip == null)
+                {
+                    return false;
+                }
+
+                return animation.IsPlaying(locomotionClip);
+            }
+        }
 
         /// <summary>True when all seven clips were found and added to the Animation.</summary>
         public bool HasClips => animation != null && animation.GetClipCount() >= 7;
@@ -179,16 +199,21 @@ namespace Shooter.Enemies
                     return;
                 }
 
+                // PlayAction crossfaded with StopAll, so the locomotion loop is
+                // stopped and the rig is holding the action clip's final pose.
+                // Force one fade back, even when the wanted clip is unchanged.
                 activeAction = null;
+                resumeLocomotion = true;
             }
 
             // Locomotion: walk when actually covering ground, idle otherwise.
             // The threshold is low because the boss lumbers rather than jogs.
             string wanted = planarSpeed > 0.25f && grounded ? WalkClip : IdleClip;
-            float fade = locomotionFade;
+            float fade = resumeLocomotion ? recoverFade : locomotionFade;
 
-            if (wanted != locomotionClip)
+            if (resumeLocomotion || wanted != locomotionClip)
             {
+                resumeLocomotion = false;
                 locomotionClip = wanted;
                 animation.CrossFade(wanted, fade, PlayMode.StopAll);
                 return;

@@ -74,6 +74,8 @@ namespace Shooter.Enemies
         private void HandleDied(EnemyHealth enemy)
         {
             // Shot dead: still goes off. That is the whole threat of the variant.
+            // Every enemy carries this component, so the blast only happens for the
+            // variants the spawner actually armed through Initialize().
             Detonate();
         }
 
@@ -144,7 +146,10 @@ namespace Shooter.Enemies
         /// </summary>
         public void Detonate()
         {
-            if (exploded)
+            // Every enemy prefab carries this component; only the ones the spawner
+            // armed with Initialize() are allowed to detonate. Without the active
+            // check the death event would blow up every grunt in the arena.
+            if (!active || exploded)
             {
                 return;
             }
