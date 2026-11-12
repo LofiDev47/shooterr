@@ -53,6 +53,7 @@ namespace Shooter.Managers
 
         private float hitStopUntil;
         private static bool autoStartNextRun;
+        private UI.MenuController menu;
 
         private void Awake()
         {
@@ -125,13 +126,27 @@ namespace Shooter.Managers
                 return;
             }
 
+            // The settings page is a modal screen owned by MenuController. While it
+            // owns input, Enter/Space must not start a run behind it and Esc must not
+            // resume a paused run underneath it. MenuController keeps the flag up for
+            // the frame it closes on, so the close key cannot leak through when
+            // Update order puts the menu first.
+            if (menu == null)
+            {
+                menu = FindAnyObjectByType<UI.MenuController>();
+            }
+
+            if (menu != null && menu.IsModalOpen)
+            {
+                return;
+            }
+
             SettingsManager settings = SettingsManager.Instance;
 
             switch (State)
             {
                 case GameState.GameOver:
-                    if ((settings != null && settings.WasPressed(SettingsManager.ActionRestart)) ||
-                        Keyboard.current.rKey.wasPressedThisFrame ||
+                    if (WasPressed(settings, SettingsManager.ActionRestart) ||
                         Keyboard.current.enterKey.wasPressedThisFrame)
                     {
                         Restart();
@@ -150,23 +165,44 @@ namespace Shooter.Managers
                     break;
 
                 case GameState.Playing:
-                    if ((settings != null && settings.WasPressed(SettingsManager.ActionPause)) ||
-                        Keyboard.current.escapeKey.wasPressedThisFrame ||
-                        Keyboard.current.pKey.wasPressedThisFrame)
+                    if (WasPressed(settings, SettingsManager.ActionPause))
                     {
                         Pause();
                     }
                     break;
 
                 case GameState.Paused:
-                    if ((settings != null && settings.WasPressed(SettingsManager.ActionPause)) ||
-                        Keyboard.current.escapeKey.wasPressedThisFrame ||
-                        Keyboard.current.pKey.wasPressedThisFrame)
+                    if (WasPressed(settings, SettingsManager.ActionPause))
                     {
                         Resume();
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// The bound key wins; the literal default only steps in when there is no
+        /// SettingsManager at all. Checking both meant rebinding Pause or Restart
+        /// added a second key instead of replacing the default one.
+        /// </summary>
+        private static bool WasPressed(SettingsManager settings, string actionId)
+        {
+            if (settings != null)
+            {
+                return settings.WasPressed(actionId);
+            }
+
+            if (actionId == SettingsManager.ActionPause)
+            {
+                return SettingsManager.WasPressed(Key.Escape);
+            }
+
+            if (actionId == SettingsManager.ActionRestart)
+            {
+                return SettingsManager.WasPressed(Key.R);
+            }
+
+            return false;
         }
 
         /// <summary>Moves from the main menu into the run. Also used after a quit to menu.</summary>
