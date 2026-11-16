@@ -110,10 +110,13 @@ namespace Shooter.Managers
             return (x - Math.Floor(x)) * 2.0 - 1.0;
         }
 
-        private float Decay(double time, double rate) => (float)Math.Exp(-time * rate);
+        /// <summary>Envelope with a non-negative time: a negative time would mean
+        /// exponential GAIN, which clips the wave-clear chime to full scale.</summary>
+        public static float Decay(double time, double rate) => (float)Math.Exp(-Math.Max(0.0, time) * rate);
 
-        private float WaveSine(double t, double freq, double rate = 9.0)
-            => (float)Math.Sin(Math.PI * 2.0 * freq * t) * Decay(t, rate);
+        /// <summary>Silence before a note's start offset (used by the wave-clear arpeggio).</summary>
+        public static float WaveSine(double t, double freq, double rate = 9.0)
+            => t < 0.0 ? 0f : (float)Math.Sin(Math.PI * 2.0 * freq * t) * Decay(t, rate);
 
         private float WeaponFireSample(float t, double time)
         {

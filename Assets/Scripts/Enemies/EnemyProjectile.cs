@@ -73,34 +73,69 @@ namespace Shooter.Enemies
             projectile.sparkMaterial = sparkMaterial;
         }
 
+        /// <summary>
+        /// Swept proximity test: measures the closest approach of the player's
+        /// chest to the travelled segment instead of just the endpoint, so a fast
+        /// bolt cannot step over the player between two frames. Travel is already
+        /// clamped to the geometry hit, so cover still blocks the bolt.
+        /// </summary>
+        public static bool SweptHit(Vector3 origin, Vector3 direction, float travel,
+            Vector3 point, float radius, out float distance)
+        {
+            float t = Mathf.Clamp(Vector3.Dot(point - origin, direction), 0f, Mathf.Max(0f, travel));
+            Vector3 closest = origin + direction * t;
+            distance = t;
+            return (point - closest).sqrMagnitude <= radius * radius;
+        }
+
+        /// <summary>
+        /// When geometry stopped the bolt, only a player whose closest approach
+        /// happens BEFORE the wall may be hit — otherwise cover is decorative.
+        /// </summary>
+        public static bool CanHitPlayer(float hitDistance, float travel, bool geometryHit) =>
+            !geometryHit || hitDistance < travel - 0.001f;
+
         private void Update()
         {
             float step = speed * Time.deltaTime;
-            Vector3 next = transform.position + direction * step;
+            Vector3 origin = transform.position;
+            Vector3 next = origin + direction * step;
+            float travel = step;
+            bool geometryHit = false;
+            Vector3 impactPoint = next;
 
             // Layer 2 is Ignore Raycast and holds the player, so the sweep only
             // tests world geometry and enemies.
-            if (Physics.Linecast(transform.position, next, out RaycastHit hit,
+            if (Physics.Linecast(origin, next, out RaycastHit hit,
                     ~(1 << 2), QueryTriggerInteraction.Ignore))
             {
-                transform.position = hit.point;
-                Explode();
-                return;
+                geometryHit = true;
+                travel = Mathf.Min(step, hit.distance);
+                impactPoint = hit.point;
             }
-
-            transform.position = next;
 
             if (target != null && !target.IsDead)
             {
                 Vector3 chest = target.transform.position + Vector3.up * 1.1f;
 
-                if ((chest - transform.position).sqrMagnitude <= hitRadius * hitRadius)
+                if (SweptHit(origin, direction, travel, chest, hitRadius, out float playerHitDistance) &&
+                    CanHitPlayer(playerHitDistance, travel, geometryHit))
                 {
+                    transform.position = origin + direction * playerHitDistance;
                     target.TakeDamage(damage);
                     Explode();
                     return;
                 }
             }
+
+            if (geometryHit)
+            {
+                transform.position = impactPoint;
+                Explode();
+                return;
+            }
+
+            transform.position = next;
 
             lifetime -= Time.deltaTime;
 

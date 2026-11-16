@@ -201,6 +201,8 @@ namespace Shooter.Weapons
         private float slideOffset;
         private float slideCycleStartedAt = -999f;
         private ShotgunState shotgunState;
+        private readonly DryClickGate dryClickGate = new DryClickGate();
+        private float appliedFireRateMultiplier = 1f;
         private Vector3 pumpRestLocalPosition;
         private Vector3 pumpBackAxis = Vector3.back;
         private float pumpOffset;
@@ -284,7 +286,8 @@ namespace Shooter.Weapons
             WeaponState previous = State;
 
             int magazine = Mathf.Max(1, Mathf.CeilToInt(magazineSize * (upgrades != null ? upgrades.MagazineMultiplier : 1f)));
-            float interval = Mathf.Max(0.02f, fireInterval / (upgrades != null ? upgrades.EffectiveFireRateMultiplier : 1f));
+            appliedFireRateMultiplier = Mathf.Max(0.1f, upgrades != null ? upgrades.EffectiveFireRateMultiplier : 1f);
+            float interval = Mathf.Max(0.02f, fireInterval / appliedFireRateMultiplier);
             float reload = Mathf.Max(0.15f, reloadDuration / (upgrades != null ? upgrades.ReloadSpeedMultiplier : 1f));
             int effectiveMaxReserve = maxReserve + (upgrades != null ? upgrades.ReserveBonus : 0);
             int inMagazine = magazine;
@@ -299,15 +302,33 @@ namespace Shooter.Weapons
             State = new WeaponState(magazine, reserve, interval, reload, effectiveMaxReserve);
             State.SetMagazineAmmo(inMagazine);
 
-            // Fire cooldown and reload progress survive the rebuild. Winded calls
-            // this on every accepted hit, so dropping the cooldown would let the
-            // rifle fire as fast as the trigger is tapped, and a card pick would
-            // silently refund an in-flight reload.
+            // Fire cooldown and reload progress survive the rebuild: a card pick
+            // must not hand out a free shot or refund an in-flight reload.
             State.CarryTimingFrom(previous);
         }
 
         /// <summary>Called by the upgrade manager after an augment changes weapon stats.</summary>
         public void OnAugmentsChanged() => RebuildState();
+
+        /// <summary>
+        /// Applies timed fire-rate effects (Crit Combo's 2 s window) to the rifle.
+        /// The interval is baked into WeaponState, so the change is detected here
+        /// instead of rebuilding on every crit. CarryTimingFrom keeps the shot
+        /// cooldown intact when the rapid window opens and closes.
+        /// </summary>
+        public void ApplyLiveFireRate()
+        {
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float rate = Mathf.Max(0.1f, upgrades != null ? upgrades.EffectiveFireRateMultiplier : 1f);
+
+            if (Mathf.Abs(rate - appliedFireRateMultiplier) <= 0.0001f)
+            {
+                return;
+            }
+
+            appliedFireRateMultiplier = rate;
+            RebuildState();
+        }
 
         private void Update()
         {
@@ -317,6 +338,7 @@ namespace Shooter.Weapons
             }
 
             float now = Time.time;
+            ApplyLiveFireRate();
             State.Tick(now);
             shotgunState ??= new ShotgunState(shotgunCapacity);
             shotgunState.Tick(now);
@@ -381,8 +403,8 @@ namespace Shooter.Weapons
 
             if (!State.CanFire(now))
             {
-                // Empty magazine: play the dry click and start reloading automatically.
-                if (!State.IsReloading && State.AmmoInMagazine == 0)
+                // Empty magazine: one click per interval, and a reload attempt.
+                if (dryClickGate.ShouldPlay(now, State.IsReloading, State.AmmoInMagazine))
                 {
                     AudioManager.Instance?.PlayWeaponEmpty(muzzle != null ? muzzle.position : transform.position);
                     TryReload();

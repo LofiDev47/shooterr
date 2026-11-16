@@ -40,6 +40,12 @@ namespace Shooter.EditorTools
             TestSynergyDerivedMultipliers();
             TestSynergyCritHooks();
             TestSynergyKillHooks();
+            TestAirborneAndCoyoteFraming();
+            TestWindedSpeedFloor();
+            TestCritFireRateReachesRifle();
+            TestDryClickGate();
+            TestWaveClearChimeGain();
+            TestProjectileSweptHit();
             TestComboTracker();
             TestHeadshotBounds();
             TestShotgunState();
@@ -434,6 +440,155 @@ namespace Shooter.EditorTools
                 "Adrenaline Surge reaches +16% damage at the cap");
 
             Object.DestroyImmediate(root);
+        }
+
+        private static void TestAirborneAndCoyoteFraming()
+        {
+            // The framing regression: ground state read before Move used to re-arm
+            // the coyote window on take-off and clear Sky Hunter in the same frame.
+            Check(PlayerController.JustLeftGround(true, false), "leaving ground is a real transition");
+            Check(!PlayerController.JustLeftGround(false, false), "staying airborne does not re-arm airtime");
+            Check(PlayerController.JustLanded(false, true), "touching down clears airtime");
+            Check(!PlayerController.CanGroundedJump(1f, -999f, 0.12f),
+                "a jump's negative sentinel prevents a free coyote jump");
+            Check(PlayerController.CanGroundedJump(1f, 0.95f, 0.12f), "coyote window works after a real landing");
+            Check(!PlayerController.CanGroundedJump(1.2f, 0.95f, 0.12f), "coyote window expires");
+
+            Check(UpgradeManager.SkyHunterBonus(10f, -1e9f, 0.3f) == 0f,
+                "Sky Hunter is inert while grounded");
+            Check(UpgradeManager.SkyHunterBonus(10.49f, 10f, 0.3f) == 0f,
+                "Sky Hunter needs the full airborne window");
+            Check(Mathf.Approximately(UpgradeManager.SkyHunterBonus(10.5f, 10f, 0.3f), 0.3f),
+                "Sky Hunter pays out after 0.5 s of airtime");
+
+            var root = new GameObject("SkyHunterRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            upgrades.AddSkyHunter();
+            upgrades.OnJumpPressed();
+            Check(upgrades.AirborneFirstHitDamageMultiplier == 0f, "Sky Hunter does not pay out on take-off");
+
+            var startedAt = typeof(UpgradeManager).GetField("airborneStartedAt",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            startedAt.SetValue(upgrades, Time.time - 0.6f);
+            Check(upgrades.AirborneFirstHitDamageMultiplier > 0f, "Sky Hunter pays out mid-air");
+            upgrades.OnLanded();
+            Check(upgrades.AirborneFirstHitDamageMultiplier == 0f, "landing clears Sky Hunter");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestWindedSpeedFloor()
+        {
+            var root = new GameObject("WindedRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            upgrades.AddSpeedPenaltyPerShot(0.02f);
+
+            upgrades.TakeSpeedPenalty();
+            Check(upgrades.SpeedMultiplier < 1f, "each accepted hit drains speed");
+            Check(upgrades.SpeedMultiplier > UpgradeManager.MinSpeedMultiplier, "one hit is far from the floor");
+
+            for (int i = 0; i < 200; i++)
+            {
+                upgrades.TakeSpeedPenalty();
+            }
+
+            Check(upgrades.SpeedMultiplier >= UpgradeManager.MinSpeedMultiplier,
+                "Winded never drops below its speed floor");
+            Check(upgrades.SpeedMultiplier <= UpgradeManager.MinSpeedMultiplier + 0.0001f,
+                "Winded settles exactly at the floor");
+
+            upgrades.ResetAugments();
+            Check(upgrades.SpeedMultiplier == 1f, "reset restores base speed");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestCritFireRateReachesRifle()
+        {
+            var upgradesRoot = new GameObject("CritRateRoot");
+            var upgrades = upgradesRoot.AddComponent<UpgradeManager>();
+            var weaponRoot = new GameObject("CritRateWeapon");
+            var weapon = weaponRoot.AddComponent<Weapon>();
+
+            var instanceProperty = typeof(UpgradeManager).GetProperty("Instance",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            object previous = instanceProperty.GetValue(null);
+            instanceProperty.SetValue(null, upgrades);
+
+            weapon.RebuildState(); // edit-mode AddComponent does not run Awake
+            float baseInterval = weapon.State.FireInterval;
+
+            upgrades.AddCritFeedsFireRate(0.2f);
+            upgrades.OnCrit();
+            weapon.ApplyLiveFireRate();
+            Check(weapon.State.FireInterval < baseInterval - 0.001f,
+                "Crit Combo's rapid window shortens the rifle's fire interval");
+
+            var boostUntil = typeof(UpgradeManager).GetField("fireRateBoostUntil",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            boostUntil.SetValue(upgrades, Time.time - 1f);
+            weapon.ApplyLiveFireRate();
+            Check(Mathf.Approximately(weapon.State.FireInterval, baseInterval),
+                "the rifle returns to its normal interval when the window closes");
+
+            instanceProperty.SetValue(null, previous);
+            Object.DestroyImmediate(weaponRoot);
+            Object.DestroyImmediate(upgradesRoot);
+        }
+
+        private static void TestDryClickGate()
+        {
+            var gate = new DryClickGate();
+
+            Check(gate.ShouldPlay(0f, false, 0), "an empty gun clicks once");
+            Check(!gate.ShouldPlay(0.01f, false, 0), "holding fire does not click every frame");
+            Check(!gate.ShouldPlay(1f, true, 0), "no click while reloading");
+            Check(!gate.ShouldPlay(1f, false, 5), "no click with a loaded magazine");
+            Check(gate.ShouldPlay(0.35f, false, 0), "the click returns after its cooldown");
+
+            gate.Reset();
+            Check(gate.ShouldPlay(0.36f, false, 0), "reset re-arms the gate");
+        }
+
+        private static void TestWaveClearChimeGain()
+        {
+            Check(AudioManager.WaveSine(-0.42, 1480.0, 18.0) == 0f,
+                "a note before its start offset is silent");
+            Check(AudioManager.Decay(-0.42, 18.0) <= 1f,
+                "negative time never turns the envelope into gain");
+            Check(AudioManager.Decay(0.0, 18.0) == 1f, "the envelope starts at unit gain");
+            Check(Mathf.Abs(AudioManager.WaveSine(0.42, 1480.0, 18.0)) <= 1f,
+                "the chime stays within unit amplitude");
+        }
+
+        private static void TestProjectileSweptHit()
+        {
+            Vector3 origin = Vector3.zero;
+            Vector3 direction = Vector3.forward;
+
+            Check(EnemyProjectile.SweptHit(origin, direction, 1f,
+                    new Vector3(0.2f, 0f, 0.5f), 0.3f, out float hitDistance),
+                "a bolt hits a player at the midpoint of its step");
+            Check(Mathf.Abs(hitDistance - 0.5f) < 0.01f, "the hit reports the closest approach distance");
+
+            Check(!EnemyProjectile.SweptHit(origin, direction, 1f,
+                    new Vector3(0f, 0f, 1.4f), 0.3f, out _),
+                "a player beyond the step is not hit");
+
+            Check(!EnemyProjectile.SweptHit(origin, direction, 0.4f,
+                    new Vector3(0.2f, 0f, 0.9f), 0.3f, out _),
+                "geometry-clamped travel stops a later hit (cover still works)");
+
+            Check(!EnemyProjectile.SweptHit(origin, direction, 1f,
+                    new Vector3(0.2f, 0f, -0.4f), 0.3f, out _),
+                "a player behind the bolt is not hit");
+
+            Check(EnemyProjectile.CanHitPlayer(0.4f, 1f, true),
+                "a player in front of cover is still hit");
+            Check(!EnemyProjectile.CanHitPlayer(1f, 1f, true),
+                "a player behind cover is not hit by the clamped sweep");
+            Check(EnemyProjectile.CanHitPlayer(0.9f, 1f, false),
+                "an unobstructed bolt can hit near the end of its step");
         }
 
         private static void TestRangeFalloffAndMelee()

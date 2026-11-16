@@ -394,7 +394,6 @@ namespace Shooter.Player
                 if (WasPressed(settings, SettingsManager.ActionJump))
                 {
                     jumpBufferedUntil = Time.time + jumpBufferTime;
-                    UpgradeManager.Instance?.OnJumpPressed();
                 }
 
                 if (WasReleased(settings, SettingsManager.ActionJump) && verticalVelocity > 0f)
@@ -418,17 +417,13 @@ namespace Shooter.Player
 
             UpdateJump();
 
-            // Gravity and ground contact.
-            if (controller.isGrounded)
+            // Gravity and ground contact. Ground state here is from the PREVIOUS
+            // Move, so it must not be used to re-arm the coyote window or reset
+            // the airborne timer: on a take-off frame it is still true and would
+            // hand out a free second jump while instantly cancelling Sky Hunter.
+            if (controller.isGrounded && verticalVelocity < 0f)
             {
-                lastGroundedTime = Time.time;
-                UpgradeManager.Instance?.ResetAirJumps();
-                UpgradeManager.Instance?.OnLanded();
-
-                if (verticalVelocity < 0f)
-                {
-                    verticalVelocity = -2f; // Keeps the controller glued to slopes.
-                }
+                verticalVelocity = -2f; // Keeps the controller glued to slopes.
             }
 
             float fallSpeed = verticalVelocity;
@@ -438,6 +433,24 @@ namespace Shooter.Player
             controller.Move(motion * deltaTime);
 
             bool groundedNow = controller.isGrounded;
+
+            // Only the post-Move contact state is authoritative. Left-ground arms
+            // the airborne timer exactly once; landing clears it and restores air
+            // jumps. Air jumps keep wasGrounded == false, so they never re-arm it.
+            if (groundedNow)
+            {
+                lastGroundedTime = Time.time;
+                UpgradeManager.Instance?.ResetAirJumps();
+            }
+
+            if (JustLanded(wasGrounded, groundedNow))
+            {
+                UpgradeManager.Instance?.OnLanded();
+            }
+            else if (JustLeftGround(wasGrounded, groundedNow))
+            {
+                UpgradeManager.Instance?.OnJumpPressed();
+            }
 
             if (groundedNow && !wasGrounded && fallSpeed < -6f)
             {
@@ -553,6 +566,19 @@ namespace Shooter.Player
             // Momentum carries over: planarVelocity keeps the slide's direction and speed.
         }
 
+        /// <summary>True on the frame ground contact is lost (jump or ledge drop).</summary>
+        public static bool JustLeftGround(bool wasGrounded, bool groundedNow) => wasGrounded && !groundedNow;
+
+        /// <summary>True on the frame the player touches down.</summary>
+        public static bool JustLanded(bool wasGrounded, bool groundedNow) => !wasGrounded && groundedNow;
+
+        /// <summary>
+        /// Coyote check. A jump writes a negative sentinel to lastGroundedTime, so
+        /// the window cannot be re-armed until a real post-Move landing occurs.
+        /// </summary>
+        public static bool CanGroundedJump(float now, float lastGroundedTime, float coyoteTime) =>
+            lastGroundedTime > -1e8f && now - lastGroundedTime <= coyoteTime;
+
         private void UpdateJump()
         {
             if (jumpBufferedUntil < 0f || Time.time > jumpBufferedUntil)
@@ -562,7 +588,7 @@ namespace Shooter.Player
 
             UpgradeManager upgrades = UpgradeManager.Instance;
             float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
-            bool groundedJump = Time.time - lastGroundedTime <= coyoteTime;
+            bool groundedJump = CanGroundedJump(Time.time, lastGroundedTime, coyoteTime);
 
             if (!groundedJump && !(upgrades != null && upgrades.TryConsumeAirJump()))
             {

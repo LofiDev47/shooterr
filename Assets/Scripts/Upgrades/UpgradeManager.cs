@@ -531,19 +531,13 @@ namespace Shooter.Upgrades
             }
         }
 
-        /// <summary>Damage added to the shot immediately after an airborne period (one-shot).</summary>
-        public float AirborneFirstHitDamageMultiplier
-        {
-            get
-            {
-                if (!skyHunter || airborneStartedAt < -1e8f)
-                {
-                    return 0f;
-                }
+        /// <summary>Damage bonus for shots fired after 0.5 s of real airtime.</summary>
+        public float AirborneFirstHitDamageMultiplier =>
+            skyHunter ? SkyHunterBonus(Time.time, airborneStartedAt, airborneDamageMultiplier) : 0f;
 
-                return Time.time - airborneStartedAt >= 0.5f ? airborneDamageMultiplier : 0f;
-            }
-        }
+        /// <summary>Pure airborne-window check, exposed for headless tests.</summary>
+        public static float SkyHunterBonus(float now, float airborneStartedAt, float multiplier) =>
+            airborneStartedAt < -1e8f || now - airborneStartedAt < 0.5f ? 0f : multiplier;
 
         // ---------------------------------------------------------------- modifiers
 
@@ -679,39 +673,47 @@ namespace Shooter.Upgrades
                 playerHealth.Heal(vampiricCritHeal);
             }
 
-            // Chain Reaction: crits reset the slide cooldown and open a rapid-fire window.
-            if (critReducesSlideCooldown > 0f && player != null)
+            // Crit Combo: the slide reset and the rapid-fire window are independent
+            // effects. The fire-rate window must not depend on a player reference.
+            if (critReducesSlideCooldown > 0f)
             {
-                player.ResetSlideCooldown();
+                player?.ResetSlideCooldown();
+            }
+
+            if (critFeedsFireRate > 0f)
+            {
                 fireRateBoostUntil = Time.time + 2f;
             }
         }
 
-        /// <summary>Called when the player lands, so airborne damage timing resets.</summary>
-        public void OnLanded()
-        {
-            airborneStartedAt = -1e9f;
-        }
+        /// <summary>Floor for Winded's per-hit speed drain (30% of base speed).</summary>
+        public const float MinSpeedMultiplier = 0.3f;
 
-        /// <summary>Called the frame the jump key fires, so airborne damage timing starts.</summary>
+        /// <summary>Called on the post-Move frame ground contact is lost.</summary>
         public void OnJumpPressed()
         {
             airborneStartedAt = Time.time;
         }
 
+        /// <summary>Called on the post-Move frame the player touches down.</summary>
+        public void OnLanded()
+        {
+            airborneStartedAt = -1e9f;
+        }
+
         /// <summary>
-        /// Winded interlock: each accepted hit drains a small fixed amount of speed.
-        /// Rebuilds the weapon so fire rate never restores speed instead of damage.
+        /// Winded interlock: each accepted hit drains a small fixed amount of speed,
+        /// floored so the player never grinds to a halt. No weapon rebuild is needed
+        /// here — speed is sampled live and none of the rebuilt stats depend on it.
         /// </summary>
         public void TakeSpeedPenalty()
         {
-            if (speedPenaltyPerShot <= 0f)
+            if (speedPenaltyPerShot <= 0f || speedMultiplier <= MinSpeedMultiplier)
             {
                 return;
             }
 
-            AddSpeedMultiplier(-speedPenaltyPerShot);
-            weapon?.OnAugmentsChanged();
+            speedMultiplier = Mathf.Max(MinSpeedMultiplier, speedMultiplier * (1f - speedPenaltyPerShot));
         }
 
         /// <summary>One extra air jump is consumed per airborne jump; reset on landing.</summary>
