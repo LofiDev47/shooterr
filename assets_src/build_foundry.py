@@ -537,6 +537,29 @@ def build_effects():
         build_effect(*spec)
 
 
+def build_secondary_models():
+    for name in ("Conduit", "Hardware", "Drum", "SpentCell", "ImpactMark"):
+        reset()
+        finish = material("FoundryFrame", (0.038, 0.057, 0.067), 0.7)
+        if name == "Conduit":
+            loft(name, (0, 0, 0), [(-1, 0.84, 0.84, 0), (-0.83, 1, 1, 0),
+                                   (0.83, 1, 1, 0), (1, 0.84, 0.84, 0)], finish, None)
+        elif name == "Drum":
+            loft(name, (0, 0, 0), [(-1, 0.91, 0.91, 0), (-0.90, 1, 1, 0),
+                                   (-0.72, 0.87, 0.87, 0), (0.70, 0.87, 0.87, 0),
+                                   (0.80, 1, 1, 0), (1, 0.91, 0.91, 0)], finish, None)
+        elif name == "SpentCell":
+            loft(name, (0, 0, 0), [(-0.50, 0.67, 0.67, 0), (-0.29, 1, 1, 0),
+                                   (0.17, 1, 1, 0), (0.50, 0.71, 0.71, 0)], finish, None)
+        elif name == "ImpactMark":
+            ring(name, (0, 0, 0), 0.5, 0.13, 0.045, finish, None, 8)
+        else:
+            loft(name, (0, 0, 0), [(-0.5, 0.82, 0.82, 0), (-0.34, 1, 1, 0),
+                                   (0.27, 1, 1, 0), (0.50, 0.75, 0.84, 0)], finish, None)
+        save(name)
+        export(name)
+
+
 if __name__ == "__main__":
     build_actors()
     build_viewmodel()
@@ -544,3 +567,4 @@ if __name__ == "__main__":
     build_pickup("AmmoCache", (1.0, 0.62, 0.13), False)
     build_pickup("HealthCache", (0.26, 1.0, 0.54), True)
     build_effects()
+    build_secondary_models()

@@ -10,6 +10,8 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
+for collection in list(bpy.data.collections):
+    bpy.data.collections.remove(collection)
 scene = bpy.context.scene
 scene.render.engine = "BLENDER_EEVEE"
 scene.render.film_transparent = True
