@@ -17,6 +17,7 @@ namespace Shooter.UI
     /// </summary>
     public sealed class MenuController : MonoBehaviour
     {
+        public Sprite foundryPlate;
         [Header("Wiring (scene builder)")]
         public GameManager gameManager;
         public SettingsManager settings;
@@ -874,6 +875,7 @@ namespace Shooter.UI
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
             Image image = AddImage(rect, color);
+            image.sprite = foundryPlate;
             image.raycastTarget = true;
             return image;
         }

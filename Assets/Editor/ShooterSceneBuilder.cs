@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Shooter.Enemies;
+using Shooter.Effects;
 using Shooter.Managers;
 using Shooter.Player;
 using Shooter.UI;
@@ -17,14 +18,14 @@ namespace Shooter.EditorTools
     /// <summary>
     /// Builds the entire playable arena from code so the scene is reproducible:
     /// menu item "Shooter/Rebuild Arena Scene" or -executeMethod Shooter.EditorTools.ShooterSceneBuilder.Build.
-    /// Only built-in primitives and generated materials are used.
+    /// Rebuilds Foundry visuals around the arena's original collision layout.
     /// </summary>
     public static class ShooterSceneBuilder
     {
-        public const string ScenePath = "Assets/Scenes/Arena.unity";
+        public const string ScenePath = "Assets/Scenes/FoundryArena.unity";
 
         private const string MaterialsFolder = "Assets/Materials";
-        private const string PrefabsFolder = "Assets/Prefabs";
+        private const string PrefabsFolder = "Assets/Prefabs/Foundry";
         private const string ScenesFolder = "Assets/Scenes";
 
         private const float ArenaHalfSize = 22f;
@@ -36,6 +37,7 @@ namespace Shooter.EditorTools
             EnsureFolder("Assets/Scripts");
             EnsureFolder(MaterialsFolder);
             EnsureFolder(PrefabsFolder);
+            EnsureFolder(FoundryAssets.Materials);
             EnsureFolder(ScenesFolder);
 
             ArenaMaterials materials = CreateMaterials();
@@ -54,6 +56,7 @@ namespace Shooter.EditorTools
             ManagersRig managers = BuildManagers(enemyPrefabs, bossPrefab, ammoCachePrefab, healthCachePrefab,
                 rig, spawnPoints);
             HUDController hud = BuildHud(rig, managers);
+            FoundryHudSkin.Apply(hud.gameObject);
 
             // Wired after the HUD exists, so these components can raise UI feedback.
             rig.Weapon.hud = hud;
@@ -182,6 +185,10 @@ namespace Shooter.EditorTools
 
         private static Material GetOrCreateLitMaterial(string name, Color color, float smoothness, float metallic)
         {
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsFolder}/{name}.mat");
+            if (existing != null)
+                return existing;
+
             Shader shader = Shader.Find("Universal Render Pipeline/Lit");
 
             if (shader == null)
@@ -202,6 +209,10 @@ namespace Shooter.EditorTools
 
         private static Material GetOrCreateUnlitMaterial(string name, Color color)
         {
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsFolder}/{name}.mat");
+            if (existing != null)
+                return existing;
+
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
 
             if (shader == null)
@@ -221,6 +232,10 @@ namespace Shooter.EditorTools
         /// <summary>Lit material with emission enabled, so bloom makes it glow.</summary>
         private static Material GetOrCreateEmissiveMaterial(string name, Color baseColor, Color emission)
         {
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsFolder}/{name}.mat");
+            if (existing != null)
+                return existing;
+
             Material material = GetOrCreateLitMaterial(name, baseColor, 0.45f, 0f);
             material.EnableKeyword("_EMISSION");
 
@@ -254,6 +269,10 @@ namespace Shooter.EditorTools
 
         private static Material GetOrCreateSkyboxMaterial()
         {
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>($"{MaterialsFolder}/Skybox.mat");
+            if (existing != null)
+                return existing;
+
             Shader shader = Shader.Find("Skybox/Procedural");
 
             if (shader == null)
@@ -344,8 +363,47 @@ namespace Shooter.EditorTools
             BuildBarrels(materials, arena.transform);
             BuildFloorGuides(materials, arena.transform);
             BuildArenaDetails(materials, arena.transform);
+            ApplyArenaModels(arena.transform);
 
             ground.isStatic = true;
+        }
+
+        private static void ApplyArenaModels(Transform arena)
+        {
+            var models = new Dictionary<string, GameObject>();
+            foreach (MeshRenderer renderer in arena.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                string label = renderer.name;
+                string asset = label switch
+                {
+                    "Ground" => "Ground",
+                    "Central Pad" => "Pad",
+                    "Pillar" or "Wall Pier" => "Pillar",
+                    "Container" or "Barrier" or "L Wall" or "L Wall Return" => "Cover",
+                    "Wall North" or "Wall South" or "Wall East" or "Wall West" => "Wall",
+                    "Barrel" => "Drum",
+                    "Barrel Ring" => "Conduit",
+                    _ when label.StartsWith("Pipe ") => "Conduit",
+                    _ when label.StartsWith("Platform ") => "Platform",
+                    _ when label.StartsWith("Ramp ") => "Ramp",
+                    _ when label.StartsWith("Trim ") || label.StartsWith("Pad Trim ") => "Trim",
+                    _ => "Hardware",
+                };
+
+                if (!models.TryGetValue(asset, out GameObject source))
+                {
+                    source = FoundryAssets.LoadProp(asset);
+                    models.Add(asset, source);
+                }
+
+                GameObject visual = Object.Instantiate(source, renderer.transform, false);
+                visual.name = "Foundry Visual";
+                if (asset == "Hardware" || asset == "Drum" || asset == "Conduit")
+                    visual.GetComponentInChildren<MeshRenderer>().sharedMaterial = renderer.sharedMaterial;
+                else
+                    FoundryAssets.Skin(visual);
+                renderer.enabled = false;
+            }
         }
 
         /// <summary>
@@ -813,12 +871,25 @@ namespace Shooter.EditorTools
         /// </summary>
         private static void BuildPostProcessing(PlayerRig rig)
         {
+            var volumeObject = new GameObject("Post Processing");
+            Volume volume = volumeObject.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 0f;
+            volume.sharedProfile = LoadPostProcessing();
+
+            if (rig.Camera != null)
+            {
+                rig.Camera.GetUniversalAdditionalCameraData().renderPostProcessing = true;
+            }
+        }
+
+        private static VolumeProfile LoadPostProcessing()
+        {
             const string profilePath = "Assets/Settings/ShooterPostProcessing.asset";
 
-            if (AssetDatabase.LoadAssetAtPath<VolumeProfile>(profilePath) != null)
-            {
-                AssetDatabase.DeleteAsset(profilePath);
-            }
+            VolumeProfile existing = AssetDatabase.LoadAssetAtPath<VolumeProfile>(profilePath);
+            if (existing != null)
+                return existing;
 
             VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, profilePath);
@@ -853,18 +924,7 @@ namespace Shooter.EditorTools
 
             EditorUtility.SetDirty(profile);
 
-            var volumeObject = new GameObject("Post Processing");
-            Volume volume = volumeObject.AddComponent<Volume>();
-            volume.isGlobal = true;
-            volume.priority = 0f;
-            volume.sharedProfile = profile;
-
-            if (rig.Camera != null)
-            {
-                rig.Camera.GetUniversalAdditionalCameraData().renderPostProcessing = true;
-            }
-
-            Debug.Log("[Shooter] Post-processing volume created (bloom, vignette, ACES).");
+            return profile;
         }
 
         private static List<Transform> BuildSpawnPoints()
@@ -966,27 +1026,14 @@ namespace Shooter.EditorTools
             weaponObject.transform.SetParent(cameraTransform, false);
             weaponObject.transform.localPosition = new Vector3(0.22f, -0.19f, 0.35f);
 
-            // The rifle is a Blender-authored FBX (Tools/Blender/build_rifle.py).
-            // It keeps its named Slide / EjectPoint / MuzzlePoint anchors so the
-            // firing animation stays in code without a rigged animation clip.
             var model = new GameObject("Model");
             model.transform.SetParent(weaponObject.transform, false);
 
-            GameObject rifleAsset = LoadRifleAsset();
-
-            if (rifleAsset == null)
-            {
-                throw new System.InvalidOperationException(
-                    "Missing Assets/Models/ShooterRifle.fbx. Run Tools/Blender/build_rifle.py first.");
-            }
-
-            GameObject rifle = (GameObject)Object.Instantiate(rifleAsset, model.transform, false);
+            GameObject rifleAsset = FoundryAssets.LoadPlayer();
+            GameObject rifle = Object.Instantiate(rifleAsset, model.transform, false);
             rifle.name = "Rifle";
-
-            foreach (MeshRenderer renderer in rifle.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                renderer.sharedMaterial = RifleMaterialFor(renderer.gameObject.name, materials);
-            }
+            FoundryAssets.Skin(rifle);
+            Animation viewAnimation = FoundryAssets.Bind(rifle, rifleAsset, FoundryAssets.PlayerNames);
 
             // Every piece is collider-free and on the Ignore Raycast layer so the
             // weapon can never eat its own shots.
@@ -1021,15 +1068,7 @@ namespace Shooter.EditorTools
             // is rotated randomly per shot by Weapon.PlayMuzzleFlash.
             var flashRoot = new GameObject("MuzzleFlash");
             flashRoot.transform.SetParent(muzzle.transform, false);
-            CreatePrimitive("FlashCore", PrimitiveType.Sphere, Vector3.zero,
-                new Vector3(0.13f, 0.13f, 0.13f), materials.Muzzle, flashRoot.transform);
-
-            for (int i = 0; i < 4; i++)
-            {
-                CreatePrimitive($"FlashPetal{i}", PrimitiveType.Cube, new Vector3(0f, 0f, 0.035f),
-                    new Vector3(0.018f, 0.17f, 0.018f), materials.Muzzle, flashRoot.transform,
-                    Quaternion.Euler(0f, 0f, i * 45f));
-            }
+            Animation muzzleBurst = PlaceEffect("ChargeFlash", 5, flashRoot.transform, Quaternion.Euler(90f, 0f, 0f));
 
             foreach (Transform flashPart in flashRoot.GetComponentsInChildren<Transform>(true))
             {
@@ -1053,6 +1092,7 @@ namespace Shooter.EditorTools
             Transform shotgunMuzzle = null;
             GameObject shotgunFlashRoot = null;
             Light shotgunLight = null;
+            Animation breachBurst = null;
 
             if (shotgunMuzzleAnchor != null)
             {
@@ -1064,15 +1104,7 @@ namespace Shooter.EditorTools
 
                 shotgunFlashRoot = new GameObject("ShotgunFlash");
                 shotgunFlashRoot.transform.SetParent(shotgunMuzzle, false);
-                CreatePrimitive("ShotgunFlashCore", PrimitiveType.Sphere, Vector3.zero,
-                    new Vector3(0.17f, 0.17f, 0.17f), materials.Muzzle, shotgunFlashRoot.transform);
-
-                for (int i = 0; i < 5; i++)
-                {
-                    CreatePrimitive($"ShotgunFlashPetal{i}", PrimitiveType.Cube, new Vector3(0f, 0f, 0.045f),
-                        new Vector3(0.024f, 0.23f, 0.024f), materials.Muzzle, shotgunFlashRoot.transform,
-                        Quaternion.Euler(0f, 0f, i * 36f));
-                }
+                breachBurst = PlaceEffect("BreachFlash", 7, shotgunFlashRoot.transform, Quaternion.Euler(90f, 0f, 0f));
 
                 foreach (Transform flashPart in shotgunFlashRoot.GetComponentsInChildren<Transform>(true))
                 {
@@ -1112,6 +1144,10 @@ namespace Shooter.EditorTools
             weapon.player = player;
             weapon.muzzle = muzzle.transform;
             weapon.muzzleFlash = flashRoot;
+            weapon.muzzleBurst = muzzleBurst;
+            weapon.breachBurst = breachBurst;
+            weapon.spentCell = BuildLooseProp("SpentCell", materials.Brass);
+            weapon.impactMark = BuildLooseProp("ImpactMark", materials.Impact);
             weapon.muzzleLight = flashLight;
             weapon.tracer = tracer;
             weapon.audioSource = audioSource;
@@ -1119,6 +1155,7 @@ namespace Shooter.EditorTools
             weapon.sparkMaterial = materials.Spark;
             weapon.explosionMaterial = materials.Muzzle;
             weapon.slide = slide;
+            weapon.viewAnimation = viewAnimation;
             weapon.shellEjectPoint = ejectPoint;
             weapon.shellMaterial = materials.Brass;
             weapon.shotgunMuzzle = shotgunMuzzle;
@@ -1148,89 +1185,12 @@ namespace Shooter.EditorTools
         /// duplicate materials. The material mapping lives in the builder so the
         /// rifle always uses the project's URP assets.
         /// </summary>
-        private static GameObject LoadRifleAsset()
-        {
-            const string path = "Assets/Models/ShooterRifle.fbx";
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            if (AssetImporter.GetAtPath(path) is ModelImporter importer)
-            {
-                bool dirty = false;
-
-                if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
-                {
-                    importer.materialImportMode = ModelImporterMaterialImportMode.None;
-                    dirty = true;
-                }
-
-                if (importer.importAnimation)
-                {
-                    importer.importAnimation = false;
-                    dirty = true;
-                }
-
-                if (dirty)
-                {
-                    importer.SaveAndReimport();
-                }
-            }
-
-            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
-        }
-
-        /// <summary>Maps FBX part names to the shared weapon materials.</summary>
-        private static Material RifleMaterialFor(string partName, ArenaMaterials materials)
-        {
-            if (partName.Contains("Glow") || partName.Contains("OpticGlass"))
-            {
-                return materials.Accent;
-            }
-
-            if (partName.Contains("OpticDot") || partName.Contains("SideAccent"))
-            {
-                return materials.EnemyEye;
-            }
-
-            if (partName.Contains("Grip") || partName.Contains("ButtPad") ||
-                partName.Contains("Cheek") || partName.Contains("Vent") ||
-                partName.Contains("EjectionPort") || partName.Contains("Pump"))
-            {
-                return materials.Grip;
-            }
-
-            if (partName.Contains("Rail") || partName.Contains("Sight") ||
-                partName.Contains("Barrel") || partName.Contains("Muzzle") ||
-                partName.Contains("Brake") || partName.Contains("GasBlock") ||
-                partName.Contains("MagazineBase") || partName.Contains("MagazineRib") ||
-                partName.Contains("ReceiverTop") || partName.Contains("HandguardTop") ||
-                partName.Contains("HandguardBottom") || partName.Contains("Panel") ||
-                partName.Contains("Slide") || partName.Contains("Trigger") ||
-                partName.Contains("GripCap") || partName.Contains("OpticFrame"))
-            {
-                return materials.GunAccent;
-            }
-
-            return materials.Gun;
-        }
-
-        private static Transform FindDeep(Transform root, string name)
-        {
-            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
-            {
-                if (child.name == name)
-                {
-                    return child;
-                }
-            }
-
-            return null;
-        }
-
-        // ---------------------------------------------------------------- enemies
+        // ---------------------------------------------------------------- enemy prefabs
 
         private sealed class EnemyPrefabRig
         {
             public GameObject Trooper;
+            public GameObject Exploder;
             public GameObject Runner;
             public GameObject Bulwark;
             public GameObject Marksman;
@@ -1249,6 +1209,7 @@ namespace Shooter.EditorTools
             return new EnemyPrefabRig
             {
                 Trooper = CreateEnemyPrefab("Trooper", materials),
+                Exploder = CreateEnemyPrefab("Exploder", materials),
                 Runner = CreateEnemyPrefab("Runner", materials),
                 Bulwark = CreateEnemyPrefab("Bulwark", materials),
                 Marksman = CreateEnemyPrefab("Marksman", materials),
@@ -1276,24 +1237,12 @@ namespace Shooter.EditorTools
             var model = new GameObject("Model");
             model.transform.SetParent(root.transform, false);
 
-            GameObject source = LoadEnemyAsset(variant);
-
-            if (source == null)
-            {
-                throw new System.InvalidOperationException(
-                    $"Missing Assets/Models/Enemies/Enemy{variant}.fbx. " +
-                    "Run Tools/Blender/build_enemies.py first.");
-            }
-
-            GameObject rig = (GameObject)Object.Instantiate(source, model.transform, false);
+            GameObject source = FoundryAssets.LoadActor("Enemy" + variant);
+            GameObject rig = Object.Instantiate(source, model.transform, false);
             rig.name = "Rig";
-
+            FoundryAssets.Skin(rig);
+            Animation animation = FoundryAssets.Bind(rig, source, FoundryAssets.ActorNames);
             EnemyPalette palette = EnemyPaletteFor(variant, materials);
-
-            foreach (MeshRenderer renderer in rig.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                renderer.sharedMaterial = EnemyMaterialFor(renderer.gameObject.name, palette);
-            }
 
             foreach (Transform part in rig.GetComponentsInChildren<Transform>(true))
             {
@@ -1314,6 +1263,7 @@ namespace Shooter.EditorTools
 
             EnemyAnimator animator = root.AddComponent<EnemyAnimator>();
             animator.model = model.transform;
+            animator.authored = animation;
 
             EnemyRangedAttack ranged = root.AddComponent<EnemyRangedAttack>();
             ranged.projectileMaterial = materials.EnemyBolt;
@@ -1332,36 +1282,6 @@ namespace Shooter.EditorTools
 
             Debug.Log($"[Shooter] Enemy{variant} prefab saved to {path}.");
             return prefab;
-        }
-
-        private static GameObject LoadEnemyAsset(string variant)
-        {
-            string path = $"Assets/Models/Enemies/Enemy{variant}.fbx";
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            if (AssetImporter.GetAtPath(path) is ModelImporter importer)
-            {
-                bool dirty = false;
-
-                if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
-                {
-                    importer.materialImportMode = ModelImporterMaterialImportMode.None;
-                    dirty = true;
-                }
-
-                if (importer.importAnimation)
-                {
-                    importer.importAnimation = false;
-                    dirty = true;
-                }
-
-                if (dirty)
-                {
-                    importer.SaveAndReimport();
-                }
-            }
-
-            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
         }
 
         private static EnemyPalette EnemyPaletteFor(string variant, ArenaMaterials materials)
@@ -1437,29 +1357,11 @@ namespace Shooter.EditorTools
 
             var model = new GameObject("Model");
             model.transform.SetParent(root.transform, false);
-            // The authored feet reach y = -0.10, so the visual is lifted to stand
-            // on the floor instead of sinking into it.
-            model.transform.localPosition = new Vector3(0f, 0.1f, 0f);
-
-            GameObject source = LoadBossModel();
-
-            if (source == null)
-            {
-                throw new System.InvalidOperationException(
-                    "Missing Assets/Models/Boss/BossWarden_Idle.fbx. " +
-                    "Run Tools/Blender/build_boss.py first.");
-            }
-
-            // The rig root carries the Animation component: legacy clips bind by
-            // path relative to it ("Torso/ArmL/ElbowL"), so it must stay the root.
-            GameObject rig = (GameObject)Object.Instantiate(source, model.transform, false);
+            model.transform.localScale = Vector3.one * (controller.height / 3.48f);
+            GameObject source = FoundryAssets.LoadActor("BossWarden");
+            GameObject rig = Object.Instantiate(source, model.transform, false);
             rig.name = "Rig";
-
-            foreach (MeshRenderer renderer in rig.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                renderer.sharedMaterial = BossMaterialFor(renderer.gameObject.name, materials);
-                renderer.shadowCastingMode = ShadowCastingMode.On;
-            }
+            FoundryAssets.Skin(rig);
 
             foreach (Transform part in rig.GetComponentsInChildren<Transform>(true))
             {
@@ -1487,13 +1389,13 @@ namespace Shooter.EditorTools
             health.debrisMaterial = materials.BossDark;
 
             BossAnimator animator = root.AddComponent<BossAnimator>();
-            animator.idle = LoadBossClip("Idle");
-            animator.walk = LoadBossClip("Walk");
-            animator.slam = LoadBossClip("Slam");
-            animator.volley = LoadBossClip("Volley");
-            animator.roar = LoadBossClip("Roar");
-            animator.hit = LoadBossClip("Hit");
-            animator.death = LoadBossClip("Death");
+            animator.idle = FoundryAssets.Clip(source, "Idle");
+            animator.walk = FoundryAssets.Clip(source, "Walk");
+            animator.slam = FoundryAssets.Clip(source, "Slam");
+            animator.volley = FoundryAssets.Clip(source, "Volley");
+            animator.roar = FoundryAssets.Clip(source, "Roar");
+            animator.hit = FoundryAssets.Clip(source, "Hit");
+            animator.death = FoundryAssets.Clip(source, "Death");
 
             if (animator.idle == null || animator.death == null)
             {
@@ -1516,137 +1418,68 @@ namespace Shooter.EditorTools
             return prefab;
         }
 
-        /// <summary>Imports one boss FBX as a legacy-animation model and returns it.</summary>
-        private static GameObject LoadBossModel()
+        private static Animation PlaceEffect(string name, int frames, Transform parent, Quaternion rotation)
         {
-            const string path = "Assets/Models/Boss/BossWarden_Idle.fbx";
-            ImportBossFbx(path);
-            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            GameObject source = FoundryAssets.LoadEffect(name, frames);
+            GameObject visual = Object.Instantiate(source, parent, false);
+            visual.transform.localRotation = rotation;
+            FoundryAssets.Skin(visual);
+            foreach (MeshRenderer renderer in visual.GetComponentsInChildren<MeshRenderer>(true))
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+            return FoundryAssets.Bind(visual, source, new[] { "Effect" });
         }
 
-        /// <summary>Loads the single baked clip inside a per-clip boss FBX.</summary>
-        /// <remarks>
-        /// Unity also exposes a generated <c>__preview__Scene</c> clip next to the real
-        /// take. It looks identical when inspected but makes <see cref="Animation.AddClip"/>
-        /// log "Source and Destination Types do not match" at runtime, so the real
-        /// <c>Scene</c> take is preferred and the preview is only a fallback.
-        /// </remarks>
-        private static AnimationClip LoadBossClip(string clipName)
+        private static GameObject BuildLooseProp(string name, Material material)
         {
-            string path = $"Assets/Models/Boss/BossWarden_{clipName}.fbx";
-            ImportBossFbx(path);
-
-            AnimationClip fallback = null;
-
-            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
-            {
-                if (!(asset is AnimationClip clip) || clip.name.StartsWith("__preview__"))
-                {
-                    continue;
-                }
-
-                if (clip.name == "Scene")
-                {
-                    return clip;
-                }
-
-                if (fallback == null)
-                {
-                    fallback = clip;
-                }
-            }
-
-            return fallback;
+            var root = new GameObject(name) { layer = 2 };
+            var orientation = new GameObject("Orientation");
+            orientation.transform.SetParent(root.transform, false);
+            orientation.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            GameObject visual = Object.Instantiate(FoundryAssets.LoadProp(name), orientation.transform, false);
+            visual.layer = 2;
+            MeshRenderer renderer = visual.GetComponentInChildren<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, $"{PrefabsFolder}/{name}.prefab");
+            Object.DestroyImmediate(root);
+            return prefab;
         }
 
-        /// <summary>
-        /// Imports a boss FBX with legacy animation and no generated materials.
-        /// Legacy is required: the boss plays clips through an Animation component.
-        /// </summary>
-        private static void ImportBossFbx(string path)
+        private static void BuildEffectLibrary(GameObject managers)
         {
-            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
-
-            if (!(AssetImporter.GetAtPath(path) is ModelImporter importer))
+            var effects = new (string Name, int Frames)[]
             {
-                return;
-            }
-
-            bool dirty = false;
-
-            if (importer.animationType != ModelImporterAnimationType.Legacy)
+                ("ImpactSpark", 11), ("Explosion", 19), ("ShockRing", 24),
+                ("EnemyBolt", 9), ("Tracer", 5), ("DebrisShard", 18),
+            };
+            var prefabs = new GameObject[effects.Length];
+            for (int i = 0; i < prefabs.Length; i++)
             {
-                importer.animationType = ModelImporterAnimationType.Legacy;
-                dirty = true;
+                var root = new GameObject(effects[i].Name) { layer = 2 };
+                Quaternion orientation = i == (int)FoundryEffect.Impact
+                    ? Quaternion.Euler(90f, 0f, 0f) : Quaternion.identity;
+                PlaceEffect(effects[i].Name, effects[i].Frames, root.transform, orientation);
+                prefabs[i] = PrefabUtility.SaveAsPrefabAsset(root, $"{PrefabsFolder}/{root.name}.prefab");
+                Object.DestroyImmediate(root);
             }
-
-            if (!importer.importAnimation)
-            {
-                importer.importAnimation = true;
-                dirty = true;
-            }
-
-            if (importer.materialImportMode != ModelImporterMaterialImportMode.None)
-            {
-                importer.materialImportMode = ModelImporterMaterialImportMode.None;
-                dirty = true;
-            }
-
-            if (dirty)
-            {
-                importer.SaveAndReimport();
-            }
+            managers.AddComponent<FoundryEffects>().Configure(prefabs);
         }
 
-        /// <summary>
-        /// Part-name to material map for the boss. It mirrors the authoring palette
-        /// in Tools/Blender/build_boss.py: glow first, then trim, then blackened plate.
-        /// </summary>
-        private static Material BossMaterialFor(string partName, ArenaMaterials materials)
+        private static void PlacePickupVisual(string name, Transform parent)
         {
-            if (partName.Contains("Glow") || partName.Contains("Visor") ||
-                partName.Contains("Rune") || partName.Contains("Vent"))
-            {
-                return materials.BossGlow;
-            }
-
-            if (partName.Contains("Trim") || partName.Contains("Collar") ||
-                partName.Contains("Brake") || partName.Contains("BladeEdge") ||
-                partName.Contains("BladeGuard"))
-            {
-                return materials.BossTrim;
-            }
-
-            if (partName.Contains("Guard") || partName.Contains("Claw") ||
-                partName.Contains("Skirt") || partName.Contains("ChestPlate") ||
-                partName.Contains("Housing") || partName.Contains("SpinePlate") ||
-                partName.Contains("Exhaust") || partName.Contains("Banner") ||
-                partName.Contains("Spike") || partName.Contains("Crown") ||
-                partName.Contains("Brow") || partName.Contains("Jaw") ||
-                partName.Contains("BladeSpine") || partName.Contains("Barrel"))
-            {
-                return materials.BossDark;
-            }
-
-            return materials.BossBody;
+            GameObject source = FoundryAssets.LoadPickup(name);
+            GameObject visual = Object.Instantiate(source, parent, false);
+            FoundryAssets.Skin(visual);
+            Animation animation = FoundryAssets.Bind(visual, source, new[] { "Idle" });
+            animation.clip = FoundryAssets.Clip(source, "Idle");
+            animation.playAutomatically = true;
         }
 
         private static GameObject CreateAmmoCachePrefab(ArenaMaterials materials)
         {
             var root = new GameObject("AmmoCache");
 
-            GameObject crate = CreatePrimitive("Crate", PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
-                new Vector3(0.5f, 0.32f, 0.5f), materials.AmmoCache, root.transform);
-            StripCollider(crate);
-
-            GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
-                new Vector3(0.34f, 0.3f, 0.34f), materials.AmmoCache, root.transform,
-                Quaternion.Euler(0f, 45f, 0f));
-            StripCollider(lid);
-
-            GameObject beacon = CreatePrimitive("Beacon", PrimitiveType.Cube, new Vector3(0f, 0.44f, 0f),
-                new Vector3(0.16f, 0.09f, 0.16f), materials.AmmoCache, root.transform);
-            StripCollider(beacon);
+            PlacePickupVisual("AmmoCache", root.transform);
 
             AmmoPickup pickup = root.AddComponent<AmmoPickup>();
             pickup.Configure(90, 1.9f, 0f, 90f, 0.12f);
@@ -1667,23 +1500,7 @@ namespace Shooter.EditorTools
         {
             var root = new GameObject("HealthCache");
 
-            GameObject box = CreatePrimitive("Box", PrimitiveType.Cube, new Vector3(0f, 0f, 0f),
-                new Vector3(0.5f, 0.32f, 0.5f), materials.HealthCache, root.transform);
-            StripCollider(box);
-
-            GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
-                new Vector3(0.34f, 0.3f, 0.34f), materials.HealthCache, root.transform,
-                Quaternion.Euler(0f, 45f, 0f));
-            StripCollider(lid);
-
-            // Cross on top so it reads as health, not ammo, in a glance.
-            GameObject crossA = CreatePrimitive("CrossA", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                new Vector3(0.22f, 0.08f, 0.08f), materials.HealthCache, root.transform);
-            StripCollider(crossA);
-
-            GameObject crossB = CreatePrimitive("CrossB", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                new Vector3(0.08f, 0.08f, 0.22f), materials.HealthCache, root.transform);
-            StripCollider(crossB);
+            PlacePickupVisual("HealthCache", root.transform);
 
             HealthPickup pickup = root.AddComponent<HealthPickup>();
             pickup.Configure(25f);
@@ -1711,6 +1528,7 @@ namespace Shooter.EditorTools
             List<Transform> spawnPoints)
         {
             var managers = new GameObject("Managers");
+            BuildEffectLibrary(managers);
 
             SettingsManager settingsManager = managers.AddComponent<SettingsManager>();
             GameManager gameManager = managers.AddComponent<GameManager>();
@@ -1720,6 +1538,7 @@ namespace Shooter.EditorTools
 
             waveSpawner.enemyPrefab = enemyPrefabs.Trooper;
             waveSpawner.trooperPrefab = enemyPrefabs.Trooper;
+            waveSpawner.exploderPrefab = enemyPrefabs.Exploder;
             waveSpawner.runnerPrefab = enemyPrefabs.Runner;
             waveSpawner.bulwarkPrefab = enemyPrefabs.Bulwark;
             waveSpawner.marksmanPrefab = enemyPrefabs.Marksman;
@@ -2000,6 +1819,7 @@ namespace Shooter.EditorTools
             menu.gameManager = managers.Game;
             menu.settings = managers.Settings;
             menu.hud = hud;
+            menu.foundryPlate = FoundryHudSkin.Plate;
             menu.player = rig.Controller;
             return menu;
         }
@@ -2143,19 +1963,7 @@ namespace Shooter.EditorTools
                 crate.transform.SetParent(parent.transform, false);
                 crate.transform.position = position;
 
-                GameObject box = CreatePrimitive("Box", PrimitiveType.Cube, Vector3.zero,
-                    new Vector3(0.42f, 0.3f, 0.42f), materials.Ammo, crate.transform);
-                StripCollider(box);
-
-                GameObject lid = CreatePrimitive("Lid", PrimitiveType.Cube, new Vector3(0f, 0.22f, 0f),
-                    new Vector3(0.3f, 0.3f, 0.3f), materials.Ammo, crate.transform,
-                    Quaternion.Euler(0f, 45f, 0f));
-                StripCollider(lid);
-
-                // Emissive beacon cube so crates read at a distance even in fog.
-                GameObject beacon = CreatePrimitive("Beacon", PrimitiveType.Cube, new Vector3(0f, 0.46f, 0f),
-                    new Vector3(0.12f, 0.07f, 0.12f), materials.Ammo, crate.transform);
-                StripCollider(beacon);
+                PlacePickupVisual("AmmoCache", crate.transform);
 
                 AmmoPickup pickup = crate.AddComponent<AmmoPickup>();
                 pickup.weapon = rig.Weapon;
@@ -2215,6 +2023,16 @@ namespace Shooter.EditorTools
             {
                 Object.DestroyImmediate(collider);
             }
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name == name)
+                    return child;
+            }
+            return null;
         }
 
         private static RectTransform CreateRect(string name, Transform parent, Vector2 anchor, Vector2 pivot,

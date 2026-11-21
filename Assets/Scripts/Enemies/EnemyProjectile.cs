@@ -48,6 +48,8 @@ namespace Shooter.Enemies
             }
 
             MeshRenderer renderer = bolt.GetComponent<MeshRenderer>();
+            if (FoundryEffects.Spawn(FoundryEffect.Bolt, origin, Quaternion.identity, 5f, 0.3f, bolt.transform, true) != null)
+                renderer.enabled = false;
 
             if (renderer != null && boltMaterial != null)
             {

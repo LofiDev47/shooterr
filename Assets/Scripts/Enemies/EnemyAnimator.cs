@@ -3,10 +3,8 @@ using UnityEngine;
 namespace Shooter.Enemies
 {
     /// <summary>
-    /// Procedural animation for the shared enemy rig. Every variant exposes the
-    /// same joint names (Torso, Head, ArmL/R, LegL/R), so one component drives
-    /// walk cycles, attack swings, hit flinches and marksman aiming without a
-    /// baked animation clip or Animator Controller.
+    /// Plays authored clips on the shared enemy rig. Original prefabs use their
+    /// procedural joint animation when they have no imported takes.
     /// </summary>
     public sealed class EnemyAnimator : MonoBehaviour
     {
@@ -18,6 +16,7 @@ namespace Shooter.Enemies
         public Transform armR;
         public Transform legL;
         public Transform legR;
+        public Animation authored;
 
         [Header("Tuning")]
         [SerializeField] private float walkCycleSpeed = 8f;
@@ -44,6 +43,9 @@ namespace Shooter.Enemies
         private float hitTimer;
         private float aimBlend;
         private float aimTarget;
+        private float authoredUntil;
+        private string authoredLoop;
+        private bool dying;
 
         /// <summary>True when all six animated joints were found on the model.</summary>
         public bool HasRig =>
@@ -88,18 +90,47 @@ namespace Shooter.Enemies
         {
             attackDuration = Mathf.Max(0.05f, windup);
             attackTimer = attackDuration;
+            PlayAuthored("Slam", attackDuration / (26f / 30f));
         }
 
         /// <summary>Short recoil on the torso and head when a shot lands.</summary>
         public void TriggerHit()
         {
             hitTimer = 0.16f;
+            if (Time.time >= authoredUntil)
+                PlayAuthored("Hit");
         }
 
         /// <summary>Marksmen raise the cannon arm while charging a shot.</summary>
-        public void SetAiming(bool aiming)
+        public void SetAiming(bool aiming, float windup = 0f)
         {
+            if (aiming && aimTarget == 0f)
+                PlayAuthored("Volley", windup / (19f / 40f));
             aimTarget = aiming ? 1f : 0f;
+        }
+
+        public void PlayCharge(float duration) => PlayAuthored("Roar", duration);
+
+        public void PlayDeath(float lifetime)
+        {
+            PlayAuthored("Death", lifetime * 2.5f);
+            dying = true;
+        }
+
+        private void PlayAuthored(string clip, float seconds = 0f)
+        {
+            if (authored == null || dying)
+                return;
+
+            AnimationState state = authored[clip];
+            if (state == null)
+                return;
+
+            state.speed = seconds > 0f ? state.length / seconds : 1f;
+            state.time = 0f;
+            authored.Play(clip);
+            authoredUntil = Time.time + state.length / state.speed;
+            authoredLoop = null;
         }
 
         private void Update()
@@ -111,6 +142,20 @@ namespace Shooter.Enemies
 
             float deltaTime = Time.deltaTime;
             moveBlend = Mathf.Lerp(moveBlend, targetMove, 1f - Mathf.Exp(-12f * deltaTime));
+            if (authored != null)
+            {
+                attackTimer = Mathf.Max(0f, attackTimer - deltaTime);
+                if (!dying && Time.time >= authoredUntil)
+                {
+                    string loop = moveBlend > 0.08f ? "Walk" : "Idle";
+                    if (loop != authoredLoop)
+                    {
+                        authored.CrossFade(loop, 0.1f);
+                        authoredLoop = loop;
+                    }
+                }
+                return;
+            }
             aimBlend = Mathf.Lerp(aimBlend, aimTarget, 1f - Mathf.Exp(-8f * deltaTime));
 
             if (moveBlend > 0.02f)

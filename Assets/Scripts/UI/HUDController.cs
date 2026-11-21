@@ -17,6 +17,9 @@ namespace Shooter.UI
     /// </summary>
     public sealed class HUDController : MonoBehaviour
     {
+        private static readonly Vector2[] CrosshairDirections =
+            { Vector2.up, Vector2.down, Vector2.left, Vector2.right };
+
         [Header("Gameplay wiring (scene builder)")]
         public PlayerHealth playerHealth;
         public PlayerController player;
@@ -226,20 +229,14 @@ namespace Shooter.UI
             crosshairSpread = Mathf.Lerp(crosshairSpread, spread, 1f - Mathf.Exp(-10f * Time.unscaledDeltaTime));
             float offset = crosshairSpread * crosshairMaxSpread;
 
-            // Bars point outward from the centre: 0 = up, 1 = down, 2 = left, 3 = right.
-            Vector2[] directions =
-            {
-                Vector2.up, Vector2.down, Vector2.left, Vector2.right,
-            };
-
-            for (int i = 0; i < crosshairBars.Length && i < directions.Length; i++)
+            for (int i = 0; i < crosshairBars.Length && i < CrosshairDirections.Length; i++)
             {
                 if (crosshairBars[i] == null || i >= crosshairBasePositions.Length)
                 {
                     continue;
                 }
 
-                crosshairBars[i].anchoredPosition = crosshairBasePositions[i] + directions[i] * offset;
+                crosshairBars[i].anchoredPosition = crosshairBasePositions[i] + CrosshairDirections[i] * offset;
             }
         }
 

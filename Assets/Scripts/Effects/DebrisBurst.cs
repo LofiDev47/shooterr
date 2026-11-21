@@ -27,7 +27,8 @@ namespace Shooter.Effects
 
             for (int i = 0; i < count; i++)
             {
-                GameObject piece = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                GameObject piece = FoundryEffects.Spawn(FoundryEffect.Debris, position, Quaternion.identity,
+                    1f, lifetime) ?? GameObject.CreatePrimitive(PrimitiveType.Cube);
                 piece.name = "Debris";
                 piece.layer = 2; // Ignore Raycast: sparks must not eat incoming bullets.
 
@@ -40,7 +41,8 @@ namespace Shooter.Effects
 
                 piece.transform.position = position + Random.insideUnitSphere * 0.05f;
                 piece.transform.rotation = Random.rotation;
-                piece.transform.localScale = Vector3.one * size * Random.Range(0.6f, 1.4f);
+                float meshScale = piece.GetComponent<MeshRenderer>() != null ? 1f : 5f;
+                piece.transform.localScale = Vector3.one * (meshScale * size * Random.Range(0.6f, 1.4f));
 
                 MeshRenderer renderer = piece.GetComponent<MeshRenderer>();
 

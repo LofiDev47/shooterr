@@ -25,6 +25,7 @@ namespace Shooter.Managers
         [Tooltip("Fallback prefab; also used by older tests.")]
         public GameObject enemyPrefab;
         public GameObject trooperPrefab;
+        public GameObject exploderPrefab;
         public GameObject runnerPrefab;
         public GameObject bulwarkPrefab;
         public GameObject marksmanPrefab;
@@ -232,11 +233,11 @@ namespace Shooter.Managers
             bool bulwark = !boss && !elite && !exploder && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
 
             // Pick the dedicated model for this variant. enemyPrefab stays as a
-            // fallback for older scenes and tests. The boss has its own rig,
-            // exploders reuse the trooper model with an amber tint.
+            // fallback for older scenes and tests.
             GameObject prefab = boss && bossPrefab != null ? bossPrefab
                 : boss ? elitePrefab
                 : elite ? elitePrefab
+                : exploder && exploderPrefab != null ? exploderPrefab
                 : marksman ? marksmanPrefab
                 : runner ? runnerPrefab
                 : bulwark ? bulwarkPrefab

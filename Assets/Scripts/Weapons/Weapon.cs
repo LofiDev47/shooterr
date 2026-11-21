@@ -133,6 +133,11 @@ namespace Shooter.Weapons
         public Light shotgunLight;
         public Transform shotgunEjectPoint;
         public Transform pump;
+        public Animation viewAnimation;
+        public Animation muzzleBurst;
+        public Animation breachBurst;
+        public GameObject spentCell;
+        public GameObject impactMark;
         public LineRenderer tracer;
         public AudioSource audioSource;
         public HUDController hud;
@@ -226,6 +231,11 @@ namespace Shooter.Weapons
         /// <summary>True when the imported rifle supplied a moving bolt.</summary>
         public bool SlideWired => slide != null;
 
+        private PlayerHealth viewHealth;
+        private string viewLoop;
+        private float viewActionUntil;
+        private bool viewDying;
+
         private void Awake()
         {
             RebuildState();
@@ -244,6 +254,15 @@ namespace Shooter.Weapons
             }
 
             weaponRenderers = GetComponentsInChildren<Renderer>(true);
+            if (viewAnimation != null)
+            {
+                viewHealth = GetComponentInParent<PlayerHealth>();
+                if (viewHealth != null)
+                {
+                    viewHealth.Damaged += PlayViewHit;
+                    viewHealth.Died += PlayViewDeath;
+                }
+            }
 
             if (slide != null)
             {
@@ -271,6 +290,84 @@ namespace Shooter.Weapons
             }
 
             HideEffects();
+        }
+
+        private void OnDestroy()
+        {
+            if (viewHealth != null)
+            {
+                viewHealth.Damaged -= PlayViewHit;
+                viewHealth.Died -= PlayViewDeath;
+            }
+        }
+
+        private void PlayViewHit(float _)
+        {
+            if (Time.time >= viewActionUntil)
+                PlayViewAction("Hit");
+        }
+
+        private void PlayViewDeath()
+        {
+            PlayViewAction("Death");
+            viewDying = true;
+            // The game-over screen pauses gameplay. Sample the final view pose
+            // before that pause so the model does not freeze in its idle pose.
+            AnimationState state = viewAnimation["Death"];
+            if (state != null)
+            {
+                state.wrapMode = WrapMode.ClampForever;
+                state.time = state.length;
+                viewAnimation.Sample();
+            }
+        }
+
+        private void PlayViewAction(string clip, float duration = 0f, float progress = 0f)
+        {
+            if (viewAnimation == null || viewDying)
+                return;
+
+            AnimationState state = viewAnimation[clip];
+            if (state == null)
+                return;
+
+            float seek = state.length * Mathf.Clamp(progress, 0f, 0.999f);
+            float remaining = state.length - seek;
+            state.speed = duration > 0f ? remaining / duration : 1f;
+            viewAnimation.Play(clip);
+            state.time = seek;
+            viewActionUntil = Time.time + remaining / state.speed;
+            viewLoop = null;
+        }
+
+        private void UpdateViewAnimation()
+        {
+            if (viewAnimation == null || viewDying)
+                return;
+
+            float now = Time.time;
+            if (now < viewActionUntil)
+                return;
+
+            if (State.IsReloading)
+            {
+                float progress = State.ReloadProgress(now);
+                PlayViewAction("Reload", State.ReloadDuration * (1f - progress), progress);
+                return;
+            }
+
+            if (shotgunState.IsReloading)
+            {
+                PlayViewAction("BreachReload", shotgunState.ReloadEndsAt - now, shotgunState.ReloadProgress(now));
+                return;
+            }
+
+            string loop = player != null && player.Velocity.sqrMagnitude > 0.16f ? "Move" : "Idle";
+            if (loop != viewLoop)
+            {
+                viewAnimation.CrossFade(loop, 0.08f);
+                viewLoop = loop;
+            }
         }
 
         /// <summary>
@@ -349,6 +446,7 @@ namespace Shooter.Weapons
             HandleMeleeInput();
             UpdateEffects(now);
             UpdatePose(now);
+            UpdateViewAnimation();
             UpdateVisibility();
         }
 
@@ -359,6 +457,8 @@ namespace Shooter.Weapons
             {
                 return false;
             }
+
+            PlayViewAction("Reload", State.ReloadDuration);
 
             if (audioSource != null)
             {
@@ -479,6 +579,7 @@ namespace Shooter.Weapons
 
             meleeReadyAt = now + meleeCooldown;
             meleeSwingStartedAt = now;
+            PlayViewAction("Melee", meleeSwingDuration);
             AudioManager.Instance?.PlayMeleeSwing(transform.position);
 
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
@@ -676,6 +777,7 @@ namespace Shooter.Weapons
             PlayMuzzleFlash();
             PlayTracer(tracerPoints);
             ApplyRecoil();
+            PlayViewAction("Fire");
             CycleAction();
             PlayFireAudio();
 
@@ -793,7 +895,8 @@ namespace Shooter.Weapons
         {
             float size = Mathf.Max(0.25f, radius * 0.45f);
 
-            if (explosionMaterial != null)
+            if (FoundryEffects.Spawn(FoundryEffect.Explosion, point, Quaternion.identity, size, 0.25f) == null &&
+                explosionMaterial != null)
             {
                 GameObject flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 flash.name = "Bullet Explosion";
@@ -974,6 +1077,7 @@ namespace Shooter.Weapons
             PlayShotgunFlash();
             PlayTracer(muzzleStart, tracerEnd);
             ApplyShotgunRecoil();
+            PlayViewAction("BreachFire");
             CyclePump();
             EjectShell(shotgunEjectPoint != null ? shotgunEjectPoint : shellEjectPoint, 0.05f);
             PlayShotgunAudio();
@@ -1014,18 +1118,20 @@ namespace Shooter.Weapons
 
         private void SpawnImpact(Vector3 point, Vector3 normal)
         {
+            FoundryEffects.Spawn(FoundryEffect.Impact, point, Quaternion.LookRotation(normal), 0.38f, 0.16f);
             if (impactMaterial == null)
             {
                 return;
             }
 
             // A thin cube reads as a bullet hole from any angle, unlike a one-sided quad.
-            GameObject decal = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject decal = impactMark != null ? Instantiate(impactMark) : GameObject.CreatePrimitive(PrimitiveType.Cube);
             decal.name = "Impact";
             decal.transform.position = point + normal * 0.01f;
             decal.transform.rotation = Quaternion.LookRotation(normal);
             decal.transform.localScale = new Vector3(0.09f, 0.09f, 0.01f);
-            decal.GetComponent<MeshRenderer>().sharedMaterial = impactMaterial;
+            if (impactMark == null)
+                decal.GetComponent<MeshRenderer>().sharedMaterial = impactMaterial;
 
             Collider decalCollider = decal.GetComponent<Collider>();
 
@@ -1043,6 +1149,7 @@ namespace Shooter.Weapons
             {
                 muzzleFlash.SetActive(true);
                 muzzleFlash.transform.localRotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+                FoundryEffects.Play(muzzleBurst, muzzleFlashTime);
             }
 
             if (muzzleLight != null)
@@ -1060,6 +1167,7 @@ namespace Shooter.Weapons
             {
                 shotgunFlash.SetActive(true);
                 shotgunFlash.transform.localRotation = Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
+                FoundryEffects.Play(breachBurst, muzzleFlashTime * 1.4f);
             }
 
             if (shotgunLight != null)
@@ -1091,6 +1199,7 @@ namespace Shooter.Weapons
                 tracer.SetPosition(i, points[i]);
             }
 
+            PlayTracerPulse(points[0], points[1]);
             tracer.enabled = true;
             tracerUntil = Time.time + tracerTime;
         }
@@ -1106,8 +1215,17 @@ namespace Shooter.Weapons
             LastTracerPointCount = 2;
             tracer.SetPosition(0, start);
             tracer.SetPosition(1, endPoint);
+            PlayTracerPulse(start, endPoint);
             tracer.enabled = true;
             tracerUntil = Time.time + tracerTime;
+        }
+
+        private void PlayTracerPulse(Vector3 start, Vector3 end)
+        {
+            Vector3 direction = end - start;
+            if (direction.sqrMagnitude > 0.01f)
+                FoundryEffects.Spawn(FoundryEffect.Tracer, start + direction.normalized * 0.25f,
+                    Quaternion.LookRotation(direction), 0.8f, tracerTime);
         }
 
         private void ApplyRecoil()
@@ -1205,7 +1323,7 @@ namespace Shooter.Weapons
             float reloadDip = 0f;
             float reloadTilt = 0f;
 
-            if (State.IsReloading)
+            if (viewAnimation == null && State.IsReloading)
             {
                 float progress = State.ReloadProgress(now);
                 float curve = Mathf.Sin(progress * Mathf.PI); // 0 -> 1 -> 0 across the reload.
@@ -1223,7 +1341,7 @@ namespace Shooter.Weapons
             UpdateSlide();
             UpdatePump();
 
-            float meleeProgress = meleeSwingDuration > 0.001f
+            float meleeProgress = viewAnimation == null && meleeSwingDuration > 0.001f
                 ? (Time.time - meleeSwingStartedAt) / meleeSwingDuration
                 : 1f;
             float meleeWeight = meleeProgress >= 0f && meleeProgress < 1f
@@ -1314,7 +1432,7 @@ namespace Shooter.Weapons
                 return;
             }
 
-            GameObject casing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject casing = spentCell != null ? Instantiate(spentCell) : GameObject.CreatePrimitive(PrimitiveType.Cube);
             casing.name = "Shell Casing";
             casing.layer = 2; // Ignore Raycast, matching every other effect piece.
             casing.transform.position = origin.position;
