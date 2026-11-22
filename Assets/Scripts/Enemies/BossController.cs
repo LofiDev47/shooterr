@@ -190,7 +190,7 @@ namespace Shooter.Enemies
 
             foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
             {
-                if (renderer.gameObject.name == "CoreGlow")
+                if (renderer.gameObject.name is "CoreGlow" or "ChestCoreGlow")
                 {
                     coreRenderer = renderer;
                     break;

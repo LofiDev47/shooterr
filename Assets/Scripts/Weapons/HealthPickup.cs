@@ -28,6 +28,7 @@ namespace Shooter.Weapons
         [SerializeField] private float bobSpeed = 2.4f;
 
         private Vector3 basePosition;
+        private bool basePositionCaptured;
 
         /// <summary>Health restored when the pickup is collected.</summary>
         public float HealAmount
@@ -46,11 +47,16 @@ namespace Shooter.Weapons
 
         private void Awake()
         {
-            basePosition = transform.position;
         }
 
         private void Update()
         {
+            if (!basePositionCaptured)
+            {
+                basePosition = transform.position;
+                basePositionCaptured = true;
+            }
+
             float bob = Mathf.Sin(Time.time * bobSpeed) * bobHeight;
             transform.position = basePosition + Vector3.up * bob;
             transform.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.World);

@@ -184,6 +184,8 @@ namespace Shooter.Enemies
         {
             IsDead = true;
             deathScale = transform.localScale;
+            if (TryGetComponent(out EnemyAnimator animator))
+                animator.PlayDeath(deathDuration);
 
             // A held corpse keeps its pose: deathTimer stays negative so Update
             // never shrinks it, and the object removes itself after the hold.

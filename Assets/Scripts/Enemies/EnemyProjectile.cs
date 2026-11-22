@@ -48,6 +48,8 @@ namespace Shooter.Enemies
             }
 
             MeshRenderer renderer = bolt.GetComponent<MeshRenderer>();
+            if (FoundryEffects.Spawn(FoundryEffect.Bolt, origin, Quaternion.identity, 5f, 0.3f, bolt.transform, true) != null)
+                renderer.enabled = false;
 
             if (renderer != null && boltMaterial != null)
             {
@@ -104,14 +106,30 @@ namespace Shooter.Enemies
             bool geometryHit = false;
             Vector3 impactPoint = next;
 
-            // Layer 2 is Ignore Raycast and holds the player, so the sweep only
-            // tests world geometry and enemies.
-            if (Physics.Linecast(origin, next, out RaycastHit hit,
-                    ~(1 << 2), QueryTriggerInteraction.Ignore))
+            // Layer 2 is Ignore Raycast and holds the player. Enemies share the
+            // default layer, so filter them out of the geometry test: a bolt must
+            // only detonate on world geometry, never on an ally.
+            RaycastHit[] geometryHits = Physics.RaycastAll(origin, direction, step,
+                ~(1 << 2), QueryTriggerInteraction.Ignore);
+            System.Array.Sort(geometryHits, (a, b) => a.distance.CompareTo(b.distance));
+
+            foreach (RaycastHit candidate in geometryHits)
             {
+                if (candidate.collider == null)
+                {
+                    continue;
+                }
+
+                if (candidate.collider.GetComponentInParent<EnemyAI>() != null ||
+                    candidate.collider.GetComponentInParent<EnemyHealth>() != null)
+                {
+                    continue;
+                }
+
                 geometryHit = true;
-                travel = Mathf.Min(step, hit.distance);
-                impactPoint = hit.point;
+                travel = Mathf.Min(step, candidate.distance);
+                impactPoint = candidate.point;
+                break;
             }
 
             if (target != null && !target.IsDead)

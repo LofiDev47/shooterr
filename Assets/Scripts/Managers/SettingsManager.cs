@@ -25,6 +25,7 @@ namespace Shooter.Managers
         public static readonly string ActionReload = "Reload";
         public static readonly string ActionShotgun = "Shotgun";
         public static readonly string ActionMelee = "Melee";
+        public static readonly string ActionInspect = "Inspect";
         public static readonly string ActionPause = "Pause";
         public static readonly string ActionRestart = "Restart";
 
@@ -46,8 +47,9 @@ namespace Shooter.Managers
             new BindingDef { Id = ActionSprint, Label = "SPRINT", DefaultKey = Key.LeftShift },
             new BindingDef { Id = ActionSlide, Label = "SLIDE", DefaultKey = Key.C },
             new BindingDef { Id = ActionReload, Label = "RELOAD", DefaultKey = Key.R },
-            new BindingDef { Id = ActionShotgun, Label = "SHOTGUN", DefaultKey = Key.F },
-            new BindingDef { Id = ActionMelee, Label = "MELEE", DefaultKey = Key.V },
+            new BindingDef { Id = ActionShotgun, Label = "SHOTGUN", DefaultKey = Key.G },
+            new BindingDef { Id = ActionMelee, Label = "MELEE", DefaultKey = Key.E },
+            new BindingDef { Id = ActionInspect, Label = "INSPECT WEAPON", DefaultKey = Key.F },
             new BindingDef { Id = ActionPause, Label = "PAUSE", DefaultKey = Key.Escape },
             new BindingDef { Id = ActionRestart, Label = "RESTART", DefaultKey = Key.R },
         };
@@ -55,12 +57,14 @@ namespace Shooter.Managers
         private static readonly List<BindingDef> Bindings = new List<BindingDef>(DefaultBindings);
 
         private const string KeyPrefixBind = "Shooter.Key.";
+        private const string KeyWeaponBindingsVersion = "Shooter.WeaponBindingsVersion";
         private const string KeySensitivity = "Shooter.Sensitivity";
         private const string KeyVolume = "Shooter.MasterVolume";
         private const string KeyFov = "Shooter.FieldOfView";
         private const string KeyInvertY = "Shooter.InvertY";
         private const string KeyShake = "Shooter.ShakeEnabled";
         private const string KeyDamageNumbers = "Shooter.ShowDamageNumbers";
+        private const string KeyShowFps = "Shooter.ShowFps";
         private const string KeyQuality = "Shooter.Quality";
         private const string KeyFullscreen = "Shooter.Fullscreen";
         private const string KeyVSync = "Shooter.VSync";
@@ -77,6 +81,7 @@ namespace Shooter.Managers
         public bool InvertY { get; private set; }
         public bool ShakeEnabled { get; private set; } = true;
         public bool ShowDamageNumbers { get; private set; } = true;
+        public bool ShowFps { get; private set; }
         public int QualityIndex { get; private set; } = 2;
         public bool Fullscreen { get; private set; } = true;
         public bool VSyncEnabled { get; private set; } = true;
@@ -261,6 +266,14 @@ namespace Shooter.Managers
             SettingsChanged?.Invoke();
         }
 
+        public void SetShowFps(bool value)
+        {
+            ShowFps = value;
+            PlayerPrefs.SetInt(KeyShowFps, value ? 1 : 0);
+            PlayerPrefs.Save();
+            SettingsChanged?.Invoke();
+        }
+
         public void SetQualityIndex(int value)
         {
             QualityIndex = Mathf.Clamp(value, 0, 3);
@@ -332,6 +345,7 @@ namespace Shooter.Managers
             InvertY = false;
             ShakeEnabled = true;
             ShowDamageNumbers = true;
+            ShowFps = false;
             QualityIndex = 2;
             Fullscreen = true;
             VSyncEnabled = true;
@@ -345,6 +359,7 @@ namespace Shooter.Managers
             PlayerPrefs.SetInt(KeyInvertY, 0);
             PlayerPrefs.SetInt(KeyShake, 1);
             PlayerPrefs.SetInt(KeyDamageNumbers, 1);
+            PlayerPrefs.SetInt(KeyShowFps, 0);
             PlayerPrefs.SetInt(KeyQuality, QualityIndex);
             PlayerPrefs.SetInt(KeyFullscreen, 1);
             PlayerPrefs.SetInt(KeyVSync, 1);
@@ -403,7 +418,8 @@ namespace Shooter.Managers
             if (!Application.isEditor && Screen.currentResolution.width != ResWidth)
             {
                 Screen.SetResolution(ResWidth, ResHeight,
-                    Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed, 60);
+                    Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed,
+                    Screen.currentResolution.refreshRateRatio);
             }
             else if (Application.isEditor)
             {
@@ -421,6 +437,7 @@ namespace Shooter.Managers
             InvertY = PlayerPrefs.GetInt(KeyInvertY, 0) == 1;
             ShakeEnabled = PlayerPrefs.GetInt(KeyShake, 1) == 1;
             ShowDamageNumbers = PlayerPrefs.GetInt(KeyDamageNumbers, 1) == 1;
+            ShowFps = PlayerPrefs.GetInt(KeyShowFps, 0) == 1;
             QualityIndex = PlayerPrefs.GetInt(KeyQuality, 2);
             Fullscreen = PlayerPrefs.GetInt(KeyFullscreen, 1) == 1;
             VSyncEnabled = PlayerPrefs.GetInt(KeyVSync, 1) == 1;
@@ -429,6 +446,7 @@ namespace Shooter.Managers
             BestScore = PlayerPrefs.GetInt(KeyBestScore, 0);
             BestWave = PlayerPrefs.GetInt(KeyBestWave, 0);
 
+            MigrateWeaponBindings();
             boundKeys.Clear();
 
             foreach (BindingDef def in DefaultBindings)
@@ -447,6 +465,21 @@ namespace Shooter.Managers
         private static int SavedKey(int value, Key fallback)
         {
             return System.Enum.IsDefined(typeof(Key), value) ? value : (int)fallback;
+        }
+
+        private static void MigrateWeaponBindings()
+        {
+            if (PlayerPrefs.GetInt(KeyWeaponBindingsVersion, 0) >= 1)
+                return;
+
+            string melee = KeyPrefixBind + ActionMelee;
+            string shotgun = KeyPrefixBind + ActionShotgun;
+            if (PlayerPrefs.GetInt(melee, 0) == (int)Key.V)
+                PlayerPrefs.DeleteKey(melee);
+            if (PlayerPrefs.GetInt(shotgun, 0) == (int)Key.F)
+                PlayerPrefs.DeleteKey(shotgun);
+            PlayerPrefs.SetInt(KeyWeaponBindingsVersion, 1);
+            PlayerPrefs.Save();
         }
     }
 }

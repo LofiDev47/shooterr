@@ -17,6 +17,10 @@ namespace Shooter.UI
     /// </summary>
     public sealed class MenuController : MonoBehaviour
     {
+        public Sprite foundryPlate;
+        public Sprite foundryEmblem;
+        private static readonly Color MenuBackdrop = new Color(0.023f, 0.038f, 0.052f, 0.97f);
+        private static readonly Color SignalAccent = new Color(0.45f, 0.96f, 0.81f);
         [Header("Wiring (scene builder)")]
         public GameManager gameManager;
         public SettingsManager settings;
@@ -49,6 +53,7 @@ namespace Shooter.UI
         private int inputBlockedUntilFrame = -1;
         private GameObject pendingSelection;
         private MenuScreen lastScreen = MenuScreen.None;
+        private bool settingsSubscribed;
 
         private Text bestLabel;
         private Slider sensitivitySlider;
@@ -62,6 +67,7 @@ namespace Shooter.UI
         private Toggle invertToggle;
         private Toggle shakeToggle;
         private Toggle damageToggle;
+        private Toggle fpsToggle;
         private Toggle fullscreenToggle;
         private Toggle vsyncToggle;
         private Button resolutionButton;
@@ -115,15 +121,19 @@ namespace Shooter.UI
 
         private void OnDisable()
         {
-            if (settings != null)
+            if (settings != null && settingsSubscribed)
             {
                 settings.SettingsChanged -= HandleSettingsChanged;
+                settingsSubscribed = false;
             }
         }
 
         private void Update()
         {
-            ResolveReferences();
+            if (gameManager == null || settings == null || hud == null || player == null)
+            {
+                ResolveReferences();
+            }
 
             consumedInputThisFrame = false;
             UpdateRebindCapture();
@@ -158,6 +168,12 @@ namespace Shooter.UI
             if (settings == null)
             {
                 settings = SettingsManager.Instance != null ? SettingsManager.Instance : FindAnyObjectByType<SettingsManager>();
+            }
+
+            if (settings != null && !settingsSubscribed)
+            {
+                settings.SettingsChanged += HandleSettingsChanged;
+                settingsSubscribed = true;
             }
 
             if (gameManager == null)
@@ -447,6 +463,9 @@ namespace Shooter.UI
                 damageToggle.SetIsOnWithoutNotify(settings.ShowDamageNumbers);
             }
 
+            if (fpsToggle != null)
+                fpsToggle.SetIsOnWithoutNotify(settings.ShowFps);
+
             if (fullscreenToggle != null)
             {
                 fullscreenToggle.SetIsOnWithoutNotify(settings.Fullscreen);
@@ -484,7 +503,8 @@ namespace Shooter.UI
 
             if (settings == null)
             {
-                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · V melee · C slide · R reload · F shotgun · ESC pause";
+                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R reload · G shotgun · ESC pause" +
+                    "\nAt a wall, hold W + SPACE to climb or press SPACE airborne to kick away.";
                 return;
             }
 
@@ -500,10 +520,13 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionJump)} jump" +
                 " · LMB fire · RMB aim" +
                 $" · {K(SettingsManager.ActionMelee)} melee" +
+                $" · {K(SettingsManager.ActionInspect)} inspect" +
                 $" · {K(SettingsManager.ActionSlide)} slide" +
                 $" · {K(SettingsManager.ActionReload)} reload" +
                 $" · {K(SettingsManager.ActionShotgun)} shotgun" +
-                $" · {K(SettingsManager.ActionPause)} pause";
+                $" · {K(SettingsManager.ActionPause)} pause" +
+                $"\nAt a wall, hold {K(SettingsManager.ActionForward)} + {K(SettingsManager.ActionJump)} to climb" +
+                $" or press {K(SettingsManager.ActionJump)} airborne to kick away.";
         }
 
         private static string QualityName(int index)
@@ -523,11 +546,14 @@ namespace Shooter.UI
             {
                 if (pair.Value != null)
                 {
-                    string label = settings != null ? SettingsManager.PrettyKey(settings.GetKey(pair.Key)) : "—";
-                    pair.Value.GetComponentInChildren<Text>().text = label;
-                    if (listeningActionId == pair.Key)
+                    Text label = pair.Value.GetComponentInChildren<Text>();
+                    if (label != null)
                     {
-                        pair.Value.GetComponentInChildren<Text>().text = "...";
+                        label.text = settings != null ? SettingsManager.PrettyKey(settings.GetKey(pair.Key)) : "—";
+                        if (listeningActionId == pair.Key)
+                        {
+                            label.text = "...";
+                        }
                     }
                 }
             }
@@ -701,35 +727,40 @@ namespace Shooter.UI
 
         private void BuildMainMenu(Transform canvas)
         {
-            Image bg = CreateFullScreenImage(canvas, "MainMenuPanel", new Color(0.015f, 0.02f, 0.03f, 0.94f));
+            Image bg = CreateFullScreenImage(canvas, "MainMenuPanel", MenuBackdrop);
             mainMenuPanel = bg.gameObject;
 
-            Text title = CreateText(bg.transform, "MenuTitle", "SHOOTER", 110, new Color(0.45f, 0.85f, 1f),
-                TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 300f),
-                new Vector2(1200f, 140f), font, FontStyle.Bold);
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            const float consoleX = -350f;
+            RectTransform stage = CreateRect("EmblemStage", bg.transform, center, center, center,
+                new Vector2(356f, 26f), new Vector2(620f, 650f));
+            Image stageImage = AddImage(stage, new Color(0.045f, 0.085f, 0.10f));
+            stageImage.sprite = foundryPlate;
+            stageImage.raycastTarget = false;
+            Image mark = AddImage(CreateRect("FoundryEmblem", stage, center, center, center,
+                Vector2.zero, new Vector2(478f, 478f)), SignalAccent);
+            mark.sprite = foundryEmblem;
+            mark.raycastTarget = false;
+            mark.enabled = foundryEmblem != null;
 
-            Text subtitle = CreateText(bg.transform, "MenuSubtitle", "ARENA FPS · ENDLESS WAVES · CHOOSE YOUR AUGMENTS",
-                22, Color.white, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, 215f), new Vector2(1200f, 40f), font);
-
+            CreateText(bg.transform, "MenuTitle", "SIGNAL\nFOUNDRY", 88, Color.white,
+                TextAnchor.MiddleLeft, center, center, new Vector2(consoleX, 240f),
+                new Vector2(540f, 210f), font, FontStyle.Bold);
             bestLabel = CreateText(bg.transform, "BestLabel", "BEST SCORE 0 · BEST WAVE 0", 20,
-                new Color(1f, 0.82f, 0.3f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, 160f), new Vector2(1200f, 36f), font);
+                SignalAccent, TextAnchor.MiddleLeft, center, center,
+                new Vector2(consoleX, 104f), new Vector2(540f, 36f), font);
 
-            playButton = CreateButton(bg.transform, "PlayButton", "PLAY",
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(420f, 76f), Play);
+            playButton = CreateButton(bg.transform, "PlayButton", "ENTER ARENA",
+                center, new Vector2(consoleX - 60f, 24f), new Vector2(420f, 76f), Play);
             CreateButton(bg.transform, "SettingsButton", "SETTINGS",
-                new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(420f, 64f), OpenSettingsFromMenu);
+                center, new Vector2(consoleX - 60f, -66f), new Vector2(420f, 64f), OpenSettingsFromMenu);
             CreateButton(bg.transform, "QuitButton", "QUIT",
-                new Vector2(0.5f, 0.5f), new Vector2(0f, -146f), new Vector2(420f, 64f), QuitGame);
+                center, new Vector2(consoleX - 60f, -143f), new Vector2(420f, 64f), QuitGame);
 
             menuHint = CreateText(bg.transform, "MenuHint", "",
                 16, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0f, -260f), new Vector2(1500f, 30f), font);
+                new Vector2(0.5f, 0.5f), new Vector2(0f, -378f), new Vector2(1500f, 64f), font);
             RefreshMenuHint();
-
-            _ = title;
-            _ = subtitle;
         }
 
         private void BuildPauseMenu(Transform canvas)
@@ -780,13 +811,15 @@ namespace Shooter.UI
             invertToggle = CreateToggleRow(column, "Invert Y", settings != null && settings.InvertY,
                 168f, value => settings?.SetInvertY(value));
             shakeToggle = CreateToggleRow(column, "Screen Shake", settings == null || settings.ShakeEnabled,
-                118f, value => settings?.SetShakeEnabled(value));
+                125f, value => settings?.SetShakeEnabled(value));
             damageToggle = CreateToggleRow(column, "Damage Numbers", settings == null || settings.ShowDamageNumbers,
-                68f, value => settings?.SetShowDamageNumbers(value));
+                82f, value => settings?.SetShowDamageNumbers(value));
+            fpsToggle = CreateToggleRow(column, "Show FPS", settings != null && settings.ShowFps,
+                39f, value => settings?.SetShowFps(value));
             fullscreenToggle = CreateToggleRow(column, "Fullscreen", settings == null || settings.Fullscreen,
-                18f, value => settings?.SetFullscreen(value));
+                -4f, value => settings?.SetFullscreen(value));
             vsyncToggle = CreateToggleRow(column, "VSync", settings == null || settings.VSyncEnabled,
-                -32f, value => settings?.SetVSync(value));
+                -47f, value => settings?.SetVSync(value));
 
             CreateText(column, "ResolutionLabel", "RESOLUTION", 18, Color.white, TextAnchor.MiddleLeft,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-80f, -92f), new Vector2(160f, 30f), font);
@@ -800,10 +833,10 @@ namespace Shooter.UI
 
             // Compact two-column keybind grid.
             SettingsManager.BindingDef[] defs = SettingsManager.AllBindings;
-            const int rows = 6;
+            int rows = (defs.Length + 1) / 2;
             for (int i = 0; i < rows; i++)
             {
-                float y = -210f - i * 52f;
+                float y = -210f - i * 45f;
                 CreateKeybindRow(column, defs[i], new Vector2(-260f, y), new Vector2(420f, 44f));
                 if (defs.Length > i + rows)
                 {
@@ -882,13 +915,14 @@ namespace Shooter.UI
             Vector2 size, UnityEngine.Events.UnityAction callback, int fontSize = 24)
         {
             RectTransform rect = CreateRect(name, parent, anchor, position, size);
-            Image image = AddImage(rect, new Color(0.12f, 0.16f, 0.22f, 0.95f));
+            Image image = AddImage(rect, new Color(0.12f, 0.25f, 0.29f, 1f));
+            image.sprite = foundryPlate;
             Button button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             ColorBlock colors = button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.75f, 0.9f, 1f);
-            colors.pressedColor = new Color(0.35f, 0.65f, 0.9f);
+            colors.highlightedColor = SignalAccent;
+            colors.pressedColor = new Color(0.40f, 0.71f, 0.65f);
             button.colors = colors;
 
             Text text = CreateText(rect, "Label", label, fontSize, Color.white, TextAnchor.MiddleCenter,

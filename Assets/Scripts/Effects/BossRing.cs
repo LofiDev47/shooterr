@@ -59,6 +59,9 @@ namespace Shooter.Effects
             ring.SetPropertyBlock(block);
 
             gameObject.transform.position = new Vector3(position.x, 0.06f, position.z);
+            if (!taperIn)
+                FoundryEffects.Spawn(FoundryEffect.ShockRing, gameObject.transform.position, Quaternion.identity,
+                    0.9f, duration, gameObject.transform);
 
             BossRing marker = gameObject.AddComponent<BossRing>();
             marker.ring = ring;

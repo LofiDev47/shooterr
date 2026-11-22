@@ -47,7 +47,7 @@ namespace Shooter.EditorTools
         private int failures;
         private PlayerHealth playerHealth;
         private float startedAt;
-        private string reportPath = "/tmp/opencode/bossim.txt";
+        private readonly string reportPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "shooterr-bossim.txt");
 
         private void Awake()
         {

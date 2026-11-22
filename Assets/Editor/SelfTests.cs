@@ -34,6 +34,7 @@ namespace Shooter.EditorTools
             TestExploderInertUntilArmed();
             TestAugmentMultipliersAndCaps();
             TestAugmentAirJumps();
+            TestTraversalAndMeleeAugments();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
             TestWeaponStateRebuildTiming();
@@ -259,6 +260,32 @@ namespace Shooter.EditorTools
             Check(!upgrades.TryConsumeAirJump(), "a single extra jump cannot be used twice in the air");
             upgrades.ResetAirJumps();
             Check(upgrades.TryConsumeAirJump(), "landing restores the air jump");
+
+            Object.DestroyImmediate(root);
+        }
+
+        private static void TestTraversalAndMeleeAugments()
+        {
+            var root = new GameObject("AugmentTraversalTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var poolMethod = typeof(UpgradeManager).GetMethod("BuildPool",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var pool = (AugmentDef[])poolMethod.Invoke(null, null);
+            AugmentDef traversal = System.Array.Find(pool, card => card.Id == "Traversal Harness");
+            AugmentDef brawler = System.Array.Find(pool, card => card.Id == "Brawler Kit");
+
+            traversal.Apply(upgrades);
+            brawler.Apply(upgrades);
+            Check(Mathf.Approximately(upgrades.WallClimbMultiplier, 1.35f) &&
+                  Mathf.Approximately(upgrades.WallKickMultiplier, 1.15f), "Traversal Harness buffs both wall moves");
+            Check(Mathf.Approximately(upgrades.MeleeRangeMultiplier, 1.20f) &&
+                  Mathf.Approximately(upgrades.MeleeDamageMultiplier, 1.30f), "Brawler Kit buffs melee reach and damage");
+            Check(!traversal.CanOffer(upgrades) && !brawler.CanOffer(upgrades), "specialized augments are offered once per run");
+
+            upgrades.ResetAugments();
+            Check(upgrades.WallClimbMultiplier == 1f && upgrades.WallKickMultiplier == 1f &&
+                  upgrades.MeleeRangeMultiplier == 1f && upgrades.MeleeDamageMultiplier == 1f &&
+                  traversal.CanOffer(upgrades) && brawler.CanOffer(upgrades), "new runs clear and restore specialized augments");
 
             Object.DestroyImmediate(root);
         }

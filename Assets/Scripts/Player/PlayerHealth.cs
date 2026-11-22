@@ -63,7 +63,7 @@ namespace Shooter.Player
             // Augment damage reduction (Kevlar Weave), read live so stacking works.
             if (Upgrades.UpgradeManager.Instance != null)
             {
-                amount *= 1f - Upgrades.UpgradeManager.Instance.DamageReduction;
+                amount *= Mathf.Max(0f, 1f - Upgrades.UpgradeManager.Instance.DamageReduction);
             }
 
             float previous = CurrentHealth;

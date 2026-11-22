@@ -165,6 +165,15 @@ namespace Shooter.EditorTools
                       hud.waveSpawner != null, "HUD gameplay references are wired");
                 Check(hud.healthFill != null && hud.healthText != null && hud.ammoText != null &&
                       hud.reloadText != null, "HUD health/ammo widgets are wired");
+                Check(hud.combatReadout != null && hud.combatReadout.anchorMin == new Vector2(0.5f, 0f) &&
+                      hud.combatReadout.anchorMax == hud.combatReadout.anchorMin &&
+                      Mathf.Approximately(hud.combatReadout.anchoredPosition.x, 0f),
+                    "HUD vitals and ammo share a centered bottom readout");
+                Check(hud.combatReadout != null && hud.ammoFill != null && hud.ammoFill.sprite != null &&
+                      hud.healthFill != null && hud.healthFill.sprite != null &&
+                      hud.ammoFill.transform.IsChildOf(hud.combatReadout) &&
+                      hud.healthFill.transform.IsChildOf(hud.combatReadout),
+                    "both instrument bars have fill sprites and belong to the centered readout");
                 Check(hud.waveText != null && hud.statusText != null && hud.scoreText != null,
                     "HUD wave/score widgets are wired");
                 Check(hud.gameOverPanel != null && hud.gameOverScoreText != null && hud.hintText != null,
@@ -247,11 +256,12 @@ namespace Shooter.EditorTools
                     waveSpawner.bulwarkPrefab,
                     waveSpawner.marksmanPrefab,
                     waveSpawner.elitePrefab,
+                    waveSpawner.exploderPrefab,
                 };
 
-                Check(variants.All(prefab => prefab != null), "all five enemy variants have prefabs");
-                Check(variants.Where(prefab => prefab != null).Distinct().Count() == 5,
-                    "enemy variants use five distinct prefabs");
+                Check(variants.All(prefab => prefab != null), "all six enemy variants have prefabs");
+                Check(variants.Where(prefab => prefab != null).Distinct().Count() == variants.Length,
+                    "enemy variants each use a distinct prefab");
                 Check(waveSpawner.enemyPrefab != null, "wave spawner has a fallback enemy prefab");
 
                 string[] joints = { "Torso", "Head", "ArmL", "ArmR", "LegL", "LegR" };
@@ -266,6 +276,9 @@ namespace Shooter.EditorTools
                         $"{name} has a CharacterController");
                     Check(prefab.GetComponent<EnemyAnimator>() != null,
                         $"{name} has an EnemyAnimator");
+                    Animation authored = prefab.GetComponent<EnemyAnimator>()?.authored;
+                    Check(authored != null && authored.GetClipCount() == 7,
+                        $"{name} has all seven authored animation takes");
 
                     Transform model = prefab.transform.Find("Model");
                     Transform rig = model != null ? model.Find("Rig") : null;
@@ -339,6 +352,20 @@ namespace Shooter.EditorTools
                     "rifle optic has no solid tube to block the sight picture");
                 Check(weaponParts.Any(part => part.name == "OpticFrameTop"),
                     "rifle optic is an open sight frame");
+                Check(sceneWeapon.sightModel != null && sceneWeapon.sightDot != null &&
+                      sceneWeapon.sightDot.IsChildOf(sceneWeapon.sightModel),
+                    "aim calibration uses the rendered optic dot");
+                Check(sceneWeapon.viewAnimation != null &&
+                      sceneWeapon.viewAnimation.GetClipCount() == FoundryAssets.PlayerNames.Length &&
+                      sceneWeapon.viewAnimation.GetClip("Inspect") != null,
+                    "weapon has all Foundry handling clips, including inspect");
+                if (sceneWeapon.viewAnimation != null)
+                {
+                    AnimationClip[] clips = AnimationUtility.GetAnimationClips(sceneWeapon.viewAnimation.gameObject);
+                    Check(clips.All(clip => AnimationUtility.GetCurveBindings(clip).All(curve =>
+                        !curve.path.EndsWith("/Slide") && !curve.path.EndsWith("/Pump"))),
+                        "handling clips leave runtime slide and pump controls unbound");
+                }
                 Check(sceneWeapon.SlideWired && sceneWeapon.slide != null,
                     "weapon has an animated bolt");
                 Check(sceneWeapon.shellEjectPoint != null && sceneWeapon.shellMaterial != null,
@@ -448,10 +475,8 @@ namespace Shooter.EditorTools
 
                 Transform[] parts = rig.GetComponentsInChildren<Transform>(true);
 
-                // These are the joints the authored clips actually bind against.
-                // The boss legs are named Thigh (it carries a hip plate), unlike
-                // the grunt rig's Leg naming.
-                string[] joints = { "Torso", "Head", "ArmL", "ArmR", "ThighL", "ThighR",
+                // These are the joints the authored clips bind against.
+                string[] joints = { "Torso", "Head", "ArmL", "ArmR", "LegL", "LegR",
                     "KneeL", "KneeR", "ElbowL", "ElbowR" };
                 string missing = string.Join(", ", joints.Where(joint =>
                     !parts.Any(part => part.name == joint)));
@@ -462,6 +487,8 @@ namespace Shooter.EditorTools
 
                 Check(rig.GetComponentsInChildren<Renderer>().Length >= 40,
                     "the boss model is a detailed multi-part build");
+                Check(parts.Any(part => part.name == "ChestCoreGlow" && part.GetComponent<Renderer>() != null),
+                    "the Warden's exposed core has a glow renderer");
             }
 
             if (animator != null)

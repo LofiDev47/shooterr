@@ -3,10 +3,8 @@ using UnityEngine;
 namespace Shooter.Enemies
 {
     /// <summary>
-    /// Procedural animation for the shared enemy rig. Every variant exposes the
-    /// same joint names (Torso, Head, ArmL/R, LegL/R), so one component drives
-    /// walk cycles, attack swings, hit flinches and marksman aiming without a
-    /// baked animation clip or Animator Controller.
+    /// Plays authored clips on the shared enemy rig. Original prefabs use their
+    /// procedural joint animation when they have no imported takes.
     /// </summary>
     public sealed class EnemyAnimator : MonoBehaviour
     {
@@ -18,6 +16,7 @@ namespace Shooter.Enemies
         public Transform armR;
         public Transform legL;
         public Transform legR;
+        public Animation authored;
 
         [Header("Tuning")]
         [SerializeField] private float walkCycleSpeed = 8f;
@@ -44,6 +43,12 @@ namespace Shooter.Enemies
         private float hitTimer;
         private float aimBlend;
         private float aimTarget;
+        private float authoredUntil;
+        private string authoredLoop;
+        private bool dying;
+        private AnimationState authoredWalk;
+        private float walkStride;
+        private float groundSpeed;
 
         /// <summary>True when all six animated joints were found on the model.</summary>
         public bool HasRig =>
@@ -75,12 +80,18 @@ namespace Shooter.Enemies
             legLRest = legL != null ? legL.localRotation : Quaternion.identity;
             legRRest = legR != null ? legR.localRotation : Quaternion.identity;
             modelRestPosition = model != null ? model.localPosition : Vector3.zero;
+            if (authored != null)
+            {
+                authoredWalk = authored["Walk"];
+                walkStride = ReadStride(searchRoot, transform);
+            }
         }
 
         /// <summary>Called by EnemyAI every frame with the current planar speed.</summary>
         public void SetLocomotion(float planarSpeed, float maxSpeed)
         {
             targetMove = Mathf.Clamp01(planarSpeed / Mathf.Max(0.1f, maxSpeed));
+            groundSpeed = planarSpeed;
         }
 
         /// <summary>Starts the arm-swing portion of a telegraphed melee attack.</summary>
@@ -88,18 +99,47 @@ namespace Shooter.Enemies
         {
             attackDuration = Mathf.Max(0.05f, windup);
             attackTimer = attackDuration;
+            PlayAuthored("Slam", attackDuration / (26f / 30f));
         }
 
         /// <summary>Short recoil on the torso and head when a shot lands.</summary>
         public void TriggerHit()
         {
             hitTimer = 0.16f;
+            if (Time.time >= authoredUntil)
+                PlayAuthored("Hit");
         }
 
         /// <summary>Marksmen raise the cannon arm while charging a shot.</summary>
-        public void SetAiming(bool aiming)
+        public void SetAiming(bool aiming, float windup = 0f)
         {
+            if (aiming && aimTarget == 0f)
+                PlayAuthored("Volley", windup / (19f / 40f));
             aimTarget = aiming ? 1f : 0f;
+        }
+
+        public void PlayCharge(float duration) => PlayAuthored("Roar", duration);
+
+        public void PlayDeath(float lifetime)
+        {
+            PlayAuthored("Death", lifetime * 2.5f);
+            dying = true;
+        }
+
+        private void PlayAuthored(string clip, float seconds = 0f)
+        {
+            if (authored == null || dying)
+                return;
+
+            AnimationState state = authored[clip];
+            if (state == null)
+                return;
+
+            state.speed = seconds > 0f ? state.length / seconds : 1f;
+            authored.CrossFade(clip, 0.075f);
+            state.time = 0f;
+            authoredUntil = Time.time + state.length / state.speed;
+            authoredLoop = null;
         }
 
         private void Update()
@@ -111,6 +151,25 @@ namespace Shooter.Enemies
 
             float deltaTime = Time.deltaTime;
             moveBlend = Mathf.Lerp(moveBlend, targetMove, 1f - Mathf.Exp(-12f * deltaTime));
+            if (authored != null)
+            {
+                attackTimer = Mathf.Max(0f, attackTimer - deltaTime);
+                if (!dying && Time.time >= authoredUntil)
+                {
+                    string loop = groundSpeed > 0.12f ? "Walk" : "Idle";
+                    if (loop == "Walk" && authoredWalk != null && walkStride > 0f)
+                    {
+                        authoredWalk.speed = StridePlaybackSpeed(
+                            authoredWalk, groundSpeed, walkStride * transform.lossyScale.y);
+                    }
+                    if (loop != authoredLoop)
+                    {
+                        authored.CrossFade(loop, 0.1f);
+                        authoredLoop = loop;
+                    }
+                }
+                return;
+            }
             aimBlend = Mathf.Lerp(aimBlend, aimTarget, 1f - Mathf.Exp(-8f * deltaTime));
 
             if (moveBlend > 0.02f)
@@ -163,6 +222,18 @@ namespace Shooter.Enemies
             // Vertical bob reads as weight without lifting the collider.
             model.localPosition = modelRestPosition +
                 Vector3.up * (Mathf.Sin(walkPhase * 2f) * bobHeight * moveBlend);
+        }
+
+        internal static float ReadStride(Transform rig, Transform actor)
+        {
+            Transform marker = FindJoint(rig, "StrideEnd");
+            return marker == null ? 0f :
+                actor.InverseTransformVector(marker.position - marker.parent.position).magnitude;
+        }
+
+        internal static float StridePlaybackSpeed(AnimationState walk, float speed, float stride)
+        {
+            return Mathf.Clamp(speed * walk.length / Mathf.Max(0.1f, stride), 0.08f, 4f);
         }
 
         private static Transform FindJoint(Transform root, string name)

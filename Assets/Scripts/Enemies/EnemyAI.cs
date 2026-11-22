@@ -46,7 +46,7 @@ namespace Shooter.Enemies
         [SerializeField] private float rangedHoldDistance;
         [SerializeField] private float rangedStrafeSpeed = 2.6f;
 
-        private static readonly Collider[] Neighbors = new Collider[32];
+        private static readonly Collider[] Neighbors = new Collider[128];
 
         private CharacterController controller;
         private EnemyHealth health;
@@ -55,6 +55,7 @@ namespace Shooter.Enemies
         private Transform model;
         private Vector3 planarVelocity;
         private float verticalVelocity;
+        private Vector3 pendingKnockback;
         private float nextAttackTime;
         private float attackStrikeTime = -1f;
         private float leanAngle;
@@ -133,7 +134,9 @@ namespace Shooter.Enemies
 
             if (away.sqrMagnitude > 0.0001f)
             {
-                controller.Move(away.normalized * flinchKnockback);
+                // Route the knockback through the normal movement integration so
+                // gravity and grounding are not bypassed by a raw controller.Move.
+                pendingKnockback += away.normalized * flinchKnockback;
             }
         }
 
@@ -362,6 +365,15 @@ namespace Shooter.Enemies
             verticalVelocity += gravity * deltaTime;
 
             Vector3 motion = planarVelocity + Vector3.up * verticalVelocity;
+
+            if (pendingKnockback.sqrMagnitude > 0.0001f)
+            {
+                // Convert the displacement into a velocity for this frame so the
+                // CharacterController still applies gravity and grounding.
+                motion += pendingKnockback / Mathf.Max(deltaTime, 0.0001f);
+                pendingKnockback = Vector3.zero;
+            }
+
             controller.Move(motion * deltaTime);
         }
 

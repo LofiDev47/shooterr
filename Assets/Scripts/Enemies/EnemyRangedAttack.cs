@@ -90,8 +90,6 @@ namespace Shooter.Enemies
                 return;
             }
 
-            animator?.SetAiming(charging);
-
             if (charging)
             {
                 UpdateCharge();
@@ -112,6 +110,7 @@ namespace Shooter.Enemies
             chargeStartedAt = Time.time;
             windUpEndsAt = Time.time + windUp;
             aimPoint = TargetPoint();
+            animator?.SetAiming(true, windUp);
 
             if (telegraph != null)
             {

@@ -42,10 +42,13 @@ namespace Shooter.Enemies
         /// <summary>True while the proximity fuse is burning.</summary>
         public bool IsFusing => fuseEndsAt >= 0f;
 
+        private EnemyAnimator animator;
+
         private void Awake()
         {
             health = GetComponent<EnemyHealth>();
             model = transform.Find("Model");
+            animator = GetComponent<EnemyAnimator>();
 
             if (health != null)
             {
@@ -118,6 +121,7 @@ namespace Shooter.Enemies
             else if (distance <= triggerDistance)
             {
                 fuseEndsAt = Time.time + fuseTime;
+                animator?.PlayCharge(fuseTime);
                 AudioManager.Instance?.PlayEnemyCharge(transform.position);
             }
 
@@ -198,7 +202,8 @@ namespace Shooter.Enemies
         {
             float size = Mathf.Max(0.3f, radius * 0.5f);
 
-            if (explosionMaterial != null)
+            if (FoundryEffects.Spawn(FoundryEffect.Explosion, point, Quaternion.identity, size, 0.28f) == null &&
+                explosionMaterial != null)
             {
                 GameObject flash = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 flash.name = "Exploder Blast";

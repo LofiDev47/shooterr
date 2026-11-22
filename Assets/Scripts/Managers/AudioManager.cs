@@ -39,6 +39,9 @@ namespace Shooter.Managers
 
         private readonly Dictionary<string, AudioClip> generated = new Dictionary<string, AudioClip>();
 
+        private readonly AudioSource[] oneShotPool = new AudioSource[8];
+        private int nextOneShot;
+
         private void Awake()
         {
             Instance = this;
@@ -48,6 +51,16 @@ namespace Shooter.Managers
             }
 
             EnsureProceduralClips();
+
+            for (int i = 0; i < oneShotPool.Length; i++)
+            {
+                GameObject sourceObject = new GameObject("OneShotAudio");
+                sourceObject.transform.SetParent(transform, false);
+                AudioSource source = sourceObject.AddComponent<AudioSource>();
+                source.playOnAwake = false;
+                source.spatialBlend = 1f;
+                oneShotPool[i] = source;
+            }
         }
 
         private void OnDestroy()
@@ -324,7 +337,16 @@ namespace Shooter.Managers
                 return;
             }
 
-            AudioSource.PlayClipAtPoint(clip, position, finalVolume);
+            // Reuse a small pool of 3D sources instead of spawning a GameObject
+            // (PlayClipAtPoint) for every hit, death, explosion and pickup.
+            AudioSource pooled = oneShotPool[nextOneShot];
+            nextOneShot = (nextOneShot + 1) % oneShotPool.Length;
+
+            if (pooled != null)
+            {
+                pooled.transform.position = position;
+                pooled.PlayOneShot(clip, finalVolume);
+            }
         }
     }
 }
