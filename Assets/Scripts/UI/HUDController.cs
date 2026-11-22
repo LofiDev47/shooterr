@@ -70,6 +70,7 @@ namespace Shooter.UI
         [SerializeField] private float damageNumberRise = 60f;
 
         [Header("Crosshair")]
+        public CanvasGroup crosshairGroup;
         public RectTransform[] crosshairBars;
 
         [Tooltip("Pixels the crosshair opens at full spread.")]
@@ -201,6 +202,9 @@ namespace Shooter.UI
         /// </summary>
         private void UpdateCrosshair()
         {
+            if (crosshairGroup != null)
+                crosshairGroup.alpha = 1f - (weapon != null ? weapon.SightBlend : 0f);
+
             if (crosshairBars == null || crosshairBasePositions == null || crosshairBars.Length == 0)
             {
                 return;

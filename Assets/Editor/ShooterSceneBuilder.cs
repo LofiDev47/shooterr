@@ -643,7 +643,6 @@ namespace Shooter.EditorTools
         {
             BuildWallRuns(materials, parent);
             BuildEnvironmentLights(materials, parent);
-            BuildFloorSeams(materials, parent);
             BuildHazardChevrons(materials, parent);
         }
 
@@ -723,7 +722,7 @@ namespace Shooter.EditorTools
                 BuildWallPlate(materials, parent, new Vector3(-ArenaHalfSize + 0.75f, 4.2f, z), new Vector3(0.12f, 5.5f, 7f));
             }
 
-            // Vertical light rails, evenly spaced—reads as a deliberate light rig rather than lights on box walls.
+            // Vertical light rails, evenly spacedâ€”reads as a deliberate light rig rather than lights on box walls.
             foreach (float x in new[] { -24f, -8f, 8f, 24f })
             {
                 BuildLuminousRail(materials, parent, new Vector3(x, 4.5f, ArenaHalfSize - 0.68f), new Vector3(0.28f, 5.6f, 0.1f));
@@ -747,7 +746,7 @@ namespace Shooter.EditorTools
                         xSign * (ArenaHalfSize - 0.55f), WallHeight * 0.5f,
                         zSign * (ArenaHalfSize - 0.55f));
 
-                    // Stone pier, dark plinth, emissive crown — different materials, not same wall replicated.
+                    // Stone pier, dark plinth, emissive crown â€” different materials, not same wall replicated.
                     CreatePrimitive("Wall Pier", PrimitiveType.Cube, position,
                         new Vector3(1.4f, WallHeight, 1.4f), materials.Stone, parent);
                     CreatePrimitive("Pier Plinth", PrimitiveType.Cube,
@@ -787,39 +786,9 @@ namespace Shooter.EditorTools
             SetStaticDecoration(rail);
         }
 
-        private static void BuildFloorSeams(ArenaMaterials materials, Transform parent)
-        {
-            // Crosses built from very thin strips read as expansion joints and maintenance paths.
-            // They stay at y = 0, below the pad surface.
-            const float length = ArenaHalfSize * 2f - 4f;
-
-            foreach (float x in new[] { -16f, 0f, 16f })
-            {
-                CreatePrimitive("Floor Seam X", PrimitiveType.Cube, new Vector3(x, 0.01f, 0f),
-                    new Vector3(0.12f, 0.02f, length), materials.DarkMetal, parent);
-            }
-
-            foreach (float z in new[] { -16f, 0f, 16f })
-            {
-                CreatePrimitive("Floor Seam Z", PrimitiveType.Cube, new Vector3(0f, 0.01f, z),
-                    new Vector3(length, 0.02f, 0.12f), materials.DarkMetal, parent);
-            }
-
-            // A rivet-like dot in the intersection of every seam — tiny but makes the grid feel authored.
-            foreach (float x in new[] { -16f, 0f, 16f })
-            {
-                foreach (float z in new[] { -16f, 0f, 16f })
-                {
-                    GameObject rivet = CreatePrimitive("Seam Rivet", PrimitiveType.Cube, new Vector3(x, 0.02f, z),
-                        new Vector3(0.28f, 0.02f, 0.28f), materials.Accent, parent);
-                    StripCollider(rivet);
-                }
-            }
-        }
-
         private static void BuildHazardChevrons(ArenaMaterials materials, Transform parent)
         {
-            // Four chevron pairs drawn on the ground near each lane entry — the arena reads as a
+            // Four chevron pairs drawn on the ground near each lane entry â€” the arena reads as a
             // managed dangerous place, not a blank room, without adding gameplay obstacles.
             foreach (var offset in new[] { -1f, 1f })
             {
@@ -844,7 +813,7 @@ namespace Shooter.EditorTools
             GameObject a = CreatePrimitive("Hazard Chevron A", PrimitiveType.Cube, position + Quaternion.Euler(0f, -35f, 0f) * Vector3.right * 0.65f,
                 new Vector3(2.3f, 0.02f, 0.32f), materials.Hazard, parent, rotation);
 
-            GameObject b = CreatePrimitive("Hazard Chevron B", PrimitiveType.Cube, position + Quaternion.Euler(0f, 35f, 0f) * Vector3.right * 0.65f,
+            GameObject b = CreatePrimitive("Hazard Chevron B", PrimitiveType.Cube, position + Quaternion.Euler(0f, 35f, 0f) * Vector3.right * 0.65f + Vector3.up * 0.005f,
                 new Vector3(2.3f, 0.02f, 0.32f), materials.Hazard, parent, rotation);
 
             StripCollider(a);
@@ -1156,6 +1125,8 @@ namespace Shooter.EditorTools
             weapon.explosionMaterial = materials.Muzzle;
             weapon.slide = slide;
             weapon.viewAnimation = viewAnimation;
+            weapon.sightModel = model.transform;
+            weapon.sightDot = FindDeep(rifle.transform, "OpticDot");
             weapon.shellEjectPoint = ejectPoint;
             weapon.shellMaterial = materials.Brass;
             weapon.shotgunMuzzle = shotgunMuzzle;
@@ -1587,13 +1558,13 @@ namespace Shooter.EditorTools
             RectTransform healthPanel = CreateRect("HealthPanel", canvasObject.transform, new Vector2(0f, 0f),
                 new Vector2(0f, 0f), new Vector2(36f, 36f), new Vector2(320f, 64f));
 
-            Text healthLabel = CreateText(healthPanel, "HealthLabel", "HEALTH", 14, new Color(1f, 1f, 1f, 0.55f),
+            Text healthLabel = CreateText(healthPanel, "HealthLabel", "VITALS", 15, new Color(0.55f, 0.88f, 0.82f),
                 TextAnchor.MiddleLeft, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 36f),
                 new Vector2(320f, 20f), font);
 
             RectTransform healthBar = CreateRect("HealthBar", healthPanel, new Vector2(0f, 0f), new Vector2(0f, 0f),
                 Vector2.zero, new Vector2(320f, 26f));
-            Image healthBackground = AddImage(healthBar, new Color(0f, 0f, 0f, 0.55f));
+            Image healthBackground = AddImage(healthBar, new Color(0.10f, 0.18f, 0.21f, 1f));
 
             RectTransform healthFillRect = CreateRect("HealthFill", healthBar, Vector2.zero, Vector2.one,
                 Vector2.zero, Vector2.zero);
@@ -1617,7 +1588,7 @@ namespace Shooter.EditorTools
                 new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 40f), new Vector2(360f, 48f), font,
                 FontStyle.Bold);
 
-            Text ammoLabel = CreateText(ammoPanel, "AmmoLabel", "AMMO", 14, new Color(1f, 1f, 1f, 0.55f),
+            Text ammoLabel = CreateText(ammoPanel, "AmmoLabel", "MUNITIONS", 15, new Color(0.55f, 0.88f, 0.82f),
                 TextAnchor.MiddleRight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 92f),
                 new Vector2(360f, 20f), font);
 
@@ -1722,7 +1693,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC free cursor",
+                "WASD move   Â·   SHIFT sprint   Â·   SPACE jump   Â·   LMB fire   Â·   RMB aim   Â·   V melee   Â·   C slide   Â·   R reload   Â·   ESC free cursor",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
@@ -1776,6 +1747,7 @@ namespace Shooter.EditorTools
             hud.bossPhaseText = bossPhaseText;
             hud.bossPhasePips = bossPhasePips;
             hud.crosshairBars = new[] { crosshairTop, crosshairBottom, crosshairLeft, crosshairRight };
+            hud.crosshairGroup = crosshair.gameObject.AddComponent<CanvasGroup>();
             hud.player = rig.Controller;
 
             // The upgrade manager needs the finished HUD for toasts plus the choice panel.
@@ -1820,6 +1792,7 @@ namespace Shooter.EditorTools
             menu.settings = managers.Settings;
             menu.hud = hud;
             menu.foundryPlate = FoundryHudSkin.Plate;
+            menu.foundryEmblem = FoundryHudSkin.Emblem;
             menu.player = rig.Controller;
             return menu;
         }

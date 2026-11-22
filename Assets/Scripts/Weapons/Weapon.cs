@@ -134,6 +134,9 @@ namespace Shooter.Weapons
         public Transform shotgunEjectPoint;
         public Transform pump;
         public Animation viewAnimation;
+        public Transform sightModel;
+        public Transform sightDot;
+        public float SightBlend { get; private set; }
         public Animation muzzleBurst;
         public Animation breachBurst;
         public GameObject spentCell;
@@ -1311,10 +1314,11 @@ namespace Shooter.Weapons
         {
             // Blend between hip-fire and aim-down-sights positions. Exponential blend so
             // the transition eases out instead of arriving at a constant clip.
-            bool wantsAim = player != null && player.IsAiming;
+            bool wantsAim = player != null && player.IsAiming && !State.IsReloading && !IsShotgunReloading;
             float aimTarget = wantsAim ? 1f : 0f;
             aimBlend = Mathf.Lerp(aimBlend, aimTarget, 1f - Mathf.Exp(-sightBlendSpeed * Time.deltaTime));
             float eased = Mathf.SmoothStep(0f, 1f, aimBlend);
+            SightBlend = sightDot != null && sightModel != null ? eased : 0f;
 
             Vector3 hipPosition = Vector3.Lerp(restLocalPosition, aimLocalPosition, eased);
             Quaternion hipRotation = Quaternion.Slerp(restLocalRotation, Quaternion.identity, eased);
@@ -1365,6 +1369,20 @@ namespace Shooter.Weapons
             float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);
             transform.localRotation = Quaternion.Slerp(transform.localRotation, targetRotation, blend);
+        }
+
+        private void LateUpdate()
+        {
+            if (sightModel == null || sightDot == null || aimCamera == null)
+                return;
+
+            // Legacy Animation evaluates after Update. Recenter the evaluated
+            // optic here so authored idle motion and sway cannot move it off aim.
+            sightModel.localPosition = Vector3.zero;
+            Transform cameraTransform = aimCamera.transform;
+            Vector3 correction = Vector3.ProjectOnPlane(cameraTransform.position - sightDot.position,
+                cameraTransform.forward);
+            sightModel.localPosition = sightModel.parent.InverseTransformVector(correction) * SightBlend;
         }
 
         /// <summary>

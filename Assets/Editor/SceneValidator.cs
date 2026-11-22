@@ -335,14 +335,17 @@ namespace Shooter.EditorTools
 
                 Check(weaponModel != null && weaponParts.Length > 20,
                     "weapon has a detailed multi-part model");
-                Check(weaponParts.Any(part => part.name == "SignalCrown"),
+                Check(weaponParts.Any(part => part.name == "MuzzleBrake"),
                     "weapon model has muzzle detail");
-                Check(weaponParts.Any(part => part.name.StartsWith("SignalCell")),
+                Check(weaponParts.Any(part => part.name == "StatusGlow"),
                     "weapon model has a charge strip");
                 Check(!weaponParts.Any(part => part.name == "OpticTube"),
                     "rifle optic has no solid tube to block the sight picture");
-                Check(weaponParts.Any(part => part.name == "OpticFrame"),
+                Check(weaponParts.Any(part => part.name == "OpticFrameTop"),
                     "rifle optic is an open sight frame");
+                Check(sceneWeapon.sightModel != null && sceneWeapon.sightDot != null &&
+                      sceneWeapon.sightDot.IsChildOf(sceneWeapon.sightModel),
+                    "aim calibration uses the rendered optic dot");
                 Check(sceneWeapon.viewAnimation != null && sceneWeapon.viewAnimation.GetClipCount() == 9,
                     "weapon has all nine Foundry handling clips");
                 if (sceneWeapon.viewAnimation != null)

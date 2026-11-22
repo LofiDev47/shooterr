@@ -46,6 +46,9 @@ namespace Shooter.Enemies
         private float authoredUntil;
         private string authoredLoop;
         private bool dying;
+        private AnimationState authoredWalk;
+        private float walkStride;
+        private float groundSpeed;
 
         /// <summary>True when all six animated joints were found on the model.</summary>
         public bool HasRig =>
@@ -77,12 +80,18 @@ namespace Shooter.Enemies
             legLRest = legL != null ? legL.localRotation : Quaternion.identity;
             legRRest = legR != null ? legR.localRotation : Quaternion.identity;
             modelRestPosition = model != null ? model.localPosition : Vector3.zero;
+            if (authored != null)
+            {
+                authoredWalk = authored["Walk"];
+                walkStride = ReadStride(searchRoot, transform);
+            }
         }
 
         /// <summary>Called by EnemyAI every frame with the current planar speed.</summary>
         public void SetLocomotion(float planarSpeed, float maxSpeed)
         {
             targetMove = Mathf.Clamp01(planarSpeed / Mathf.Max(0.1f, maxSpeed));
+            groundSpeed = planarSpeed;
         }
 
         /// <summary>Starts the arm-swing portion of a telegraphed melee attack.</summary>
@@ -127,8 +136,8 @@ namespace Shooter.Enemies
                 return;
 
             state.speed = seconds > 0f ? state.length / seconds : 1f;
+            authored.CrossFade(clip, 0.075f);
             state.time = 0f;
-            authored.Play(clip);
             authoredUntil = Time.time + state.length / state.speed;
             authoredLoop = null;
         }
@@ -147,7 +156,12 @@ namespace Shooter.Enemies
                 attackTimer = Mathf.Max(0f, attackTimer - deltaTime);
                 if (!dying && Time.time >= authoredUntil)
                 {
-                    string loop = moveBlend > 0.08f ? "Walk" : "Idle";
+                    string loop = groundSpeed > 0.12f ? "Walk" : "Idle";
+                    if (loop == "Walk" && authoredWalk != null && walkStride > 0f)
+                    {
+                        authoredWalk.speed = StridePlaybackSpeed(
+                            authoredWalk, groundSpeed, walkStride * transform.lossyScale.y);
+                    }
                     if (loop != authoredLoop)
                     {
                         authored.CrossFade(loop, 0.1f);
@@ -208,6 +222,18 @@ namespace Shooter.Enemies
             // Vertical bob reads as weight without lifting the collider.
             model.localPosition = modelRestPosition +
                 Vector3.up * (Mathf.Sin(walkPhase * 2f) * bobHeight * moveBlend);
+        }
+
+        internal static float ReadStride(Transform rig, Transform actor)
+        {
+            Transform marker = FindJoint(rig, "StrideEnd");
+            return marker == null ? 0f :
+                actor.InverseTransformVector(marker.position - marker.parent.position).magnitude;
+        }
+
+        internal static float StridePlaybackSpeed(AnimationState walk, float speed, float stride)
+        {
+            return Mathf.Clamp(speed * walk.length / Mathf.Max(0.1f, stride), 0.08f, 4f);
         }
 
         private static Transform FindJoint(Transform root, string name)

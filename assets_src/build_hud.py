@@ -65,12 +65,19 @@ panel = shape("Plate", [[
 pip = shape("PhasePip", [[(0, -0.98), (0.91, -0.40), (0.91, 0.40),
                           (0, 0.98), (-0.91, 0.40), (-0.91, -0.40)]])
 
-atlases = (reticle, bar_h, bar_v, hit, panel, pip)
+emblem = shape("FoundryEmblem", [
+    *rotated([(0.82, 0.08), (0.94, 0.08), (0.75, 0.55), (0.51, 0.74),
+              (0.48, 0.61), (0.67, 0.44)], 4),
+    *rotated([(0.13, -0.07), (0.58, 0.14), (0.43, 0.30), (0.09, 0.12)], 4),
+    [(0, -0.12), (0.12, 0), (0, 0.12), (-0.12, 0)],
+])
+
+atlases = (reticle, bar_h, bar_v, hit, panel, pip, emblem)
 for collection in atlases:
     for other in atlases:
         other.hide_render = other is not collection
         other.hide_viewport = other is not collection
-    scene.render.resolution_x = scene.render.resolution_y = 128
+    scene.render.resolution_x = scene.render.resolution_y = 512 if collection == emblem else 128
     scene.render.filepath = str(OUTPUT / (collection.name + ".png"))
     bpy.ops.render.render(write_still=True)
 

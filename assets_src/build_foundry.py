@@ -4,7 +4,7 @@ Run with Blender in background or execute this file through Blender MCP.
 The original Unity assets are kept alongside these replacements.
 """
 
-from math import cos, pi, radians, sin
+from math import acos, atan2, cos, degrees, hypot, pi, radians, sin
 from pathlib import Path
 
 import bpy
@@ -87,6 +87,17 @@ def panel(name, location, size, mat, parent, taper=1, bevel=0.008):
     ], mat, parent, bevel)
 
 
+def combine_panels(parts, name, mat, parent):
+    """Batch unrotated, unbeveled panels on the same rigid joint."""
+    vertices, faces = [], []
+    for part in parts:
+        base = len(vertices)
+        vertices.extend(vertex.co + part.location for vertex in part.data.vertices)
+        faces.extend(tuple(base + index for index in face.vertices) for face in part.data.polygons)
+        bpy.data.objects.remove(part, do_unlink=True)
+    return mesh(name, vertices, faces, (0, 0, 0), mat, parent, 0)
+
+
 def ring(name, location, radius, thickness, height, mat, parent, segments=12):
     vertices = [(r*cos(2*pi*i/segments), r*sin(2*pi*i/segments), z)
                 for r, z in ((radius, -height/2), (radius, height/2),
@@ -144,6 +155,7 @@ def actor(name, width, height, reach, armor_color, glow_color):
                      tuple(x*scale for x in size), mat, parent, taper, 0.012*scale)
 
     root = joint("Model", (0, 0, 0))
+    pivot("StrideEnd", (0, -4 * stride_reach(name) * scale, 0), root)
     torso = joint("Torso", (0, 0, 0.89), root)
     head = joint("Head", (0, -0.025, 0.67), torso)
     plate("PelvisFrame", (0, 0, -0.035), (width*0.82, 0.29, 0.21), frame, torso, 1.15)
@@ -153,11 +165,28 @@ def actor(name, width, height, reach, armor_color, glow_color):
     plate("FaceFrame", (0, -0.105, 0.121), (width*0.31, 0.16, 0.15), frame, head, 1.18)
     plate("VisorGlow", (0, -0.195, 0.144), (width*0.30, 0.020, 0.041), glow, head, 1.12)
     plate("ChestCoreGlow", (0, -0.21, 0.34), (width*0.16, 0.045, 0.16), glow, torso, 1.28)
+    plate("HelmetBrow", (0, -0.16, 0.197), (width*0.43, 0.10, 0.048), armor, head, 0.78)
+    plate("Breather", (0, -0.189, 0.074), (width*0.25, 0.052, 0.072), frame, head, 1.15)
+    plate("BeltBuckle", (0, -0.167, -0.018), (width*0.29, 0.06, 0.105), armor, torso, 0.84)
+
+    detail_groups = {}
+
+    def detail(label, location, size, mat, parent, taper=1):
+        part = panel(label, tuple(x*scale for x in location),
+                     tuple(x*scale for x in size), mat, parent, taper, 0)
+        detail_groups.setdefault((parent, mat), []).append(part)
 
     for side, sign in (("L", -1), ("R", 1)):
+        detail("OpticTemple" + side, (sign*width*0.184, -0.066, 0.152),
+               (0.032, 0.115, 0.11), frame, head, 0.78)
         chest = plate("ChestPlate" + side, (sign*width*0.26, -0.18, 0.37),
                       (width*0.41, 0.115, 0.43), armor, torso, 1.22)
         chest.rotation_euler.y = sign * radians(13)
+        detail("ChestInset", (0, -0.059, 0.08), (width*0.26, 0.010, 0.145), frame, chest, 1.16)
+        detail("ChestSignalGlow", (0, -0.066, 0.11), (width*0.18, 0.010, 0.025), glow, chest, 0.82)
+        for index in range(3):
+            detail("ChestVent", (0, -0.058, -0.113 + index*0.031),
+                   (width*0.23, 0.012, 0.012), frame, chest, 0.72)
         for index in range(3):
             plate(f"BackVent{side}{index}", (sign*width*0.15, 0.333, 0.26 + index*0.075),
                   (width*0.19, 0.024, 0.020), glow, torso, 0.86)
@@ -171,6 +200,13 @@ def actor(name, width, height, reach, armor_color, glow_color):
         plate("WristGlow" + side, (0, -0.154, -0.16*reach), (width*0.19, 0.015, 0.055),
               glow, elbow)
         plate("Claw" + side, (0, -0.036, -0.32*reach), (0.13, 0.18, 0.13), frame, elbow, 1.1)
+        detail("ShoulderCap", (sign*0.018, -0.078, 0.082),
+               (width*0.35, 0.225, 0.07), frame, arm, 0.73)
+        detail("ForearmRail", (sign*width*0.167, -0.038, -0.15*reach),
+               (0.036, 0.121, 0.21*reach), frame, elbow, 0.71)
+        for finger in (-1, 0, 1):
+            detail("Knuckle", (finger*0.037, -0.105, -0.316*reach),
+                   (0.029, 0.052, 0.055), armor, elbow, 0.75)
 
         leg = joint("Leg" + side, (sign*width*0.24, 0, 0.89), root)
         knee = joint("Knee" + side, (0, -0.016, -0.415), leg)
@@ -179,6 +215,10 @@ def actor(name, width, height, reach, armor_color, glow_color):
         plate("KneeGuard" + side, (0, -0.11, -0.036), (width*0.31, 0.13, 0.16), frame, knee, 1.2)
         plate("ShinPlate" + side, (0, 0, -0.215), (width*0.38, 0.21, 0.24), armor, knee, 0.73)
         plate("BootShell" + side, (0, -0.055, -0.041), (width*0.43, 0.32, 0.14), frame, boot, 0.87)
+        detail("ToePlate", (0, -0.171, -0.034), (width*0.38, 0.11, 0.11), armor, boot, 0.75)
+        detail("ShinFin", (sign*width*0.14, -0.066, -0.21),
+               (0.039, 0.105, 0.22), frame, knee, 0.69)
+        detail("KneeSignalGlow", (0, -0.18, -0.04), (width*0.19, 0.015, 0.033), glow, knee, 0.82)
 
     if name in {"Bulwark", "Warden"}:
         arm = joints["ElbowL"][0]
@@ -217,6 +257,8 @@ def actor(name, width, height, reach, armor_color, glow_color):
                   (0.45, 0.046, 0.041), trim, shield, 0.87)
         plate("CrownSigilGlow", (0, -0.123, 0.237), (0.05, 0.026, 0.10),
               glow, head, 0.44)
+    for (parent, mat), parts in detail_groups.items():
+        combine_panels(parts, parent.name + "Detail", mat, parent)
     return joints
 
 
@@ -242,40 +284,75 @@ def position_keys(obj, start, keys):
     bpy.context.scene.frame_set(0)
 
 
-def locomotion(amplitude, length):
-    for frame, direction in ((0, 1), (length//2, -1), (length, 1)):
-        yield (frame, {
-            "Torso": (5, 0, direction*4),
-            "LegL": (-direction*amplitude, 0, 0),
-            "LegR": (direction*amplitude, 0, 0),
-            "KneeL": (max(0, direction)*22, 0, 0),
-            "KneeR": (max(0, -direction)*22, 0, 0),
-            "ArmL": (direction*amplitude*0.65, 0, -8),
-            "ArmR": (-direction*amplitude*0.65, 0, 8),
-        })
-        if frame < length:
-            yield (frame + length//4, {
-                "Torso": (8, 0, -direction*2),
-                "KneeL": (max(0, direction)*37, 0, 0),
-                "KneeR": (max(0, -direction)*37, 0, 0),
-            }, (0, 0, 0.044))
+def stride_reach(name):
+    return {"Runner": 0.31, "Bulwark": 0.245, "Warden": 0.27}.get(name, 0.28)
+
+
+def locomotion(name, height, length):
+    """Bake a symmetric walk from planted-foot targets and two-bone leg IK."""
+    reach = stride_reach(name)
+    scale = height / 1.9
+    upper = hypot(0.415, 0.016)
+    lower = hypot(0.36, 0.016)
+    lift = {"Runner": 0.17, "Bulwark": 0.09, "Warden": 0.10}.get(name, 0.13)
+    arm_swing = {"Runner": 26, "Bulwark": 12, "Warden": 14}.get(name, 19)
+
+    for frame in range(length + 1):
+        phase = (frame % length) / length
+        weight = sin(2*pi*phase)
+        counter = cos(2*pi*phase)
+        pelvis = -0.076 + 0.031 * sin(2*pi*phase - 0.22)**2
+        # Offset the chest and head so the upper body follows the hips instead
+        # of all joints reversing together on the contact frame.
+        shoulder_swing = cos(2*pi*phase - 0.28)
+        head_follow = cos(2*pi*phase - 0.57)
+        angles = {
+            "Torso": (5 + (4 if name == "Runner" else 2)*sin(4*pi*phase - 0.25),
+                      3.4*weight, 6*shoulder_swing),
+            "Head": (-3 - 2*sin(4*pi*phase - 0.55), -2.5*weight, -4.8*head_follow),
+        }
+        for side, offset, sign in (("L", 0, -1), ("R", 0.5, 1)):
+            cycle = (phase + offset) % 1
+            swing = max(0, cycle * 2 - 1)
+            if cycle < 0.5:
+                forward = reach * (4*cycle - 1)
+            else:
+                forward = reach * cos(pi*swing)
+            raised = lift * sin(pi*swing)**2
+            drop = 0.779 + pelvis - raised
+            distance = min(upper + lower - 0.0001, hypot(forward, drop))
+            hip = atan2(forward, drop) - acos((upper**2 + distance**2 - lower**2)/(2*upper*distance))
+            bend = pi - acos((upper**2 + lower**2 - distance**2)/(2*upper*lower))
+            leg_angle = hip - atan2(-0.016, 0.415)
+            knee_angle = hip + bend - leg_angle - atan2(0.016, 0.36)
+            roll = 18 * sin(2*pi*swing) * sin(pi*swing)
+            angles["Leg" + side] = (degrees(leg_angle), 0, 0)
+            angles["Knee" + side] = (degrees(knee_angle), 0, 0)
+            angles["Boot" + side] = (roll - degrees(leg_angle + knee_angle), 0, 0)
+            angles["Arm" + side] = (-sign*shoulder_swing*arm_swing, sign*4*weight, sign*(8+2*counter))
+            angles["Elbow" + side] = (-20 + 11*sign*cos(2*pi*phase - 0.52), 0, 0)
+        yield (frame, angles, (0, 0, pelvis*scale))
 
 
 def actor_clips(name, height):
-    amplitude = {"Runner": 36, "Bulwark": 19, "Warden": 20}.get(name, 28)
     attack = {"Bulwark": "ArmL", "Warden": "ArmL"}.get(name, "ArmR")
     ranged = name in {"Marksman", "Warden"}
     return [
-        (0, 60, [(15, {"Torso": (2, 0, -3), "Head": (-3, 0, 4)}, (0, 0, 0.009)),
-                 (45, {"Torso": (-2, 0, 3), "Head": (2, 0, -4)})]),
-        (62, 92, list(locomotion(amplitude, 30))),
-        (94, 153, [(9, {"Torso": (-12, 0, -13), attack: (38, -14, 14)}),
+        (0, 60, [(12, {"Torso": (2, -2, -3), "ArmL": (-4, 0, -2), "ElbowR": (-7, 0, 0)},
+                  (0, 0, 0.009)),
+                 (23, {"Torso": (2, -1, -2), "Head": (-4, -2, 7), "ElbowL": (-5, 0, 0)}),
+                 (39, {"Torso": (-2, 2, 3), "Head": (2, 1, 1), "ArmR": (-5, 0, 2)}),
+                 (51, {"Torso": (-1, 1, 2), "Head": (1, 0, -6), "ElbowR": (-3, 0, 0)})]),
+        (62, 92, list(locomotion(name, height, 30))),
+        (94, 153, [(9, {"Torso": (-12, 0, -13), "Head": (7, 0, 6), attack: (38, -14, 14)}),
                     (23, {"Torso": (-21, 0, -9), attack: (66, -12, 16),
                           "ArmL": (62, 0, -14), "ArmR": (61, 0, 14)} if name == "Warden"
                      else {"Torso": (-16, 0, -16), attack: (62, 0, 16)}),
                     (26, {"Torso": (29, 0, 12), attack: (-103, 0, -6),
                           "KneeL": (26, 0, 0), "KneeR": (26, 0, 0)}, (0, 0, -0.08*height)),
-                    (39, {"Torso": (16, 0, 5), attack: (-66, 0, 0)})]),
+                    (31, {"Torso": (23, 0, 16), "Head": (-11, 0, 8), attack: (-88, 0, -15)}),
+                    (41, {"Torso": (12, 0, 5), "Head": (-8, 0, 4), attack: (-48, 0, 0)}),
+                    (49, {"Torso": (-3, 0, -2), attack: (8, 0, 4)})]),
         (155, 195, [(10, {"Torso": (-8, 0, -14), "ArmR": (-81, 0, 7),
                           "ElbowR": (-9, 0, 0), "Head": (4, 0, -5)}),
                     (18, {"ArmR": (-86, 0, 4), "Torso": (-4, 0, -13)}),
@@ -327,54 +404,67 @@ def build_actors():
 
 def build_viewmodel():
     reset()
-    ceramic = material("FoundryCeramic", (0.77, 0.69, 0.48))
-    frame = material("FoundryFrame", (0.038, 0.057, 0.067), 0.7)
-    signal = material("FoundrySignal", (0.10, 0.91, 0.81), 0.2, 4)
-    suit = material("FoundrySuit", (0.10, 0.22, 0.25))
-    root = pivot("RifleRoot")
+    original = ROOT.parent / "Assets" / "Models" / "ShooterRifle.fbx"
+    bpy.ops.import_scene.fbx(filepath=str(original))
+    root = bpy.data.objects["RifleRoot"]
+    source_parts = tuple(root.children)
     handling = pivot("Handling", parent=root)
-    magazine = pivot("Magazine", (0, 0.13, -0.11), handling)
-    slide = pivot("Slide", (0.05, 0.11, 0.045), handling)
-    pump = pivot("Pump", (0, -0.28, -0.082), handling)
-    panel("Receiver", (0, -0.01, 0.025), (0.13, 0.40, 0.143), frame, handling, 0.83)
-    panel("CeramicShell", (0, -0.12, 0.047), (0.14, 0.40, 0.103), ceramic, handling, 0.82)
-    panel("ForwardShroud", (0, -0.38, 0.015), (0.097, 0.29, 0.097), ceramic, handling, 0.76)
-    panel("RearShroud", (0, 0.249, 0.019), (0.10, 0.26, 0.109), frame, handling, 0.62)
-    panel("MagazineShell", (0, 0.01, -0.026), (0.067, 0.11, 0.108), ceramic, magazine, 1.17)
-    panel("SlideShell", (0, 0, 0), (0.027, 0.098, 0.041), frame, slide)
-    panel("PumpShell", (0, 0, 0), (0.075, 0.159, 0.062), ceramic, pump)
-    panel("BreachShell", (0, -0.33, -0.072), (0.087, 0.33, 0.070), frame, handling)
-    for i in range(4):
-        for sign in (-1, 1):
-            panel("SignalCell", (sign*0.069, -0.22+i*0.039, 0.051),
-                  (0.012, 0.020, 0.026), signal, handling, 0.63, 0.002)
-    emitter = ring("Emitter", (0, -0.56, 0.015), 0.045, 0.013, 0.13, frame, handling)
-    emitter.rotation_euler.x = pi/2
-    crown = ring("SignalCrown", (0, -0.622, 0.015), 0.049, 0.010, 0.024, signal, handling)
-    crown.rotation_euler.x = pi/2
-    optic = ring("OpticFrame", (0, -0.062, 0.115), 0.038, 0.009, 0.074, frame, handling, 8)
-    optic.rotation_euler.x = pi/2
-    panel("OpticDot", (0, -0.10, 0.105), (0.006, 0.008, 0.006), signal, handling, bevel=0)
-    grip = panel("Grip", (0, 0.218, -0.085), (0.065, 0.074, 0.14), frame, handling)
-    grip.rotation_euler.x = radians(18)
+    ceramic = material("ServiceSteel", (0.17, 0.19, 0.21), 0.65)
+    suit = material("ServiceFabric", (0.055, 0.071, 0.074), 0.06)
+    finishes = {
+        "GunBody": material("ServiceGraphite", (0.053, 0.061, 0.072), 0.65),
+        "GunMetal": ceramic,
+        "GunRubber": material("ServicePolymer", (0.025, 0.028, 0.032), 0.06),
+        "GunGlow": material("ServiceIndicatorGlow", (0.14, 0.62, 0.54), 0.2, 1.3),
+        "GunAmber": material("ServiceOpticGlow", (0.98, 0.59, 0.20), 0.2, 1.7),
+    }
+    mag_mesh = bpy.data.objects["Magazine"]
+    mag_rest = tuple(mag_mesh.location)
+    mag_mesh.name = "MagazineBody"
+    magazine = pivot("Magazine", mag_rest, handling)
+    replacement = pivot("ReplacementMagazine", mag_rest, handling)
+    for part in source_parts:
+        part.parent = handling
+        if part.type == "MESH":
+            for index, slot in enumerate(part.data.materials):
+                part.data.materials[index] = finishes.get(slot.name, ceramic)
+
+    # The imported parts share the rifle's original local coordinate space.
+    # Attach them to their animated controls without changing their rest pose.
+    for part in (mag_mesh, bpy.data.objects["MagazineBase"], bpy.data.objects["MagazineRib"]):
+        part.parent = magazine
+        part.location -= Vector(mag_rest)
+        duplicate = part.copy()
+        duplicate.data = part.data.copy()
+        duplicate.parent = replacement
+        bpy.context.collection.objects.link(duplicate)
+
+    slide = bpy.data.objects["Slide"]
+    slide_handle = bpy.data.objects["SlideHandle"]
+    slide_handle.location = slide.matrix_basis.inverted() @ slide_handle.location
+    slide_handle.parent = slide
+
+    dot = bpy.data.objects["OpticDot"]
+    dot.scale *= 0.55
+    # The old front post sat in the optic's opening; keep the base and use the
+    # illuminated optic dot as the single sight reference.
+    bpy.data.objects.remove(bpy.data.objects["FrontSightPost"], do_unlink=True)
+    bpy.data.objects.remove(bpy.data.objects["OpticDotTick"], do_unlink=True)
 
     for side, wrist_pos, sleeve_pos in (
-        ("R", (0.029, 0.220, -0.100), (0.087, 0.37, -0.164)),
-        ("L", (-0.035, -0.215, -0.113), (-0.100, 0.063, -0.223)),
+        ("R", (-0.024, 0.116, -0.167), (-0.085, 0.33, -0.225)),
+        ("L", (0.038, -0.257, -0.112), (0.088, 0.007, -0.237)),
     ):
         hand = pivot("Hand" + side, wrist_pos, handling)
         panel("Glove" + side, (0, -0.025, 0), (0.068, 0.101, 0.068), suit, hand, 0.92)
         panel("Knuckle" + side, (0, -0.039, 0.033), (0.057, 0.063, 0.021), ceramic, hand)
         sleeve_vec = Vector(sleeve_pos)-Vector(wrist_pos)
-        sleeve = panel("Sleeve" + side, sleeve_vec/2, (0.102, 0.094, sleeve_vec.length),
+        if side == "L":
+            sleeve_vec *= 0.65
+        sleeve_width, sleeve_depth = (0.074, 0.068) if side == "L" else (0.102, 0.094)
+        sleeve = panel("Sleeve" + side, sleeve_vec/2, (sleeve_width, sleeve_depth, sleeve_vec.length),
                        suit, hand, 0.74)
         sleeve.rotation_euler = sleeve_vec.to_track_quat("Z", "Y").to_euler()
-    for label, position in (
-        ("MuzzlePoint", (0, -0.680, 0.015)), ("EjectPoint", (0.060, 0.105, 0.03)),
-        ("ShotgunMuzzle", (0, -0.51, -0.072)), ("ShotgunEjectPoint", (0.060, -0.330, -0.055)),
-    ):
-        pivot(label, position, handling)
-
     hand_l = bpy.data.objects["HandL"]
     joints = {obj.name: (obj, obj.location.copy()) for obj in (handling, magazine, hand_l)}
     joints["Model"] = joints.pop("Handling")
@@ -387,9 +477,11 @@ def build_viewmodel():
                    (4, {"Model": (-1, 0, 0)}, (0, 0.008, -0.003))]),
         (105, 125, [(2, {"Model": (8, -1, 3)}, (0.004, 0.055, 0.012)),
                     (8, {"Model": (2, 0, -2)}, (0, 0.018, -0.009))]),
-        (127, 172, [(8, {"Model": (-15, 0, 19)}, (-0.02, 0.08, -0.07)),
-                    (20, {"Model": (-20, 4, 22), "HandL": (39, 0, 23)}, (-0.04, 0.11, -0.12)),
-                    (33, {"Model": (-10, -3, 13), "HandL": (16, 0, -6)}, (0, 0.06, -0.06))]),
+        (127, 172, [(9, {"Model": (-3, -16, -8), "HandL": (12, -5, 8)}, (0.040, -0.080, 0.090)),
+                    (16, {"Model": (-2, -23, -11), "HandL": (15, -7, 12)}, (0.060, -0.14, 0.16)),
+                    (26, {"Model": (-2, -22, -10), "HandL": (15, -7, 11)}, (0.063, -0.145, 0.16)),
+                    (35, {"Model": (1, -19, -8), "HandL": (11, -4, 8)}, (0.050, -0.10, 0.14)),
+                    (39, {"Model": (2, -11, -5), "HandL": (7, -2, 4)}, (0.028, -0.055, 0.070))]),
         (174, 246, [(10, {"Model": (-10, -4, 10)}, (-0.02, 0.04, -0.06)),
                     (46, {"Model": (-17, 2, 15), "HandL": (30, 8, -19)}, (-0.02, 0.05, -0.07)),
                     (64, {"Model": (6, 0, -4)}, (0, 0.02, -0.03))]),
@@ -400,13 +492,25 @@ def build_viewmodel():
         (281, 341, [(12, {"Model": (-14, -10, 17)}, (0.03, 0.14, -0.10)),
                     (60, {"Model": (-53, -20, 33)}, (0.05, 0.17, -0.32))]),
     ])
-    position_keys(magazine, 127, [(0, (0, 0, 0)), (10, (0, 0, 0)),
-                                  (18, (-0.068, 0.04, -0.19)),
-                                  (24, (-0.068, 0.04, -0.19)),
-                                  (32, (0, 0.01, -0.028)), (35, (0, 0, 0))])
-    position_keys(hand_l, 127, [(0, (0, 0, 0)), (10, (0.012, 0.22, -0.065)),
-                                (18, (-0.041, 0.30, -0.17)),
-                                (32, (0.012, 0.24, -0.044)), (42, (0, 0, 0))])
+    stow = (-0.07, 0.115, -0.35)
+    empty_path = [(0, (0, 0, 0)), (10, (0, 0, 0)), (15, (0.013, 0.020, -0.088)),
+                  (19, (0.022, 0.032, -0.15)), (22, stow), (23, stow)]
+    fresh_path = [(23, stow), (28, (0.022, 0.041, -0.14)), (32, (0.008, 0.018, -0.062)),
+                  (35, (0, 0, 0)), (38, (0, 0, 0))]
+    position_keys(magazine, 127, [*empty_path, (38, (0, 0, 0))])
+    position_keys(replacement, 127, fresh_path)
+    # The supporting hand follows the visible magazine through the exchange.
+    grasp = Vector(mag_rest) + Vector((0.048, 0.010, -0.060)) - hand_l.location
+    hand_path = [(0, (0, 0, 0)), (5, (0.021, 0.08, -0.033))]
+    hand_path.extend((time, tuple(grasp + Vector(offset)))
+                     for time, offset in [*empty_path[1:-1], *fresh_path])
+    position_keys(hand_l, 127, [*hand_path, (45, (0, 0, 0))])
+    for mag, is_original in ((magazine, True), (replacement, False)):
+        for frame in (0, 149, 150, 165, 166, 341):
+            showing_replacement = 150 <= frame <= 165
+            mag.scale = (1 if is_original != showing_replacement else 0.001,) * 3
+            mag.keyframe_insert("scale", frame=frame)
+    bpy.context.scene.frame_set(0)
     save("PlayerView")
     export("PlayerView", True)
 
@@ -417,6 +521,7 @@ def build_arena_kit():
     frame = material("FoundryFrame", (0.048, 0.073, 0.088), 0.65)
     ceramic = material("FoundryCeramic", (0.44, 0.50, 0.50))
     floor = material("FoundryFloor", (0.17, 0.22, 0.24))
+    floor_alt = material("FoundryFloorAlt", (0.148, 0.196, 0.217))
     signal = material("FoundrySignal", (0.07, 0.77, 0.72), 0.2, 3)
     warning = material("FoundryWarning", (0.96, 0.35, 0.07), 0.2, 1.5)
     roots = {name: pivot(name) for name in
@@ -434,15 +539,26 @@ def build_arena_kit():
             panel("TrimSignal", (0, 0, 0.47), (0.92, 0.55, 0.06), signal, obj)
             continue
         deck = name in {"Ground", "Platform", "Pad"}
-        panel(name + "Frame", (0, 0, 0), (1, 1, 1), frame, obj, 0.99, 0.009)
-        if deck:
+        frame_height = 0.94 if deck else 1
+        panel(name + "Frame", (0, 0, (frame_height - 1)/2),
+              (1, 1, frame_height), frame, obj, 0.99, 0.009)
+        if name == "Ground":
+            tile_count = 8
+            tile_span = 1 / tile_count
+            groups = {floor: [], floor_alt: []}
+            for x in range(tile_count):
+                for y in range(tile_count):
+                    mat = floor_alt if (x + 2*y) % 5 == 0 else floor
+                    center = ((x+0.5)*tile_span - 0.5, (y+0.5)*tile_span - 0.5, 0.467)
+                    size = (tile_span - 0.0014, tile_span - 0.0014, 0.066)
+                    groups[mat].append(panel("Tile", center, size, mat, obj, bevel=0))
+            for mat, parts in groups.items():
+                combine_panels(parts, mat.name + "Panels", mat, obj)
+        elif deck:
             for x in (-1, 1):
                 for y in (-1, 1):
-                    panel("DeckTile", (0.25*x, 0.25*y, 0.482), (0.487, 0.487, 0.036),
-                          floor if name == "Ground" else ceramic, obj, bevel=0.002)
-            for x in (-1, 1):
-                panel("DeckSignal", (0.445*x, 0, 0.489), (0.013, 0.86, 0.021),
-                      signal, obj, bevel=0.001)
+                    panel("DeckTile", (0.25*x, 0.25*y, 0.467), (0.487, 0.487, 0.066),
+                          ceramic, obj, bevel=0.002)
         else:
             for sign in (-1, 1):
                 panel("Armor", (0, sign*0.47, 0.02), (0.91, 0.051, 0.85),

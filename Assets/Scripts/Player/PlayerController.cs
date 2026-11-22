@@ -37,6 +37,13 @@ namespace Shooter.Player
         [Range(0f, 1f)]
         [SerializeField] private float jumpCutMultiplier = 0.45f;
 
+        [Header("Wall movement")]
+        [SerializeField] private float wallClimbSpeed = 5.2f;
+        [SerializeField] private float wallClimbDuration = 0.68f;
+        [SerializeField] private float wallJumpPush = 7f;
+        [SerializeField] private float wallJumpSteerDelay = 0.14f;
+        [SerializeField] private float wallReach = 0.20f;
+
         [Header("Slide")]
         [SerializeField] private float slideSpeedMultiplier = 1.4f;
         [SerializeField] private float slideFriction = 4.5f;
@@ -122,6 +129,9 @@ namespace Shooter.Player
         private float suppressFireUntil;
         private bool cursorLocked;
         private bool wasGrounded = true;
+        private float climbTime;
+        private float wallSteerUntil;
+        private Vector3 lastKickedWall;
 
         // Camera feel state.
         private float bobTime;
@@ -373,6 +383,8 @@ namespace Shooter.Player
             Vector2 input = Vector2.zero;
             bool sprintHeld = false;
             bool crouchHeld = false;
+            bool jumpHeld = false;
+            bool jumpPressed = false;
 
             SettingsManager settings = SettingsManager.Instance;
 
@@ -390,8 +402,10 @@ namespace Shooter.Player
 
                 sprintHeld = IsHeld(settings, SettingsManager.ActionSprint);
                 crouchHeld = IsHeld(settings, SettingsManager.ActionSlide);
+                jumpHeld = IsHeld(settings, SettingsManager.ActionJump);
+                jumpPressed = WasPressed(settings, SettingsManager.ActionJump);
 
-                if (WasPressed(settings, SettingsManager.ActionJump))
+                if (jumpPressed)
                 {
                     jumpBufferedUntil = Time.time + jumpBufferTime;
                 }
@@ -410,12 +424,14 @@ namespace Shooter.Player
             {
                 UpdateSlide(input, crouchHeld, deltaTime);
             }
-            else
+            else if (Time.time >= wallSteerUntil)
             {
                 UpdateWalk(input, deltaTime);
             }
 
-            UpdateJump();
+            bool climbed = UpdateWallMovement(input, jumpPressed, jumpHeld, deltaTime);
+            if (!climbed)
+                UpdateJump();
 
             // Gravity and ground contact. Ground state here is from the PREVIOUS
             // Move, so it must not be used to re-arm the coyote window or reset
@@ -427,7 +443,8 @@ namespace Shooter.Player
             }
 
             float fallSpeed = verticalVelocity;
-            verticalVelocity += gravity * deltaTime;
+            if (!climbed)
+                verticalVelocity += gravity * deltaTime;
 
             Vector3 motion = planarVelocity + Vector3.up * verticalVelocity;
             controller.Move(motion * deltaTime);
@@ -440,6 +457,9 @@ namespace Shooter.Player
             if (groundedNow)
             {
                 lastGroundedTime = Time.time;
+                climbTime = 0f;
+                wallSteerUntil = 0f;
+                lastKickedWall = Vector3.zero;
                 UpgradeManager.Instance?.ResetAirJumps();
             }
 
@@ -603,6 +623,67 @@ namespace Shooter.Player
             verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
             lastGroundedTime = -999f;
             jumpBufferedUntil = -1f;
+        }
+
+        private bool UpdateWallMovement(Vector2 input, bool jumpPressed, bool jumpHeld, float deltaTime)
+        {
+            if (controller.isGrounded || isSliding || Time.time < wallSteerUntil ||
+                (!jumpPressed && (!jumpHeld || input.y <= 0.1f || climbTime >= wallClimbDuration)))
+                return false;
+
+            Vector3 forward = transform.forward;
+            if (!ProbeWall(forward, out Vector3 normal) &&
+                (!jumpPressed || (!ProbeWall(transform.right, out normal) &&
+                    !ProbeWall(-transform.right, out normal) && !ProbeWall(-forward, out normal))))
+                return false;
+
+            bool sameWall = Vector3.Dot(lastKickedWall, normal) > 0.7f;
+            if (jumpPressed && !sameWall)
+            {
+                planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * wallJumpPush;
+                float heightScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.JumpMultiplier : 1f;
+                verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
+                wallSteerUntil = Time.time + wallJumpSteerDelay;
+                lastKickedWall = normal;
+                jumpBufferedUntil = -1f;
+                lastGroundedTime = -999f;
+                return false;
+            }
+
+            if (sameWall || !jumpHeld || climbTime >= wallClimbDuration ||
+                input.y <= 0.1f || Vector3.Dot(forward, normal) > -0.45f)
+                return false;
+
+            climbTime += deltaTime;
+            verticalVelocity = wallClimbSpeed;
+            planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.4f - normal * 1.5f;
+            return true;
+        }
+
+        private bool ProbeWall(Vector3 direction, out Vector3 normal)
+        {
+            Vector3 center = transform.TransformPoint(controller.center);
+            const float probeRadius = 0.10f;
+            float distance = controller.radius + wallReach - probeRadius;
+            // At the lower probe, climbing continues until the feet reach the lip.
+            Vector3 lower = center - Vector3.up * (controller.height * 0.5f - 0.20f);
+            return TryWallCast(center, direction, probeRadius, distance, out normal) ||
+                TryWallCast(lower, direction, probeRadius, distance, out normal);
+        }
+
+        private static bool TryWallCast(Vector3 center, Vector3 direction, float radius, float distance, out Vector3 normal)
+        {
+            const int ignoreRaycast = 1 << 2;
+            if (Physics.SphereCast(center, radius, direction, out RaycastHit hit, distance,
+                ~ignoreRaycast, QueryTriggerInteraction.Ignore) &&
+                (hit.collider is BoxCollider || hit.collider is MeshCollider) && Mathf.Abs(hit.normal.y) < 0.25f)
+            {
+                normal = new Vector3(hit.normal.x, 0f, hit.normal.z).normalized;
+                return true;
+            }
+
+            normal = Vector3.zero;
+            return false;
         }
 
         private void RecoverRecoil()

@@ -47,6 +47,8 @@ namespace Shooter.Enemies
         private float actionEndsAt = -1f;
         private float planarSpeed;
         private float referenceSpeed = 2.4f;
+        private float walkStride;
+        private AnimationState walkState;
         private bool grounded = true;
 
         /// <summary>True while a one-shot action clip is playing.</summary>
@@ -97,6 +99,8 @@ namespace Shooter.Enemies
             Register(RoarClip, roar, false);
             Register(HitClip, hit, false);
             Register(DeathClip, death, false);
+            walkStride = EnemyAnimator.ReadStride(animation.transform, transform);
+            walkState = animation[WalkClip];
 
             if (animation[IdleClip] != null)
             {
@@ -220,11 +224,12 @@ namespace Shooter.Enemies
             }
 
             // Speed-matched playback keeps a slow walk from looking like a slide.
-            if (wanted == WalkClip && animation[WalkClip] != null)
+            if (wanted == WalkClip && walkState != null)
             {
-                float pace = Mathf.Clamp(planarSpeed / referenceSpeed, 0.55f, 1.35f);
-                AnimationState state = animation[WalkClip];
-                state.speed = Mathf.Lerp(state.speed, pace, 1f - Mathf.Exp(-6f * Time.deltaTime));
+                float pace = walkStride > 0f
+                    ? EnemyAnimator.StridePlaybackSpeed(walkState, planarSpeed, walkStride * transform.lossyScale.y)
+                    : Mathf.Clamp(planarSpeed / referenceSpeed, 0.55f, 1.35f);
+                walkState.speed = Mathf.Lerp(walkState.speed, pace, 1f - Mathf.Exp(-6f * Time.deltaTime));
             }
         }
     }
