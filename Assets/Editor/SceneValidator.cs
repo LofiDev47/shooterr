@@ -165,6 +165,15 @@ namespace Shooter.EditorTools
                       hud.waveSpawner != null, "HUD gameplay references are wired");
                 Check(hud.healthFill != null && hud.healthText != null && hud.ammoText != null &&
                       hud.reloadText != null, "HUD health/ammo widgets are wired");
+                Check(hud.combatReadout != null && hud.combatReadout.anchorMin == new Vector2(0.5f, 0f) &&
+                      hud.combatReadout.anchorMax == hud.combatReadout.anchorMin &&
+                      Mathf.Approximately(hud.combatReadout.anchoredPosition.x, 0f),
+                    "HUD vitals and ammo share a centered bottom readout");
+                Check(hud.combatReadout != null && hud.ammoFill != null && hud.ammoFill.sprite != null &&
+                      hud.healthFill != null && hud.healthFill.sprite != null &&
+                      hud.ammoFill.transform.IsChildOf(hud.combatReadout) &&
+                      hud.healthFill.transform.IsChildOf(hud.combatReadout),
+                    "both instrument bars have fill sprites and belong to the centered readout");
                 Check(hud.waveText != null && hud.statusText != null && hud.scoreText != null,
                     "HUD wave/score widgets are wired");
                 Check(hud.gameOverPanel != null && hud.gameOverScoreText != null && hud.hintText != null,
@@ -346,8 +355,10 @@ namespace Shooter.EditorTools
                 Check(sceneWeapon.sightModel != null && sceneWeapon.sightDot != null &&
                       sceneWeapon.sightDot.IsChildOf(sceneWeapon.sightModel),
                     "aim calibration uses the rendered optic dot");
-                Check(sceneWeapon.viewAnimation != null && sceneWeapon.viewAnimation.GetClipCount() == 9,
-                    "weapon has all nine Foundry handling clips");
+                Check(sceneWeapon.viewAnimation != null &&
+                      sceneWeapon.viewAnimation.GetClipCount() == FoundryAssets.PlayerNames.Length &&
+                      sceneWeapon.viewAnimation.GetClip("Inspect") != null,
+                    "weapon has all Foundry handling clips, including inspect");
                 if (sceneWeapon.viewAnimation != null)
                 {
                     AnimationClip[] clips = AnimationUtility.GetAnimationClips(sceneWeapon.viewAnimation.gameObject);

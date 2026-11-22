@@ -8,6 +8,7 @@ namespace Shooter.EditorTools
     {
         internal static Sprite Plate => Load("Plate");
         internal static Sprite Emblem => Load("FoundryEmblem");
+        internal static Sprite Indicator => Load("Indicator");
 
         internal static void Apply(GameObject root)
         {
@@ -30,19 +31,15 @@ namespace Shooter.EditorTools
 
             Sprite pip = Load("PhasePip");
             Sprite plate = Plate;
-            foreach (string name in new[] { "HealthPanel", "AmmoPanel", "BossBar" })
-            {
-                Transform target = hud.Find(name);
-                var bounds = (RectTransform)target;
-                AddImage(target, "InstrumentPlate", plate, bounds.sizeDelta + new Vector2(34f, 18f),
-                    new Color(0.025f, 0.046f, 0.060f, 0.92f));
-                target.Find("InstrumentPlate").SetAsFirstSibling();
-            }
+            var boss = (RectTransform)hud.Find("BossBar");
+            AddImage(boss, "InstrumentPlate", plate, boss.sizeDelta + new Vector2(34f, 18f),
+                new Color(0.025f, 0.046f, 0.060f, 0.92f));
+            boss.Find("InstrumentPlate").SetAsFirstSibling();
             foreach (Image image in hud.GetComponentsInChildren<Image>(true))
             {
                 if (image.name.StartsWith("BossPhasePip", System.StringComparison.Ordinal))
                     image.sprite = pip;
-                if (image.name == "GameOverPanel" || image.name == "UpgradePanel")
+                if (image.name == "GameOverPanel")
                     image.sprite = plate;
             }
         }

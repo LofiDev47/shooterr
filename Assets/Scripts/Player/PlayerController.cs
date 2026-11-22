@@ -628,7 +628,12 @@ namespace Shooter.Player
         private bool UpdateWallMovement(Vector2 input, bool jumpPressed, bool jumpHeld, float deltaTime)
         {
             if (controller.isGrounded || isSliding || Time.time < wallSteerUntil ||
-                (!jumpPressed && (!jumpHeld || input.y <= 0.1f || climbTime >= wallClimbDuration)))
+                (!jumpPressed && (!jumpHeld || input.y <= 0.1f)))
+                return false;
+
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float climbLimit = wallClimbDuration * (upgrades != null ? upgrades.WallClimbMultiplier : 1f);
+            if (!jumpPressed && climbTime >= climbLimit)
                 return false;
 
             Vector3 forward = transform.forward;
@@ -640,8 +645,9 @@ namespace Shooter.Player
             bool sameWall = Vector3.Dot(lastKickedWall, normal) > 0.7f;
             if (jumpPressed && !sameWall)
             {
-                planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * wallJumpPush;
-                float heightScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.JumpMultiplier : 1f;
+                float push = wallJumpPush * (upgrades != null ? upgrades.WallKickMultiplier : 1f);
+                planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * push;
+                float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
                 verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
                 wallSteerUntil = Time.time + wallJumpSteerDelay;
                 lastKickedWall = normal;
@@ -650,7 +656,7 @@ namespace Shooter.Player
                 return false;
             }
 
-            if (sameWall || !jumpHeld || climbTime >= wallClimbDuration ||
+            if (sameWall || !jumpHeld || climbTime >= climbLimit ||
                 input.y <= 0.1f || Vector3.Dot(forward, normal) > -0.45f)
                 return false;
 

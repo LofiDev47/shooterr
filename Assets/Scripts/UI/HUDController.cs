@@ -28,10 +28,13 @@ namespace Shooter.UI
         public WaveSpawner waveSpawner;
 
         [Header("HUD elements (scene builder)")]
+        public RectTransform combatReadout;
         public Image healthFill;
         public Text healthText;
+        public Image ammoFill;
         public Text ammoText;
         public Text reloadText;
+        public GameObject shotgunChip;
         public Text shotgunText;
         public Text waveText;
         public Text statusText;
@@ -40,6 +43,7 @@ namespace Shooter.UI
         public GameObject gameOverPanel;
         public Text gameOverScoreText;
         public Text hintText;
+        public Text fpsText;
 
         [Header("Toast (ammo pickups and similar)")]
         public Text toastText;
@@ -77,16 +81,21 @@ namespace Shooter.UI
         [SerializeField] private float crosshairMaxSpread = 14f;
 
         private const string HintBase =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   C slide   ·   R reload   ·   ESC pause";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   C slide   ·   R reload   ·   ESC pause";
         private const string HintWithShotgun =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   V melee   ·   F shotgun   ·   C slide   ·   R reload   ·   ESC pause";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R reload   ·   ESC pause";
 
-        private static readonly Color HealthyColor = new Color(0.35f, 0.9f, 0.45f);
+        private static readonly Color HealthyColor = new Color(0.46f, 0.91f, 0.80f);
+        private static readonly Color ReloadColor = new Color(1f, 0.76f, 0.40f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
         private static readonly Color NormalHitColor = new Color(1f, 0.95f, 0.75f, 1f);
         private static readonly Color HeadshotColor = new Color(1f, 0.68f, 0.14f, 1f);
 
         private int lastHealth = -1;
+        private int lastMaxHealth = -1;
+        private int fpsFrames;
+        private float fpsSeconds;
+        private int lastFps;
         private int lastMagazine = -1;
         private int lastReserve = -1;
         private int lastReloadPercent = -1;
@@ -149,6 +158,7 @@ namespace Shooter.UI
             UpdateWeapon();
             UpdateShotgun();
             UpdateHint();
+            UpdateFps();
             UpdateWave();
             UpdateBossBar();
             UpdateScore();
@@ -290,14 +300,18 @@ namespace Shooter.UI
                 : 0f;
 
             healthFill.fillAmount = Mathf.Lerp(healthFill.fillAmount, ratio, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
-            healthFill.color = Color.Lerp(CriticalColor, HealthyColor, ratio);
+            healthFill.color = Color.Lerp(CriticalColor, HealthyColor, Mathf.InverseLerp(0.20f, 0.60f, ratio));
 
             int health = Mathf.CeilToInt(playerHealth.CurrentHealth);
+            int maxHealth = Mathf.CeilToInt(playerHealth.MaxHealth);
 
-            if (health != lastHealth && healthText != null)
+            if ((health != lastHealth || maxHealth != lastMaxHealth) && healthText != null)
             {
-                healthText.text = health.ToString();
+                healthText.text = combatReadout != null ? FormatReadout(health, maxHealth) : health.ToString();
+                if (combatReadout != null)
+                    healthText.color = ratio <= 0.25f ? CriticalColor : Color.white;
                 lastHealth = health;
+                lastMaxHealth = maxHealth;
             }
         }
 
@@ -313,10 +327,20 @@ namespace Shooter.UI
 
             if ((magazine != lastMagazine || reserve != lastReserve) && ammoText != null)
             {
-                ammoText.text = $"{magazine} / {reserve}";
+                ammoText.text = combatReadout != null ? FormatReadout(magazine, reserve) : $"{magazine} / {reserve}";
                 ammoText.color = magazine <= 5 ? CriticalColor : Color.white;
                 lastMagazine = magazine;
                 lastReserve = reserve;
+            }
+
+            bool reloading = weapon.IsReloading;
+            float reloadProgress = reloading ? weapon.ReloadProgress01 : 0f;
+            if (ammoFill != null)
+            {
+                int capacity = weapon.State != null ? weapon.State.MagazineSize : 0;
+                ammoFill.fillAmount = reloading ? reloadProgress :
+                    capacity > 0 ? (float)magazine / capacity : 0f;
+                ammoFill.color = reloading ? ReloadColor : magazine <= 5 ? CriticalColor : HealthyColor;
             }
 
             if (reloadText == null)
@@ -324,14 +348,16 @@ namespace Shooter.UI
                 return;
             }
 
-            if (weapon.IsReloading)
+            if (reloading)
             {
-                int percent = Mathf.RoundToInt(weapon.ReloadProgress01 * 100f);
-
-                if (percent != lastReloadPercent)
+                if (ammoFill == null)
                 {
-                    reloadText.text = $"RELOADING {percent}%";
-                    lastReloadPercent = percent;
+                    int percent = Mathf.RoundToInt(reloadProgress * 100f);
+                    if (percent != lastReloadPercent)
+                    {
+                        reloadText.text = $"RELOADING {percent}%";
+                        lastReloadPercent = percent;
+                    }
                 }
 
                 reloadText.enabled = true;
@@ -341,6 +367,11 @@ namespace Shooter.UI
                 reloadText.enabled = false;
                 lastReloadPercent = -1;
             }
+        }
+
+        private static string FormatReadout(int amount, int reference)
+        {
+            return $"{amount}<size=20><color=#A4B9C4>  /  {reference}</color></size>";
         }
 
         /// <summary>Underbarrel shell count and reload state; hidden until the augment is taken.</summary>
@@ -353,6 +384,8 @@ namespace Shooter.UI
 
             bool unlocked = UpgradeManager.Instance != null && UpgradeManager.Instance.ShotgunUnlocked;
 
+            if (shotgunChip != null && shotgunChip.activeSelf != unlocked)
+                shotgunChip.SetActive(unlocked);
             if (shotgunText.enabled != unlocked)
             {
                 shotgunText.enabled = unlocked;
@@ -401,6 +434,40 @@ namespace Shooter.UI
             {
                 hintText.text = text;
             }
+        }
+
+        private void UpdateFps()
+        {
+            if (fpsText == null)
+                return;
+
+            bool show = SettingsManager.Instance != null && SettingsManager.Instance.ShowFps;
+            if (fpsText.enabled != show)
+            {
+                fpsText.enabled = show;
+                fpsSeconds = 0f;
+                fpsFrames = 0;
+                lastFps = -1;
+                if (show)
+                    fpsText.text = "— FPS";
+            }
+
+            if (!show)
+                return;
+
+            fpsFrames++;
+            fpsSeconds += Time.unscaledDeltaTime;
+            if (fpsSeconds < 0.35f)
+                return;
+
+            int fps = Mathf.RoundToInt(fpsFrames / fpsSeconds);
+            if (fps != lastFps)
+            {
+                fpsText.text = $"{fps} FPS";
+                lastFps = fps;
+            }
+            fpsFrames = 0;
+            fpsSeconds = 0f;
         }
 
         private void UpdateWave()

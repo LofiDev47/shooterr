@@ -1554,52 +1554,8 @@ namespace Shooter.EditorTools
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 0.5f;
 
-            // Health (bottom left).
-            RectTransform healthPanel = CreateRect("HealthPanel", canvasObject.transform, new Vector2(0f, 0f),
-                new Vector2(0f, 0f), new Vector2(36f, 36f), new Vector2(320f, 64f));
-
-            Text healthLabel = CreateText(healthPanel, "HealthLabel", "VITALS", 15, new Color(0.55f, 0.88f, 0.82f),
-                TextAnchor.MiddleLeft, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 36f),
-                new Vector2(320f, 20f), font);
-
-            RectTransform healthBar = CreateRect("HealthBar", healthPanel, new Vector2(0f, 0f), new Vector2(0f, 0f),
-                Vector2.zero, new Vector2(320f, 26f));
-            Image healthBackground = AddImage(healthBar, new Color(0.10f, 0.18f, 0.21f, 1f));
-
-            RectTransform healthFillRect = CreateRect("HealthFill", healthBar, Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero);
-            healthFillRect.offsetMin = new Vector2(2f, 2f);
-            healthFillRect.offsetMax = new Vector2(-2f, -2f);
-            Image healthFill = AddImage(healthFillRect, new Color(0.35f, 0.9f, 0.45f));
-            healthFill.type = Image.Type.Filled;
-            healthFill.fillMethod = Image.FillMethod.Horizontal;
-            healthFill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            healthFill.fillAmount = 1f;
-
-            Text healthText = CreateText(healthBar, "HealthText", "100", 17, Color.white, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(320f, 26f), font,
-                FontStyle.Bold);
-
-            // Ammo (bottom right).
-            RectTransform ammoPanel = CreateRect("AmmoPanel", canvasObject.transform, new Vector2(1f, 0f),
-                new Vector2(1f, 0f), new Vector2(-36f, 36f), new Vector2(360f, 110f));
-
-            Text ammoText = CreateText(ammoPanel, "AmmoText", "30 / 150", 40, Color.white, TextAnchor.MiddleRight,
-                new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 40f), new Vector2(360f, 48f), font,
-                FontStyle.Bold);
-
-            Text ammoLabel = CreateText(ammoPanel, "AmmoLabel", "MUNITIONS", 15, new Color(0.55f, 0.88f, 0.82f),
-                TextAnchor.MiddleRight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 92f),
-                new Vector2(360f, 20f), font);
-
-            Text reloadText = CreateText(ammoPanel, "ReloadText", "RELOADING", 18, new Color(1f, 0.82f, 0.3f),
-                TextAnchor.MiddleRight, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, -12f),
-                new Vector2(360f, 24f), font, FontStyle.Bold);
-            reloadText.enabled = false;
-
-            Text shotgunText = CreateText(ammoPanel, "ShotgunText", "SHELLS 4/4", 16,
-                new Color(1f, 0.78f, 0.32f), TextAnchor.MiddleRight, new Vector2(1f, 0f),
-                new Vector2(1f, 0f), new Vector2(0f, 14f), new Vector2(360f, 22f), font, FontStyle.Bold);
+            HUDController hud = canvasObject.AddComponent<HUDController>();
+            BuildCombatReadout(canvasObject.transform, font, hud);
 
             // Wave (top center).
             Text waveText = CreateText(canvasObject.transform, "WaveText", "GET READY", 32, Color.white,
@@ -1693,7 +1649,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move   Â·   SHIFT sprint   Â·   SPACE jump   Â·   LMB fire   Â·   RMB aim   Â·   V melee   Â·   C slide   Â·   R reload   Â·   ESC free cursor",
+                "WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R reload  /  ESC pause",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
@@ -1722,16 +1678,10 @@ namespace Shooter.EditorTools
             // Augment choice screen, built last so it draws over the game-over panel.
             UpgradePanelRig upgradePanel = BuildUpgradePanel(canvasObject.transform, font);
 
-            HUDController hud = canvasObject.AddComponent<HUDController>();
             hud.playerHealth = rig.Health;
             hud.weapon = rig.Weapon;
             hud.gameManager = managers.Game;
             hud.waveSpawner = managers.Waves;
-            hud.healthFill = healthFill;
-            hud.healthText = healthText;
-            hud.ammoText = ammoText;
-            hud.reloadText = reloadText;
-            hud.shotgunText = shotgunText;
             hud.waveText = waveText;
             hud.statusText = statusText;
             hud.scoreText = scoreText;
@@ -1739,6 +1689,21 @@ namespace Shooter.EditorTools
             hud.gameOverPanel = gameOverPanel.gameObject;
             hud.gameOverScoreText = gameOverScore;
             hud.hintText = hintText;
+            RectTransform diagnostics = CreateRect("Diagnostics", canvasObject.transform,
+                Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            diagnostics.anchorMax = Vector2.one;
+            diagnostics.offsetMin = Vector2.zero;
+            diagnostics.offsetMax = Vector2.zero;
+            Canvas diagnosticsCanvas = diagnostics.gameObject.AddComponent<Canvas>();
+            diagnosticsCanvas.overrideSorting = true;
+            diagnosticsCanvas.sortingOrder = 150;
+            Vector2 topLeft = new Vector2(0f, 1f);
+            hud.fpsText = CreateText(diagnostics, "FpsText", "", 18, Color.white, TextAnchor.MiddleLeft,
+                topLeft, topLeft, new Vector2(22f, -5f), new Vector2(115f, 24f), font, FontStyle.Bold);
+            Outline fpsOutline = hud.fpsText.gameObject.AddComponent<Outline>();
+            fpsOutline.effectColor = Color.black;
+            fpsOutline.effectDistance = new Vector2(1f, -1f);
+            hud.fpsText.enabled = false;
             hud.toastText = toastText;
             hud.hitMarkerGroup = hitMarkerGroup;
             hud.bossBarRoot = bossPanel.gameObject;
@@ -1768,13 +1733,92 @@ namespace Shooter.EditorTools
             flash.flashImage = damageImage;
 
             // Keep the compiler honest about intentionally unused labels.
-            _ = healthLabel;
-            _ = ammoLabel;
             _ = gameOverTitle;
             _ = gameOverHint;
-            _ = healthBackground;
 
             return hud;
+        }
+
+        private static void BuildCombatReadout(Transform canvas, Font font, HUDController hud)
+        {
+            Vector2 bottomCenter = new Vector2(0.5f, 0f);
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            Color mint = new Color(0.46f, 0.91f, 0.80f);
+            Color amber = new Color(1f, 0.76f, 0.40f);
+            Sprite plate = FoundryHudSkin.Plate;
+
+            RectTransform readout = CreateRect("CombatReadout", canvas, bottomCenter, bottomCenter,
+                new Vector2(0f, 49f), new Vector2(488f, 94f));
+            hud.combatReadout = readout;
+            Image rim = AddImage(readout, new Color(0.21f, 0.38f, 0.41f));
+            rim.sprite = plate;
+            Image backing = AddImage(CreateRect("Backing", readout, center, center,
+                Vector2.zero, new Vector2(484f, 92f)), new Color(0.035f, 0.062f, 0.078f, 0.97f));
+            backing.sprite = plate;
+            AddImage(CreateRect("Divider", readout, center, center,
+                Vector2.zero, new Vector2(1f, 62f)), new Color(0.25f, 0.43f, 0.47f, 0.85f));
+
+            RectTransform health = CreateRect("HealthPanel", readout, center, center,
+                new Vector2(-119f, 0f), new Vector2(208f, 74f));
+            RectTransform ammo = CreateRect("AmmoPanel", readout, center, center,
+                new Vector2(119f, 0f), new Vector2(208f, 74f));
+
+            Vector2 left = new Vector2(0f, 0.5f);
+            AddImage(CreateRect("VitalsGlyphHorizontal", health, left, center,
+                new Vector2(8f, 24f), new Vector2(12f, 3f)), mint);
+            AddImage(CreateRect("VitalsGlyphVertical", health, left, center,
+                new Vector2(8f, 24f), new Vector2(3f, 12f)), mint);
+            for (int i = 0; i < 3; i++)
+            {
+                AddImage(CreateRect("AmmoGlyph" + i, ammo, left, center,
+                    new Vector2(4f + i * 5f, 24f), new Vector2(3f, 10f)), mint);
+            }
+            CreateText(health, "HealthLabel", "VITALS", 14, mint, TextAnchor.MiddleLeft,
+                left, left, new Vector2(24f, 24f), new Vector2(140f, 20f), font, FontStyle.Bold);
+            CreateText(ammo, "AmmoLabel", "AMMO", 14, mint, TextAnchor.MiddleLeft,
+                left, left, new Vector2(24f, 24f), new Vector2(84f, 20f), font, FontStyle.Bold);
+            hud.healthText = CreateText(health, "HealthText", "", 33, Color.white, TextAnchor.MiddleLeft,
+                left, left, new Vector2(0f, -4f), new Vector2(204f, 41f), font, FontStyle.Bold);
+            hud.ammoText = CreateText(ammo, "AmmoText", "", 33, Color.white, TextAnchor.MiddleLeft,
+                left, left, new Vector2(0f, -4f), new Vector2(204f, 41f), font, FontStyle.Bold);
+
+            hud.healthFill = BuildReadoutBar(health, "HealthBar", mint);
+            hud.ammoFill = BuildReadoutBar(ammo, "AmmoBar", mint);
+            Vector2 right = new Vector2(1f, 0.5f);
+            hud.reloadText = CreateText(ammo, "ReloadText", "RELOADING", 13, amber,
+                TextAnchor.MiddleRight, right, right, new Vector2(0f, 24f), new Vector2(104f, 20f),
+                font, FontStyle.Bold);
+            hud.reloadText.enabled = false;
+
+            Vector2 topCenter = new Vector2(0.5f, 1f);
+            RectTransform shellChip = CreateRect("ShotgunChip", ammo, topCenter, bottomCenter,
+                new Vector2(0f, 16f), new Vector2(188f, 28f));
+            Image chip = AddImage(shellChip, new Color(0.08f, 0.12f, 0.14f, 0.94f));
+            chip.sprite = plate;
+            hud.shotgunChip = shellChip.gameObject;
+            hud.shotgunText = CreateText(shellChip, "ShotgunText", "", 14, amber,
+                TextAnchor.MiddleCenter, center, center, Vector2.zero, new Vector2(166f, 24f),
+                font, FontStyle.Bold);
+            hud.shotgunChip.SetActive(false);
+        }
+
+        private static Image BuildReadoutBar(Transform panel, string name, Color color)
+        {
+            Vector2 bottomCenter = new Vector2(0.5f, 0f);
+            RectTransform bar = CreateRect(name, panel, bottomCenter, bottomCenter,
+                new Vector2(0f, 3f), new Vector2(184f, 6f));
+            AddImage(bar, new Color(0.12f, 0.21f, 0.25f));
+            RectTransform fillRect = CreateRect(name + "Fill", bar, Vector2.zero, Vector2.zero,
+                Vector2.zero, Vector2.zero);
+            fillRect.anchorMax = Vector2.one;
+            fillRect.offsetMin = Vector2.zero;
+            fillRect.offsetMax = Vector2.zero;
+            Image fill = AddImage(fillRect, color);
+            fill.sprite = FoundryHudSkin.Indicator;
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            return fill;
         }
 
         // ---------------------------------------------------------------- menus
@@ -1811,99 +1855,84 @@ namespace Shooter.EditorTools
             public Text Hint;
         }
 
-        /// <summary>
-        /// Builds the wave-clear augment screen: a dim panel with four cards, each
-        /// the colour of its rarity (Standard / Advanced / Master) rather than
-        /// its slot. Cards keep a coloured background, header badge and label so
-        /// value can be read at a glance. Input stays keyboard only.
-        /// </summary>
         private static UpgradePanelRig BuildUpgradePanel(Transform canvas, Font font)
         {
-            UpgradePanelRig result = new UpgradePanelRig
+            const int cardCount = 4;
+            var result = new UpgradePanelRig
             {
-                Roots = new GameObject[4],
-                Backgrounds = new Image[4],
-                Accents = new Image[4],
-                Badges = new Image[4],
-                Rarities = new Text[4],
-                Titles = new Text[4],
-                Descriptions = new Text[4],
+                Roots = new GameObject[cardCount],
+                Backgrounds = new Image[cardCount],
+                Accents = new Image[cardCount],
+                Badges = new Image[cardCount],
+                Rarities = new Text[cardCount],
+                Titles = new Text[cardCount],
+                Descriptions = new Text[cardCount],
             };
 
-            Image panelImage = CreateFullScreenImage(canvas, "UpgradePanel", new Color(0.02f, 0.03f, 0.05f, 0.88f));
-            result.Panel = panelImage.gameObject;
+            Image backdrop = CreateFullScreenImage(canvas, "UpgradePanel", new Color(0.018f, 0.029f, 0.040f, 0.96f));
+            result.Panel = backdrop.gameObject;
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            Vector2 topLeft = new Vector2(0f, 1f);
+            Vector2 topRight = Vector2.one;
+            Color signal = new Color(0.47f, 0.91f, 0.82f);
+            Color secondaryText = new Color(0.78f, 0.84f, 0.87f);
+            Sprite plate = FoundryHudSkin.Plate;
 
-            Text title = CreateText(panelImage.transform, "UpgradeTitle", "WAVE CLEARED", 64,
-                new Color(1f, 0.82f, 0.3f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 250f), new Vector2(1200f, 80f), font, FontStyle.Bold);
+            CreateText(backdrop.transform, "UpgradeSubtitle", "WAVE CLEARED", 22, signal,
+                TextAnchor.MiddleLeft, center, topLeft, new Vector2(-516f, 343f),
+                new Vector2(760f, 30f), font, FontStyle.Bold);
+            CreateText(backdrop.transform, "UpgradeTitle", "Choose an augment", 54, Color.white,
+                TextAnchor.MiddleLeft, center, topLeft, new Vector2(-519f, 311f),
+                new Vector2(900f, 68f), font, FontStyle.Bold);
+            Image headingRule = AddImage(CreateRect("HeadingRule", backdrop.transform, center, center,
+                new Vector2(0f, 228f), new Vector2(1032f, 2f)), new Color(0.23f, 0.38f, 0.40f));
+            headingRule.raycastTarget = false;
 
-            Text subtitle = CreateText(panelImage.transform, "UpgradeSubtitle", "CHOOSE AN AUGMENT", 26,
-                new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 188f), new Vector2(1200f, 40f), font);
+            result.Hint = CreateText(backdrop.transform, "ChoiceHint", "Press 1 / 2 / 3 / 4 to select", 22, secondaryText,
+                TextAnchor.MiddleCenter, center, center, new Vector2(0f, -305f),
+                new Vector2(1032f, 42f), font);
 
-            result.Hint = CreateText(panelImage.transform, "ChoiceHint", "PRESS 1 / 2 / 3 / 4 TO PICK", 24,
-                new Color(1f, 1f, 1f, 0.9f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(0f, -330f), new Vector2(1200f, 40f), font);
-
-            Vector2[] offsets =
+            for (int i = 0; i < cardCount; i++)
             {
-                new Vector2(-645f, -40f), new Vector2(-215f, -40f),
-                new Vector2(215f, -40f), new Vector2(645f, -40f),
-            };
-
-            for (int i = 0; i < 4; i++)
-            {
-                RectTransform card = CreateRect("Card" + (i + 1), panelImage.transform, new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f), offsets[i], new Vector2(360f, 440f));
+                var offset = new Vector2(i % 2 == 0 ? -267f : 267f, i < 2 ? 106f : -146f);
+                RectTransform card = CreateRect("Card" + (i + 1), backdrop.transform, center, center,
+                    offset, new Vector2(516f, 230f));
                 result.Roots[i] = card.gameObject;
 
-                Image cardBack = card.gameObject.AddComponent<Image>();
-                cardBack.color = new Color(0.10f, 0.11f, 0.14f, 0.98f); // re-tinted to rarity at pick time.
-                cardBack.raycastTarget = false;
-                result.Backgrounds[i] = cardBack;
+                Image back = AddImage(card, new Color(0.078f, 0.108f, 0.135f));
+                back.sprite = plate;
+                back.raycastTarget = false;
+                result.Backgrounds[i] = back;
 
-                // A thin accent strip along the top edge.
-                RectTransform strip = CreateRect("AccentStrip", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                    new Vector2(0f, 5f), new Vector2(356f, 10f));
-                Image accentStrip = AddImage(strip, Color.white);
-                result.Accents[i] = accentStrip;
+                Image accent = AddImage(CreateRect("AccentStrip", card, topLeft, topLeft,
+                    new Vector2(38f, -37f), new Vector2(24f, 3f)), Color.white);
+                accent.raycastTarget = false;
+                result.Accents[i] = accent;
 
-                // Colour carries the card's VALUE, not its slot: a Master card reads
-                // gold wherever it was dealt; a Standard one reads slate.
-                RectTransform badge = CreateRect("KeyBadge", card, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                    new Vector2(0f, -34f), new Vector2(56f, 56f));
-                Image badgeImage = badge.gameObject.AddComponent<Image>();
-                badgeImage.color = Color.white;
+                result.Rarities[i] = CreateText(card, "CardRarity", "", 18, Color.white,
+                    TextAnchor.MiddleLeft, topLeft, topLeft, new Vector2(74f, -23f),
+                    new Vector2(286f, 30f), font, FontStyle.Bold);
+
+                RectTransform badge = CreateRect("KeyBadge", card, topRight, topRight,
+                    new Vector2(-40f, -23f), new Vector2(50f, 40f));
+                Image badgeImage = AddImage(badge, signal);
+                badgeImage.sprite = plate;
                 badgeImage.raycastTarget = false;
                 result.Badges[i] = badgeImage;
 
-                Text badgeText = CreateText(badge, "KeyText", (i + 1).ToString(), 28,
-                    new Color(0.05f, 0.06f, 0.09f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f),
-                    new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(56f, 56f), font, FontStyle.Bold);
+                CreateText(badge, "KeyText", (i + 1).ToString(), 22,
+                    new Color(0.025f, 0.045f, 0.058f), TextAnchor.MiddleCenter,
+                    center, center, Vector2.zero, new Vector2(50f, 40f), font, FontStyle.Bold);
 
-                result.Rarities[i] = CreateText(card, "CardRarity", "STANDARD", 15, Color.white,
-                    TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                    new Vector2(0f, -68f), new Vector2(300f, 22f), font, FontStyle.Bold);
+                result.Titles[i] = CreateText(card, "CardTitle", "", 31, Color.white,
+                    TextAnchor.MiddleLeft, topLeft, topLeft, new Vector2(38f, -63f),
+                    new Vector2(440f, 48f), font, FontStyle.Bold);
 
-                result.Titles[i] = CreateText(card, "CardTitle", "AUGMENT", 28, Color.white,
-                    TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, 105f), new Vector2(340f, 56f), font, FontStyle.Bold);
-
-                Text description = CreateText(card, "CardDescription", "DESCRIBE THE CARD HERE", 20,
-                    Color.white, TextAnchor.UpperCenter, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(0f, -80f), new Vector2(320f, 250f), font);
-                description.horizontalOverflow = HorizontalWrapMode.Wrap; // Descriptions must wrap.
-                result.Descriptions[i] = description;
-
-                _ = badgeText;
-            }
-
-            _ = title;
-            _ = subtitle;
-
-            foreach (GameObject root in result.Roots)
-            {
-                root.SetActive(false);
+                result.Descriptions[i] = CreateText(card, "CardDescription", "", 23, secondaryText,
+                    TextAnchor.UpperLeft, topLeft, topLeft, new Vector2(38f, -123f),
+                    new Vector2(440f, 85f), font);
+                result.Descriptions[i].horizontalOverflow = HorizontalWrapMode.Wrap;
+                card.gameObject.SetActive(false);
             }
 
             result.Panel.SetActive(false);

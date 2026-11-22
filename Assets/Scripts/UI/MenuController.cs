@@ -66,6 +66,7 @@ namespace Shooter.UI
         private Toggle invertToggle;
         private Toggle shakeToggle;
         private Toggle damageToggle;
+        private Toggle fpsToggle;
         private Toggle fullscreenToggle;
         private Toggle vsyncToggle;
         private Button resolutionButton;
@@ -451,6 +452,9 @@ namespace Shooter.UI
                 damageToggle.SetIsOnWithoutNotify(settings.ShowDamageNumbers);
             }
 
+            if (fpsToggle != null)
+                fpsToggle.SetIsOnWithoutNotify(settings.ShowFps);
+
             if (fullscreenToggle != null)
             {
                 fullscreenToggle.SetIsOnWithoutNotify(settings.Fullscreen);
@@ -488,7 +492,7 @@ namespace Shooter.UI
 
             if (settings == null)
             {
-                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · V melee · C slide · R reload · F shotgun · ESC pause" +
+                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R reload · G shotgun · ESC pause" +
                     "\nAt a wall, hold W + SPACE to climb or press SPACE airborne to kick away.";
                 return;
             }
@@ -505,6 +509,7 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionJump)} jump" +
                 " · LMB fire · RMB aim" +
                 $" · {K(SettingsManager.ActionMelee)} melee" +
+                $" · {K(SettingsManager.ActionInspect)} inspect" +
                 $" · {K(SettingsManager.ActionSlide)} slide" +
                 $" · {K(SettingsManager.ActionReload)} reload" +
                 $" · {K(SettingsManager.ActionShotgun)} shotgun" +
@@ -792,13 +797,15 @@ namespace Shooter.UI
             invertToggle = CreateToggleRow(column, "Invert Y", settings != null && settings.InvertY,
                 168f, value => settings?.SetInvertY(value));
             shakeToggle = CreateToggleRow(column, "Screen Shake", settings == null || settings.ShakeEnabled,
-                118f, value => settings?.SetShakeEnabled(value));
+                125f, value => settings?.SetShakeEnabled(value));
             damageToggle = CreateToggleRow(column, "Damage Numbers", settings == null || settings.ShowDamageNumbers,
-                68f, value => settings?.SetShowDamageNumbers(value));
+                82f, value => settings?.SetShowDamageNumbers(value));
+            fpsToggle = CreateToggleRow(column, "Show FPS", settings != null && settings.ShowFps,
+                39f, value => settings?.SetShowFps(value));
             fullscreenToggle = CreateToggleRow(column, "Fullscreen", settings == null || settings.Fullscreen,
-                18f, value => settings?.SetFullscreen(value));
+                -4f, value => settings?.SetFullscreen(value));
             vsyncToggle = CreateToggleRow(column, "VSync", settings == null || settings.VSyncEnabled,
-                -32f, value => settings?.SetVSync(value));
+                -47f, value => settings?.SetVSync(value));
 
             CreateText(column, "ResolutionLabel", "RESOLUTION", 18, Color.white, TextAnchor.MiddleLeft,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-80f, -92f), new Vector2(160f, 30f), font);
@@ -812,10 +819,10 @@ namespace Shooter.UI
 
             // Compact two-column keybind grid.
             SettingsManager.BindingDef[] defs = SettingsManager.AllBindings;
-            const int rows = 6;
+            int rows = (defs.Length + 1) / 2;
             for (int i = 0; i < rows; i++)
             {
-                float y = -210f - i * 52f;
+                float y = -210f - i * 45f;
                 CreateKeybindRow(column, defs[i], new Vector2(-260f, y), new Vector2(420f, 44f));
                 if (defs.Length > i + rows)
                 {

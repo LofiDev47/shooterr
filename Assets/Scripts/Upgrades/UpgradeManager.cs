@@ -57,18 +57,18 @@ namespace Shooter.Upgrades
 
         private static Color RarityColor(AugmentRarity rarity) => rarity switch
         {
-            AugmentRarity.Standard => new Color(0.54f, 0.60f, 0.68f),
-            AugmentRarity.Advanced => new Color(0.32f, 0.78f, 0.90f),
-            AugmentRarity.Master => new Color(1.00f, 0.81f, 0.30f),
+            AugmentRarity.Standard => new Color(0.73f, 0.80f, 0.88f),
+            AugmentRarity.Advanced => new Color(0.45f, 0.93f, 0.82f),
+            AugmentRarity.Master => new Color(1.00f, 0.77f, 0.39f),
             _ => Color.white,
         };
 
         private static Color RarityBack(AugmentRarity rarity) => rarity switch
         {
-            AugmentRarity.Standard => new Color(0.16f, 0.17f, 0.20f, 0.98f),
-            AugmentRarity.Advanced => new Color(0.06f, 0.17f, 0.21f, 0.98f),
-            AugmentRarity.Master => new Color(0.21f, 0.15f, 0.04f, 0.98f),
-            _ => new Color(0.10f, 0.11f, 0.14f, 0.98f),
+            AugmentRarity.Standard => new Color(0.087f, 0.113f, 0.145f),
+            AugmentRarity.Advanced => new Color(0.054f, 0.154f, 0.153f),
+            AugmentRarity.Master => new Color(0.169f, 0.122f, 0.073f),
+            _ => new Color(0.084f, 0.105f, 0.128f),
         };
 
         private void SetCardVisuals(int index, AugmentDef def)
@@ -96,10 +96,6 @@ namespace Shooter.Upgrades
                 cardRarities[index].color = accent;
             }
 
-            if (cardTitles != null && index < cardTitles.Length && cardTitles[index] != null)
-            {
-                cardTitles[index].color = accent;
-            }
         }
 
         // --- live multiplier state (backing fields, mutated by augment defs) -----
@@ -154,6 +150,8 @@ namespace Shooter.Upgrades
 
         private Weapon weapon;
         private int airJumpsUsed;
+        private bool traversalHarness;
+        private bool brawlerKit;
 
         // --- read-only views used by gameplay code -------------------------------
         public float DamageMultiplier => damageMultiplier;
@@ -163,6 +161,10 @@ namespace Shooter.Upgrades
         public float SpreadMultiplier => spreadMultiplier;
         public float RecoilMultiplier => recoilMultiplier;
         public float SpeedMultiplier => speedMultiplier;
+        public float WallClimbMultiplier => traversalHarness ? 1.35f : 1f;
+        public float WallKickMultiplier => traversalHarness ? 1.15f : 1f;
+        public float MeleeRangeMultiplier => brawlerKit ? 1.20f : 1f;
+        public float MeleeDamageMultiplier => brawlerKit ? 1.30f : 1f;
         public float JumpMultiplier => jumpMultiplier;
         public float SlideSpeedMultiplier => slideSpeedMultiplier;
         public float SlideCooldownMultiplier => slideCooldownMultiplier;
@@ -310,13 +312,13 @@ namespace Shooter.Upgrades
 
             if (choiceHintText != null)
             {
-                string hint = "PRESS ";
+                string hint = "Press ";
                 for (int i = 0; i < offers.Count; i++)
                 {
                     hint += i > 0 ? " / " + (i + 1) : (i + 1).ToString();
                 }
 
-                choiceHintText.text = hint + " TO PICK";
+                choiceHintText.text = hint + " to select";
             }
 
             Debug.Log($"[Shooter] Offering {offers.Count} augments: {string.Join(", ", offers.ConvertAll(o => o.Title))}.");
@@ -387,6 +389,8 @@ namespace Shooter.Upgrades
         public void ResetAugments()
         {
             ownedStacks.Clear();
+            traversalHarness = false;
+            brawlerKit = false;
             damageMultiplier = 1f;
             fireRateMultiplier = 1f;
             reloadSpeedMultiplier = 1f;
@@ -954,7 +958,7 @@ namespace Shooter.Upgrades
                     Id = "Breach Tube",
                     Rarity = AugmentRarity.Master,
                     Title = "Breach Tube",
-                    Description = "Mount a four-shell underbarrel shotgun. Press F to fire",
+                    Description = "Mount a four-shell underbarrel shotgun. Uses the Shotgun binding.",
                     CanOffer = manager => !manager.ShotgunUnlocked,
                     Apply = manager => manager.UnlockShotgun(),
                 },
@@ -1128,6 +1132,63 @@ namespace Shooter.Upgrades
                     Title = "Salvage Rounds",
                     Description = "Kills refund 10% of a magazine as reserve ammo",
                     Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
+                },
+                new AugmentDef
+                {
+                    Id = "Traversal Harness",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Traversal Harness",
+                    Description = "Climb walls 35% longer and kick off 15% faster",
+                    CanOffer = manager => !manager.traversalHarness,
+                    Apply = manager => manager.traversalHarness = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Brawler Kit",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Brawler Kit",
+                    Description = "+20% melee reach and +30% melee damage",
+                    CanOffer = manager => !manager.brawlerKit,
+                    Apply = manager => manager.brawlerKit = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Runner's Plating",
+                    Rarity = AugmentRarity.Standard,
+                    Title = "Runner's Plating",
+                    Description = "Move 10% faster and gain 8% damage reduction",
+                    CanOffer = manager => !manager.ownedStacks.ContainsKey("Runner's Plating"),
+                    Apply = manager =>
+                    {
+                        manager.AddSpeedMultiplier(0.10f);
+                        manager.AddDamageReduction(0.08f);
+                    },
+                },
+                new AugmentDef
+                {
+                    Id = "Second Wind",
+                    Rarity = AugmentRarity.Master,
+                    Title = "Second Wind",
+                    Description = "Gain an air jump and shorten slide cooldown by 25%",
+                    CanOffer = manager => !manager.ownedStacks.ContainsKey("Second Wind"),
+                    Apply = manager =>
+                    {
+                        manager.AddExtraAirJump();
+                        manager.ReduceSlideCooldown(0.25f);
+                    },
+                },
+                new AugmentDef
+                {
+                    Id = "Field Medic",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Field Medic",
+                    Description = "+20 max health and regenerate 1.5 health per second",
+                    CanOffer = manager => !manager.ownedStacks.ContainsKey("Field Medic"),
+                    Apply = manager =>
+                    {
+                        manager.AddMaxHealth(20f);
+                        manager.AddRegen(1.5f);
+                    },
                 },
             };
         }

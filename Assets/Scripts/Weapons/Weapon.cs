@@ -37,7 +37,7 @@ namespace Shooter.Weapons
         [SerializeField] private float headshotMultiplier = 2f;
 
         [Header("Underbarrel shotgun")]
-        [Tooltip("Press F to fire the breach shotgun.")]
+        [Tooltip("Fires using the Shotgun binding.")]
         [SerializeField] private int shotgunCapacity = 4;
         [SerializeField] private int shotgunPellets = 8;
         [SerializeField] private float shotgunDamage = 10f;
@@ -237,6 +237,7 @@ namespace Shooter.Weapons
         private PlayerHealth viewHealth;
         private string viewLoop;
         private float viewActionUntil;
+        private float inspectUntil;
         private bool viewDying;
 
         private void Awake()
@@ -340,6 +341,7 @@ namespace Shooter.Weapons
             viewAnimation.Play(clip);
             state.time = seek;
             viewActionUntil = Time.time + remaining / state.speed;
+            inspectUntil = clip == "Inspect" ? viewActionUntil : 0f;
             viewLoop = null;
         }
 
@@ -349,6 +351,11 @@ namespace Shooter.Weapons
                 return;
 
             float now = Time.time;
+            if (now < inspectUntil && player != null && (player.IsAiming || player.IsSprinting))
+            {
+                inspectUntil = 0f;
+                viewActionUntil = 0f;
+            }
             if (now < viewActionUntil)
                 return;
 
@@ -447,6 +454,7 @@ namespace Shooter.Weapons
             HandleFireInput(now);
             HandleShotgunInput();
             HandleMeleeInput();
+            HandleInspectInput(now);
             UpdateEffects(now);
             UpdatePose(now);
             UpdateViewAnimation();
@@ -522,9 +530,10 @@ namespace Shooter.Weapons
         private void HandleShotgunInput()
         {
             SettingsManager settings = SettingsManager.Instance;
-            bool pressed = settings != null && settings.WasPressed(SettingsManager.ActionShotgun);
+            bool pressed = settings != null ? settings.WasPressed(SettingsManager.ActionShotgun) :
+                SettingsManager.WasPressed(Key.G);
 
-            if (!pressed && (Keyboard.current == null || !Keyboard.current.fKey.wasPressedThisFrame))
+            if (!pressed)
             {
                 return;
             }
@@ -545,9 +554,10 @@ namespace Shooter.Weapons
         private void HandleMeleeInput()
         {
             SettingsManager settings = SettingsManager.Instance;
-            bool pressed = settings != null && settings.WasPressed(SettingsManager.ActionMelee);
+            bool pressed = settings != null ? settings.WasPressed(SettingsManager.ActionMelee) :
+                SettingsManager.WasPressed(Key.E);
 
-            if (!pressed && (Keyboard.current == null || !Keyboard.current.vKey.wasPressedThisFrame))
+            if (!pressed)
             {
                 return;
             }
@@ -563,6 +573,20 @@ namespace Shooter.Weapons
             }
 
             TryMelee();
+        }
+
+        private void HandleInspectInput(float now)
+        {
+            if (now < viewActionUntil || State.IsReloading || IsShotgunReloading || viewDying ||
+                (GameManager.Instance != null && !GameManager.Instance.IsPlaying) ||
+                (player != null && (!player.CanFireNow || player.IsAiming || player.IsSprinting)))
+                return;
+
+            SettingsManager settings = SettingsManager.Instance;
+            bool pressed = settings != null ? settings.WasPressed(SettingsManager.ActionInspect) :
+                SettingsManager.WasPressed(Key.F);
+            if (pressed)
+                PlayViewAction("Inspect");
         }
 
         /// <summary>
@@ -588,12 +612,13 @@ namespace Shooter.Weapons
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
             Vector3 forward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
             UpgradeManager upgrades = UpgradeManager.Instance;
+            float range = meleeRange * (upgrades != null ? upgrades.MeleeRangeMultiplier : 1f);
             float appliedDamage = meleeDamage *
-                (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
+                (upgrades != null ? upgrades.EffectiveDamageMultiplier * upgrades.MeleeDamageMultiplier : 1f);
 
             Collider[] candidates = Physics.OverlapSphere(
-                origin + forward * (meleeRange * 0.5f),
-                meleeRange * 0.7f,
+                origin + forward * (range * 0.5f),
+                range * 0.7f,
                 ~(1 << 2),
                 QueryTriggerInteraction.Ignore);
 
@@ -615,7 +640,7 @@ namespace Shooter.Weapons
 
                 Vector3 targetPosition = candidate.transform.position;
 
-                if (!IsInMeleeArc(origin, forward, targetPosition, meleeRange, meleeArcDot))
+                if (!IsInMeleeArc(origin, forward, targetPosition, range, meleeArcDot))
                 {
                     continue;
                 }
@@ -625,7 +650,7 @@ namespace Shooter.Weapons
                     continue;
                 }
 
-                Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (meleeRange * 0.5f));
+                Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (range * 0.5f));
                 target.TakeDamage(appliedDamage, hitPoint);
                 hud?.ShowHitMarker(false);
                 hud?.ShowDamageNumber(hitPoint, ReportedDamage(target, appliedDamage), false, false);

@@ -12,7 +12,7 @@ namespace Shooter.EditorTools
 
         internal static readonly string[] ActorNames = { "Idle", "Walk", "Slam", "Volley", "Roar", "Hit", "Death" };
         internal static readonly string[] PlayerNames =
-            { "Idle", "Move", "Fire", "BreachFire", "Reload", "BreachReload", "Melee", "Hit", "Death" };
+            { "Idle", "Move", "Fire", "BreachFire", "Reload", "BreachReload", "Melee", "Hit", "Death", "Inspect" };
 
         private static readonly Vector2Int[] ActorFrames =
         {
@@ -21,7 +21,7 @@ namespace Shooter.EditorTools
         private static readonly Vector2Int[] PlayerFrames =
         {
             new(0, 60), new(62, 92), new(94, 103), new(105, 125), new(127, 172),
-            new(174, 246), new(248, 260), new(262, 279), new(281, 341),
+            new(174, 246), new(248, 260), new(262, 279), new(281, 341), new(343, 409),
         };
 
         internal static GameObject LoadActor(string name) => Load(name, ActorNames, ActorFrames);
