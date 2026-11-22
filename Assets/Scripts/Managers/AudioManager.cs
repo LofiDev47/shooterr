@@ -41,6 +41,9 @@ namespace Shooter.Managers
 
         private readonly AudioSource[] oneShotPool = new AudioSource[8];
         private int nextOneShot;
+        private AudioSource musicSource;
+        private AudioClip menuMusic, gameMusic;
+        private GameManager gameManager;
 
         private void Awake()
         {
@@ -51,6 +54,13 @@ namespace Shooter.Managers
             }
 
             EnsureProceduralClips();
+            musicSource = gameObject.AddComponent<AudioSource>();
+            musicSource.playOnAwake = false;
+            musicSource.loop = true;
+            musicSource.spatialBlend = 0f;
+            musicSource.ignoreListenerPause = true;
+            menuMusic = GenerateMusic("Foundry Menu", false);
+            gameMusic = GenerateMusic("Foundry Combat", true);
 
             for (int i = 0; i < oneShotPool.Length; i++)
             {
@@ -61,6 +71,42 @@ namespace Shooter.Managers
                 source.spatialBlend = 1f;
                 oneShotPool[i] = source;
             }
+        }
+
+        private void Update()
+        {
+            if (gameManager == null) gameManager = FindAnyObjectByType<GameManager>();
+            AudioClip desired = gameManager != null && gameManager.State != GameState.Menu ? gameMusic : menuMusic;
+            musicSource.volume = masterVolume * 0.25f;
+            if (musicSource.clip != desired)
+            {
+                musicSource.clip = desired;
+                musicSource.Play();
+            }
+        }
+
+        // Original synthesized loops, with no third-party recordings.
+        private static AudioClip GenerateMusic(string name, bool combat)
+        {
+            const int rate = 22050;
+            const float beat = 0.5f;
+            int count = rate * 16;
+            float[] samples = new float[count];
+            int[] notes = combat ? new[] { 0, 7, 3, 10, 0, 7, 5, 3 } : new[] { 0, 7, 10, 7, 3, 10, 7, 5 };
+            for (int i = 0; i < count; i++)
+            {
+                float t = (float)i / rate;
+                int step = (int)(t / beat);
+                float phase = (t % beat) / beat;
+                float frequency = 110f * Mathf.Pow(2f, notes[step % notes.Length] / 12f);
+                float tone = Mathf.Sin(2f * Mathf.PI * frequency * t) * 0.32f;
+                tone += Mathf.Sin(2f * Mathf.PI * frequency * 2f * t) * 0.10f;
+                if (combat) tone += Mathf.Sin(2f * Mathf.PI * 55f * t) * Mathf.Exp(-phase * 9f) * 0.4f;
+                samples[i] = tone * Mathf.Sin(Mathf.PI * phase);
+            }
+            AudioClip clip = AudioClip.Create(name, count, 1, rate, false);
+            clip.SetData(samples, 0);
+            return clip;
         }
 
         private void OnDestroy()

@@ -126,6 +126,7 @@ namespace Shooter.UI
 
         private void Awake()
         {
+            SplitCombatReadout();
             // Remember where the bars rest so spread can push them outward and back.
             if (crosshairBars != null && crosshairBars.Length > 0)
             {
@@ -141,6 +142,38 @@ namespace Shooter.UI
             }
 
             markerFont = healthText != null ? healthText.font : toastText != null ? toastText.font : null;
+        }
+
+        private void SplitCombatReadout()
+        {
+            if (combatReadout == null) return;
+            RectTransform health = combatReadout.Find("HealthPanel") as RectTransform;
+            RectTransform ammo = combatReadout.Find("AmmoPanel") as RectTransform;
+            if (health == null || ammo == null) return;
+            Image rim = combatReadout.GetComponent<Image>();
+            Transform backing = combatReadout.Find("Backing");
+            Transform divider = combatReadout.Find("Divider");
+            combatReadout.anchorMin = Vector2.zero;
+            combatReadout.anchorMax = new Vector2(1f, 0f);
+            combatReadout.pivot = new Vector2(0.5f, 0f);
+            combatReadout.anchoredPosition = Vector2.zero;
+            combatReadout.sizeDelta = new Vector2(0f, 94f);
+            if (rim != null) rim.enabled = false;
+            if (backing != null) backing.gameObject.SetActive(false);
+            if (divider != null) divider.gameObject.SetActive(false);
+            PlaceReadoutPanel(health, false, rim);
+            PlaceReadoutPanel(ammo, true, rim);
+        }
+
+        private static void PlaceReadoutPanel(RectTransform panel, bool right, Image template)
+        {
+            panel.anchorMin = panel.anchorMax = new Vector2(right ? 1f : 0f, 0f);
+            panel.pivot = new Vector2(right ? 1f : 0f, 0f);
+            panel.anchoredPosition = new Vector2(right ? -16f : 16f, 10f);
+            Image plate = panel.gameObject.AddComponent<Image>();
+            plate.color = new Color(0.035f, 0.062f, 0.078f, 0.97f);
+            if (template != null) plate.sprite = template.sprite;
+            plate.raycastTarget = false;
         }
 
         private void ResolveSettingsFlag()
