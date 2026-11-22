@@ -30,9 +30,12 @@ namespace Shooter.UI
         [Header("HUD elements (scene builder)")]
         public RectTransform combatReadout;
         public Image healthFill;
+        public Image[] healthSegments;
         public Text healthText;
         public Image ammoFill;
+        public Image[] ammoSegments;
         public Text ammoText;
+        public Text reserveText;
         public Text reloadText;
         public GameObject shotgunChip;
         public Text shotgunText;
@@ -86,11 +89,13 @@ namespace Shooter.UI
             "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R reload   ·   ESC pause";
 
         private static readonly Color HealthyColor = new Color(0.46f, 0.91f, 0.80f);
-        private static readonly Color ReloadColor = new Color(1f, 0.76f, 0.40f);
+        private static readonly Color AmmoColor = new Color(1f, 0.76f, 0.40f);
+        private static readonly Color ReloadColor = new Color(1f, 0.90f, 0.65f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
         private static readonly Color NormalHitColor = new Color(1f, 0.95f, 0.75f, 1f);
         private static readonly Color HeadshotColor = new Color(1f, 0.68f, 0.14f, 1f);
 
+        private float displayedHealthRatio = 1f;
         private int lastHealth = -1;
         private int lastMaxHealth = -1;
         private int fpsFrames;
@@ -290,7 +295,7 @@ namespace Shooter.UI
 
         private void UpdateHealth()
         {
-            if (playerHealth == null || healthFill == null)
+            if (playerHealth == null)
             {
                 return;
             }
@@ -299,8 +304,9 @@ namespace Shooter.UI
                 ? Mathf.Clamp01(playerHealth.CurrentHealth / playerHealth.MaxHealth)
                 : 0f;
 
-            healthFill.fillAmount = Mathf.Lerp(healthFill.fillAmount, ratio, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
-            healthFill.color = Color.Lerp(CriticalColor, HealthyColor, Mathf.InverseLerp(0.20f, 0.60f, ratio));
+            displayedHealthRatio = Mathf.Lerp(displayedHealthRatio, ratio, 1f - Mathf.Exp(-14f * Time.unscaledDeltaTime));
+            Color meterColor = Color.Lerp(CriticalColor, HealthyColor, Mathf.InverseLerp(0.20f, 0.60f, ratio));
+            UpdateMeter(healthSegments, healthFill, displayedHealthRatio, meterColor);
 
             int health = Mathf.CeilToInt(playerHealth.CurrentHealth);
             int maxHealth = Mathf.CeilToInt(playerHealth.MaxHealth);
@@ -327,7 +333,10 @@ namespace Shooter.UI
 
             if ((magazine != lastMagazine || reserve != lastReserve) && ammoText != null)
             {
-                ammoText.text = combatReadout != null ? FormatReadout(magazine, reserve) : $"{magazine} / {reserve}";
+                ammoText.text = reserveText != null ? magazine.ToString() :
+                    combatReadout != null ? FormatReadout(magazine, reserve) : $"{magazine} / {reserve}";
+                if (reserveText != null)
+                    reserveText.text = reserve.ToString();
                 ammoText.color = magazine <= 5 ? CriticalColor : Color.white;
                 lastMagazine = magazine;
                 lastReserve = reserve;
@@ -335,13 +344,11 @@ namespace Shooter.UI
 
             bool reloading = weapon.IsReloading;
             float reloadProgress = reloading ? weapon.ReloadProgress01 : 0f;
-            if (ammoFill != null)
-            {
-                int capacity = weapon.State != null ? weapon.State.MagazineSize : 0;
-                ammoFill.fillAmount = reloading ? reloadProgress :
-                    capacity > 0 ? (float)magazine / capacity : 0f;
-                ammoFill.color = reloading ? ReloadColor : magazine <= 5 ? CriticalColor : HealthyColor;
-            }
+            int capacity = weapon.State != null ? weapon.State.MagazineSize : 0;
+            float meterFill = reloading ? reloadProgress : capacity > 0 ? (float)magazine / capacity : 0f;
+            Color readyColor = reserveText != null ? AmmoColor : HealthyColor;
+            Color meterColor = reloading ? ReloadColor : magazine <= 5 ? CriticalColor : readyColor;
+            UpdateMeter(ammoSegments, ammoFill, meterFill, meterColor);
 
             if (reloadText == null)
             {
@@ -350,7 +357,7 @@ namespace Shooter.UI
 
             if (reloading)
             {
-                if (ammoFill == null)
+                if (ammoFill == null && (ammoSegments == null || ammoSegments.Length == 0))
                 {
                     int percent = Mathf.RoundToInt(reloadProgress * 100f);
                     if (percent != lastReloadPercent)
@@ -366,6 +373,26 @@ namespace Shooter.UI
             {
                 reloadText.enabled = false;
                 lastReloadPercent = -1;
+            }
+        }
+
+        private static void UpdateMeter(Image[] segments, Image legacyFill, float ratio, Color color)
+        {
+            if (segments == null || segments.Length == 0)
+            {
+                if (legacyFill != null)
+                {
+                    legacyFill.fillAmount = ratio;
+                    legacyFill.color = color;
+                }
+                return;
+            }
+
+            float filledSegments = ratio * segments.Length;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                segments[i].fillAmount = Mathf.Clamp01(filledSegments - i);
+                segments[i].color = color;
             }
         }
 

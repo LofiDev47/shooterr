@@ -1742,83 +1742,104 @@ namespace Shooter.EditorTools
         private static void BuildCombatReadout(Transform canvas, Font font, HUDController hud)
         {
             Vector2 bottomCenter = new Vector2(0.5f, 0f);
-            Vector2 center = new Vector2(0.5f, 0.5f);
+            Vector2 bottomRight = new Vector2(1f, 0f);
             Color mint = new Color(0.46f, 0.91f, 0.80f);
             Color amber = new Color(1f, 0.76f, 0.40f);
+            Color muted = new Color(0.66f, 0.75f, 0.81f);
             Sprite plate = FoundryHudSkin.Plate;
 
-            RectTransform readout = CreateRect("CombatReadout", canvas, bottomCenter, bottomCenter,
-                new Vector2(0f, 49f), new Vector2(488f, 94f));
+            RectTransform readout = CreateRect("CombatReadout", canvas, Vector2.zero, bottomCenter,
+                Vector2.zero, new Vector2(0f, 112f));
+            readout.anchorMax = bottomRight;
             hud.combatReadout = readout;
-            Image rim = AddImage(readout, new Color(0.21f, 0.38f, 0.41f));
-            rim.sprite = plate;
-            Image backing = AddImage(CreateRect("Backing", readout, center, center,
-                Vector2.zero, new Vector2(484f, 92f)), new Color(0.035f, 0.062f, 0.078f, 0.97f));
-            backing.sprite = plate;
-            AddImage(CreateRect("Divider", readout, center, center,
-                Vector2.zero, new Vector2(1f, 62f)), new Color(0.25f, 0.43f, 0.47f, 0.85f));
 
-            RectTransform health = CreateRect("HealthPanel", readout, center, center,
-                new Vector2(-119f, 0f), new Vector2(208f, 74f));
-            RectTransform ammo = CreateRect("AmmoPanel", readout, center, center,
-                new Vector2(119f, 0f), new Vector2(208f, 74f));
+            RectTransform health = BuildInstrumentPanel(readout, "HealthPanel", 206f, false, mint, plate);
+            RectTransform ammo = BuildInstrumentPanel(readout, "AmmoPanel", 218f, true, amber, plate);
 
-            Vector2 left = new Vector2(0f, 0.5f);
-            AddImage(CreateRect("VitalsGlyphHorizontal", health, left, center,
-                new Vector2(8f, 24f), new Vector2(12f, 3f)), mint);
-            AddImage(CreateRect("VitalsGlyphVertical", health, left, center,
-                new Vector2(8f, 24f), new Vector2(3f, 12f)), mint);
+            AddImage(CreateRect("MedicalCrossHorizontal", health, Vector2.zero, bottomCenter,
+                new Vector2(21f, 70f), new Vector2(12f, 3f)), mint);
+            AddImage(CreateRect("MedicalCrossVertical", health, Vector2.zero, bottomCenter,
+                new Vector2(21f, 66f), new Vector2(3f, 11f)), mint);
             for (int i = 0; i < 3; i++)
             {
-                AddImage(CreateRect("AmmoGlyph" + i, ammo, left, center,
-                    new Vector2(4f + i * 5f, 24f), new Vector2(3f, 10f)), mint);
+                AddImage(CreateRect("Cartridge" + i, ammo, Vector2.zero, Vector2.zero,
+                    new Vector2(15f + i * 5f, 67f), new Vector2(3f, 9f)), amber);
             }
-            CreateText(health, "HealthLabel", "VITALS", 14, mint, TextAnchor.MiddleLeft,
-                left, left, new Vector2(24f, 24f), new Vector2(140f, 20f), font, FontStyle.Bold);
-            CreateText(ammo, "AmmoLabel", "AMMO", 14, mint, TextAnchor.MiddleLeft,
-                left, left, new Vector2(24f, 24f), new Vector2(84f, 20f), font, FontStyle.Bold);
-            hud.healthText = CreateText(health, "HealthText", "", 33, Color.white, TextAnchor.MiddleLeft,
-                left, left, new Vector2(0f, -4f), new Vector2(204f, 41f), font, FontStyle.Bold);
-            hud.ammoText = CreateText(ammo, "AmmoText", "", 33, Color.white, TextAnchor.MiddleLeft,
-                left, left, new Vector2(0f, -4f), new Vector2(204f, 41f), font, FontStyle.Bold);
 
-            hud.healthFill = BuildReadoutBar(health, "HealthBar", mint);
-            hud.ammoFill = BuildReadoutBar(ammo, "AmmoBar", mint);
-            Vector2 right = new Vector2(1f, 0.5f);
-            hud.reloadText = CreateText(ammo, "ReloadText", "RELOADING", 13, amber,
-                TextAnchor.MiddleRight, right, right, new Vector2(0f, 24f), new Vector2(104f, 20f),
-                font, FontStyle.Bold);
+            CreateText(health, "HealthLabel", "HEALTH", 13, mint, TextAnchor.MiddleLeft,
+                Vector2.zero, Vector2.zero, new Vector2(34f, 62f), new Vector2(86f, 20f), font, FontStyle.Bold);
+            CreateText(ammo, "AmmoLabel", "MAGAZINE", 13, amber, TextAnchor.MiddleLeft,
+                Vector2.zero, Vector2.zero, new Vector2(35f, 62f), new Vector2(99f, 20f), font, FontStyle.Bold);
+            hud.healthText = CreateText(health, "HealthText", "", 36, Color.white, TextAnchor.MiddleLeft,
+                Vector2.zero, Vector2.zero, new Vector2(15f, 22f), new Vector2(176f, 42f), font, FontStyle.Bold);
+            hud.ammoText = CreateText(ammo, "AmmoText", "", 36, Color.white, TextAnchor.MiddleLeft,
+                Vector2.zero, Vector2.zero, new Vector2(15f, 22f), new Vector2(95f, 42f), font, FontStyle.Bold);
+
+            AddImage(CreateRect("ReserveDivider", ammo, Vector2.zero, Vector2.zero,
+                new Vector2(122f, 29f), new Vector2(1f, 29f)), new Color(0.40f, 0.46f, 0.49f, 0.75f));
+            CreateText(ammo, "ReserveLabel", "RESERVE", 12, muted, TextAnchor.MiddleRight,
+                bottomRight, bottomRight, new Vector2(-15f, 49f), new Vector2(75f, 15f), font, FontStyle.Bold);
+            hud.reserveText = CreateText(ammo, "ReserveText", "", 23, muted, TextAnchor.MiddleRight,
+                bottomRight, bottomRight, new Vector2(-15f, 23f), new Vector2(75f, 27f), font, FontStyle.Bold);
+
+            Sprite indicator = FoundryHudSkin.Indicator;
+            hud.healthSegments = BuildReadoutMeter(health, "HealthMeter", 176f, 10, mint, indicator);
+            hud.ammoSegments = BuildReadoutMeter(ammo, "AmmoMeter", 188f, 12, amber, indicator);
+            hud.reloadText = CreateText(ammo, "ReloadText", "RELOADING", 12, amber, TextAnchor.MiddleRight,
+                bottomRight, bottomRight, new Vector2(-15f, 63f), new Vector2(86f, 19f), font, FontStyle.Bold);
             hud.reloadText.enabled = false;
 
-            Vector2 topCenter = new Vector2(0.5f, 1f);
-            RectTransform shellChip = CreateRect("ShotgunChip", ammo, topCenter, bottomCenter,
-                new Vector2(0f, 16f), new Vector2(188f, 28f));
-            Image chip = AddImage(shellChip, new Color(0.08f, 0.12f, 0.14f, 0.94f));
-            chip.sprite = plate;
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            Vector2 topRight = Vector2.one;
+            RectTransform shellChip = CreateRect("ShotgunChip", ammo, topRight, bottomRight,
+                new Vector2(0f, 5f), new Vector2(176f, 26f));
+            AddImage(shellChip, new Color(0.09f, 0.13f, 0.16f, 0.96f)).sprite = plate;
             hud.shotgunChip = shellChip.gameObject;
-            hud.shotgunText = CreateText(shellChip, "ShotgunText", "", 14, amber,
-                TextAnchor.MiddleCenter, center, center, Vector2.zero, new Vector2(166f, 24f),
+            hud.shotgunText = CreateText(shellChip, "ShotgunText", "", 13, amber,
+                TextAnchor.MiddleCenter, center, center, Vector2.zero, new Vector2(156f, 22f),
                 font, FontStyle.Bold);
             hud.shotgunChip.SetActive(false);
         }
 
-        private static Image BuildReadoutBar(Transform panel, string name, Color color)
+        private static RectTransform BuildInstrumentPanel(Transform readout, string name, float width,
+            bool right, Color accent, Sprite plate)
         {
-            Vector2 bottomCenter = new Vector2(0.5f, 0f);
-            RectTransform bar = CreateRect(name, panel, bottomCenter, bottomCenter,
-                new Vector2(0f, 3f), new Vector2(184f, 6f));
-            AddImage(bar, new Color(0.12f, 0.21f, 0.25f));
-            RectTransform fillRect = CreateRect(name + "Fill", bar, Vector2.zero, Vector2.zero,
-                Vector2.zero, Vector2.zero);
-            fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = Vector2.zero;
-            fillRect.offsetMax = Vector2.zero;
-            Image fill = AddImage(fillRect, color);
-            fill.sprite = FoundryHudSkin.Indicator;
-            fill.type = Image.Type.Filled;
-            fill.fillMethod = Image.FillMethod.Horizontal;
-            fill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            return fill;
+            Vector2 corner = right ? new Vector2(1f, 0f) : Vector2.zero;
+            RectTransform panel = CreateRect(name, readout, corner, corner,
+                new Vector2(right ? -24f : 24f, 30f), new Vector2(width, 87f));
+            AddImage(panel, Color.Lerp(new Color(0.18f, 0.25f, 0.29f), accent, 0.27f)).sprite = plate;
+
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            RectTransform face = CreateRect("Face", panel, center, center, Vector2.zero,
+                new Vector2(width - 3f, 84f));
+            AddImage(face, new Color(0.055f, 0.085f, 0.111f, 0.98f)).sprite = plate;
+            AddImage(CreateRect("Accent", panel, Vector2.zero, Vector2.zero,
+                new Vector2(15f, 85f), new Vector2(38f, 2f)), accent);
+            return panel;
+        }
+
+        private static Image[] BuildReadoutMeter(Transform panel, string name, float width, int count, Color color,
+            Sprite sprite)
+        {
+            const float gap = 3f;
+            const float height = 8f;
+            float segmentWidth = (width - gap * (count - 1)) / count;
+            var segments = new Image[count];
+            for (int i = 0; i < count; i++)
+            {
+                var size = new Vector2(segmentWidth, height);
+                var position = new Vector2(15f + i * (segmentWidth + gap), 12f);
+                RectTransform track = CreateRect(name + "Track" + i, panel, Vector2.zero, Vector2.zero,
+                    position, size);
+                AddImage(track, new Color(0.24f, 0.30f, 0.34f)).sprite = sprite;
+                RectTransform fillRect = CreateRect("Fill", track, Vector2.zero, Vector2.zero, Vector2.zero, size);
+                Image fill = AddImage(fillRect, color);
+                fill.sprite = sprite;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Horizontal;
+                segments[i] = fill;
+            }
+            return segments;
         }
 
         // ---------------------------------------------------------------- menus

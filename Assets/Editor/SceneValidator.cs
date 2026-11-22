@@ -163,17 +163,18 @@ namespace Shooter.EditorTools
             {
                 Check(hud.playerHealth != null && hud.weapon != null && hud.gameManager != null &&
                       hud.waveSpawner != null, "HUD gameplay references are wired");
-                Check(hud.healthFill != null && hud.healthText != null && hud.ammoText != null &&
-                      hud.reloadText != null, "HUD health/ammo widgets are wired");
-                Check(hud.combatReadout != null && hud.combatReadout.anchorMin == new Vector2(0.5f, 0f) &&
-                      hud.combatReadout.anchorMax == hud.combatReadout.anchorMin &&
-                      Mathf.Approximately(hud.combatReadout.anchoredPosition.x, 0f),
-                    "HUD vitals and ammo share a centered bottom readout");
-                Check(hud.combatReadout != null && hud.ammoFill != null && hud.ammoFill.sprite != null &&
-                      hud.healthFill != null && hud.healthFill.sprite != null &&
-                      hud.ammoFill.transform.IsChildOf(hud.combatReadout) &&
-                      hud.healthFill.transform.IsChildOf(hud.combatReadout),
-                    "both instrument bars have fill sprites and belong to the centered readout");
+                Check(hud.healthText != null && hud.ammoText != null && hud.reserveText != null &&
+                      hud.reloadText != null, "HUD health, magazine, reserve and reload text are wired");
+                Check(hud.combatReadout != null && hud.combatReadout.anchorMin == Vector2.zero &&
+                      hud.combatReadout.anchorMax == new Vector2(1f, 0f),
+                    "HUD readout spans the bottom edge");
+                Check(hud.combatReadout != null && hud.healthSegments != null && hud.healthSegments.Length > 0 &&
+                      hud.ammoSegments != null && hud.ammoSegments.Length > 0 &&
+                      System.Array.TrueForAll(hud.healthSegments, segment => segment != null &&
+                          segment.sprite != null && segment.transform.IsChildOf(hud.combatReadout)) &&
+                      System.Array.TrueForAll(hud.ammoSegments, segment => segment != null &&
+                          segment.sprite != null && segment.transform.IsChildOf(hud.combatReadout)),
+                    "health and magazine meters have wired segment graphics");
                 Check(hud.waveText != null && hud.statusText != null && hud.scoreText != null,
                     "HUD wave/score widgets are wired");
                 Check(hud.gameOverPanel != null && hud.gameOverScoreText != null && hud.hintText != null,
