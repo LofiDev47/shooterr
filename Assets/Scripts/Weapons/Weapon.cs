@@ -258,14 +258,15 @@ namespace Shooter.Weapons
             }
 
             weaponRenderers = GetComponentsInChildren<Renderer>(true);
-            if (viewAnimation != null)
+
+            // Wire the health hooks independently of the view animation: the field may
+            // be assigned after Awake in some build paths, and PlayViewAction already
+            // guards against a missing animation component.
+            viewHealth = GetComponentInParent<PlayerHealth>();
+            if (viewHealth != null)
             {
-                viewHealth = GetComponentInParent<PlayerHealth>();
-                if (viewHealth != null)
-                {
-                    viewHealth.Damaged += PlayViewHit;
-                    viewHealth.Died += PlayViewDeath;
-                }
+                viewHealth.Damaged += PlayViewHit;
+                viewHealth.Died += PlayViewDeath;
             }
 
             if (slide != null)
@@ -799,7 +800,13 @@ namespace Shooter.Weapons
                     }
                 }
 
-                tracerPoints.Add(segmentEnd);
+                // Avoid appending stale/duplicate points on a ricochet (or a zero-length
+                // segment), which would draw a zero-length tracer segment.
+                if (tracerPoints.Count == 0 ||
+                    (tracerPoints[tracerPoints.Count - 1] - segmentEnd).sqrMagnitude > 0.0001f)
+                {
+                    tracerPoints.Add(segmentEnd);
+                }
             }
 
             PlayMuzzleFlash();
@@ -976,6 +983,11 @@ namespace Shooter.Weapons
                 return false;
             }
 
+            if (player != null && !player.CanFireNow)
+            {
+                return false;
+            }
+
             UpgradeManager upgrades = UpgradeManager.Instance;
 
             // The underbarrel is an augment, not starting equipment.
@@ -1138,7 +1150,13 @@ namespace Shooter.Weapons
             float radius = Mathf.Tan(degrees * Mathf.Deg2Rad);
             Vector2 offset = Random.insideUnitCircle * radius;
 
-            Vector3 right = Vector3.Cross(forward, Vector3.up).normalized;
+            // Aiming straight up (or down) makes Cross(forward, up) collapse to
+            // zero and normalize() produce NaN, which propagates into the shot
+            // direction. Fall back to a stable reference axis in that case.
+            Vector3 reference = Mathf.Abs(Vector3.Dot(forward, Vector3.up)) > 0.99f
+                ? Vector3.right
+                : Vector3.up;
+            Vector3 right = Vector3.Cross(forward, reference).normalized;
             Vector3 up = Vector3.Cross(right, forward).normalized;
 
             return (forward + right * offset.x + up * offset.y).normalized;

@@ -53,6 +53,7 @@ namespace Shooter.UI
         private int inputBlockedUntilFrame = -1;
         private GameObject pendingSelection;
         private MenuScreen lastScreen = MenuScreen.None;
+        private bool settingsSubscribed;
 
         private Text bestLabel;
         private Slider sensitivitySlider;
@@ -120,15 +121,19 @@ namespace Shooter.UI
 
         private void OnDisable()
         {
-            if (settings != null)
+            if (settings != null && settingsSubscribed)
             {
                 settings.SettingsChanged -= HandleSettingsChanged;
+                settingsSubscribed = false;
             }
         }
 
         private void Update()
         {
-            ResolveReferences();
+            if (gameManager == null || settings == null || hud == null || player == null)
+            {
+                ResolveReferences();
+            }
 
             consumedInputThisFrame = false;
             UpdateRebindCapture();
@@ -163,6 +168,12 @@ namespace Shooter.UI
             if (settings == null)
             {
                 settings = SettingsManager.Instance != null ? SettingsManager.Instance : FindAnyObjectByType<SettingsManager>();
+            }
+
+            if (settings != null && !settingsSubscribed)
+            {
+                settings.SettingsChanged += HandleSettingsChanged;
+                settingsSubscribed = true;
             }
 
             if (gameManager == null)
@@ -535,11 +546,14 @@ namespace Shooter.UI
             {
                 if (pair.Value != null)
                 {
-                    string label = settings != null ? SettingsManager.PrettyKey(settings.GetKey(pair.Key)) : "—";
-                    pair.Value.GetComponentInChildren<Text>().text = label;
-                    if (listeningActionId == pair.Key)
+                    Text label = pair.Value.GetComponentInChildren<Text>();
+                    if (label != null)
                     {
-                        pair.Value.GetComponentInChildren<Text>().text = "...";
+                        label.text = settings != null ? SettingsManager.PrettyKey(settings.GetKey(pair.Key)) : "—";
+                        if (listeningActionId == pair.Key)
+                        {
+                            label.text = "...";
+                        }
                     }
                 }
             }

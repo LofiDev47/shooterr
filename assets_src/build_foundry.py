@@ -125,7 +125,7 @@ def export(name, animated=False):
         axis_forward="-Z", axis_up="Y", object_types={"EMPTY", "MESH"},
         add_leaf_bones=False, use_custom_props=False, bake_anim=animated,
         bake_anim_use_all_actions=False, bake_anim_use_nla_strips=False,
-        bake_anim_simplify_factor=0,
+        bake_anim_simplify_factor=0.5,
     )
 
 

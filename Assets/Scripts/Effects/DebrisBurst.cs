@@ -41,7 +41,7 @@ namespace Shooter.Effects
 
                 piece.transform.position = position + Random.insideUnitSphere * 0.05f;
                 piece.transform.rotation = Random.rotation;
-                float meshScale = piece.GetComponent<MeshRenderer>() != null ? 1f : 5f;
+                float meshScale = 1f;
                 piece.transform.localScale = Vector3.one * (meshScale * size * Random.Range(0.6f, 1.4f));
 
                 MeshRenderer renderer = piece.GetComponent<MeshRenderer>();
@@ -52,7 +52,12 @@ namespace Shooter.Effects
                     renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 }
 
-                Rigidbody body = piece.AddComponent<Rigidbody>();
+                Rigidbody body = piece.GetComponent<Rigidbody>();
+
+                if (body == null)
+                {
+                    body = piece.AddComponent<Rigidbody>();
+                }
                 body.mass = 0.05f;
                 body.linearDamping = 0.1f;
                 body.angularDamping = 0.05f;

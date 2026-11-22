@@ -269,6 +269,16 @@ namespace Shooter.Player
                 IsSprinting = false;
                 planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, groundDeceleration * deltaTime);
 
+                // Keep gravity and grounding integrated while controls are disabled
+                // (e.g. menus / game over) so the player still falls and lands.
+                if (controller.isGrounded && verticalVelocity < 0f)
+                {
+                    verticalVelocity = -2f;
+                }
+
+                verticalVelocity += gravity * deltaTime;
+                controller.Move((planarVelocity + Vector3.up * verticalVelocity) * deltaTime);
+
                 // Let the mouse sway settle when the controls are off.
                 float settle = 1f - Mathf.Exp(-18f * deltaTime);
                 smoothedLookDelta = Vector2.Lerp(smoothedLookDelta, Vector2.zero, settle);
@@ -357,6 +367,7 @@ namespace Shooter.Player
             {
                 delta = Mouse.current.delta.ReadValue();
                 float baseSensitivity = SettingsManager.Instance != null ? SettingsManager.Instance.Sensitivity : lookSensitivity;
+                baseSensitivity = Mathf.Max(0.001f, baseSensitivity);
                 float sensitivity = baseSensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
                 float pitchDelta = delta.y * sensitivity;
 

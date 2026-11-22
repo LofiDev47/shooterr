@@ -31,6 +31,7 @@ namespace Shooter.Weapons
         [SerializeField] private float bobSpeed = 2.2f;
 
         private Vector3 basePosition;
+        private bool basePositionCaptured;
         private Renderer[] renderers;
         private float respawnAt;
         private bool collected;
@@ -63,12 +64,19 @@ namespace Shooter.Weapons
 
         private void Awake()
         {
-            basePosition = transform.position;
             renderers = GetComponentsInChildren<Renderer>(true);
         }
 
         private void Update()
         {
+            // Captured lazily so pickups placed after Awake (elite caches) keep
+            // their real spawn position instead of the prefab origin.
+            if (!basePositionCaptured)
+            {
+                basePosition = transform.position;
+                basePositionCaptured = true;
+            }
+
             float bob = Mathf.Sin(Time.time * bobSpeed) * bobHeight;
             transform.position = basePosition + Vector3.up * bob;
             transform.Rotate(Vector3.up, spinSpeed * Time.deltaTime, Space.World);

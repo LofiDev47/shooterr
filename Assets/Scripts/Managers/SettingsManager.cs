@@ -418,7 +418,8 @@ namespace Shooter.Managers
             if (!Application.isEditor && Screen.currentResolution.width != ResWidth)
             {
                 Screen.SetResolution(ResWidth, ResHeight,
-                    Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed, 60);
+                    Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed,
+                    Screen.currentResolution.refreshRateRatio);
             }
             else if (Application.isEditor)
             {

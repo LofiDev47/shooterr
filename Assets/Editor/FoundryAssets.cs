@@ -86,7 +86,7 @@ namespace Shooter.EditorTools
         {
             Animation animation = instance.GetComponent<Animation>() ?? instance.AddComponent<Animation>();
             animation.playAutomatically = false;
-            animation.cullingType = AnimationCullingType.AlwaysAnimate;
+            animation.cullingType = AnimationCullingType.BasedOnRenderers;
             AnimationUtility.SetAnimationClips(animation, names.Select(name => Clip(source, name)).ToArray());
             return animation;
         }

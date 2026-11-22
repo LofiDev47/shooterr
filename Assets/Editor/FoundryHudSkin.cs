@@ -13,28 +13,69 @@ namespace Shooter.EditorTools
         internal static void Apply(GameObject root)
         {
             Transform hud = root.transform;
-            Transform crosshair = hud.Find("Crosshair");
             Sprite horizontal = Load("ReticleBarHorizontal");
             Sprite vertical = Load("ReticleBarVertical");
-            Bar(crosshair, "Left", horizontal, 180f);
-            Bar(crosshair, "Right", horizontal, 0f);
-            Bar(crosshair, "Bottom", vertical, 180f);
-            Bar(crosshair, "Top", vertical, 0f);
-            AddImage(crosshair, "CenterDiamond", Load("Reticle"), new Vector2(4f, 4f), horizontal != null
-                ? crosshair.Find("Top").GetComponent<Image>().color : Color.white);
+
+            Transform crosshair = hud.Find("Crosshair");
+            if (crosshair != null)
+            {
+                Bar(crosshair, "Left", horizontal, 180f);
+                Bar(crosshair, "Right", horizontal, 0f);
+                Bar(crosshair, "Bottom", vertical, 180f);
+                Bar(crosshair, "Top", vertical, 0f);
+
+                Transform topBar = crosshair.Find("Top");
+                Color diamondColor = Color.white;
+                if (horizontal != null && topBar != null)
+                {
+                    Image topImage = topBar.GetComponent<Image>();
+                    if (topImage != null)
+                    {
+                        diamondColor = topImage.color;
+                    }
+                }
+
+                AddImage(crosshair, "CenterDiamond", Load("Reticle"), new Vector2(4f, 4f), diamondColor);
+            }
 
             Transform hitMarker = hud.Find("HitMarker");
-            Image[] ticks = hitMarker.GetComponentsInChildren<Image>(true);
-            AddImage(hitMarker, "FoundryHitMarker", Load("HitMarker"), new Vector2(29f, 29f), ticks[0].color);
-            foreach (Image tick in ticks)
-                tick.enabled = false;
+            if (hitMarker != null)
+            {
+                Image[] ticks = hitMarker.GetComponentsInChildren<Image>(true);
+                Color tickColor = Color.white;
+                if (ticks != null && ticks.Length > 0 && ticks[0] != null)
+                {
+                    tickColor = ticks[0].color;
+                }
+
+                AddImage(hitMarker, "FoundryHitMarker", Load("HitMarker"), new Vector2(29f, 29f), tickColor);
+
+                if (ticks != null)
+                {
+                    foreach (Image tick in ticks)
+                    {
+                        if (tick != null)
+                        {
+                            tick.enabled = false;
+                        }
+                    }
+                }
+            }
 
             Sprite pip = Load("PhasePip");
             Sprite plate = Plate;
-            var boss = (RectTransform)hud.Find("BossBar");
-            AddImage(boss, "InstrumentPlate", plate, boss.sizeDelta + new Vector2(34f, 18f),
-                new Color(0.025f, 0.046f, 0.060f, 0.92f));
-            boss.Find("InstrumentPlate").SetAsFirstSibling();
+            Transform bossTransform = hud.Find("BossBar");
+            if (bossTransform is RectTransform boss)
+            {
+                AddImage(boss, "InstrumentPlate", plate, boss.sizeDelta + new Vector2(34f, 18f),
+                    new Color(0.025f, 0.046f, 0.060f, 0.92f));
+
+                Transform plateTransform = boss.Find("InstrumentPlate");
+                if (plateTransform != null)
+                {
+                    plateTransform.SetAsFirstSibling();
+                }
+            }
             foreach (Image image in hud.GetComponentsInChildren<Image>(true))
             {
                 if (image.name.StartsWith("BossPhasePip", System.StringComparison.Ordinal))
@@ -46,7 +87,23 @@ namespace Shooter.EditorTools
 
         private static void Bar(Transform crosshair, string name, Sprite sprite, float angle)
         {
-            Image image = crosshair.Find(name).GetComponent<Image>();
+            if (crosshair == null)
+            {
+                return;
+            }
+
+            Transform bar = crosshair.Find(name);
+            if (bar == null)
+            {
+                return;
+            }
+
+            Image image = bar.GetComponent<Image>();
+            if (image == null)
+            {
+                return;
+            }
+
             image.sprite = sprite;
             image.rectTransform.localRotation = Quaternion.Euler(0f, 0f, angle);
         }
