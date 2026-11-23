@@ -152,6 +152,21 @@ namespace Shooter.Upgrades
         private int airJumpsUsed;
         private bool traversalHarness;
         private bool brawlerKit;
+        private bool siegeBreaker;
+        private bool trophyHunter;
+        public bool IncendiaryHits { get; private set; }
+        public bool CryoHits { get; private set; }
+        public bool MarkingHits { get; private set; }
+
+        public float PriorityTargetDamageMultiplier(bool isBoss, bool isElite)
+        {
+            if (!siegeBreaker)
+            {
+                return 1f;
+            }
+
+            return isBoss ? 1.5f : isElite ? 1.2f : 1f;
+        }
 
         // --- read-only views used by gameplay code -------------------------------
         public float DamageMultiplier => damageMultiplier;
@@ -439,6 +454,11 @@ namespace Shooter.Upgrades
             bulletVelocityMultiplier = 1f;
             explosionRadius = 0f;
             explosionDamageFraction = 0f;
+            siegeBreaker = false;
+            trophyHunter = false;
+            IncendiaryHits = false;
+            CryoHits = false;
+            MarkingHits = false;
         }
 
         // ---------------------------------------------------------------- synergy modifiers
@@ -644,13 +664,18 @@ namespace Shooter.Upgrades
         // ---------------------------------------------------------------- hooks
 
         /// <summary>Called by enemy deaths, applies lifesteal heals and kill-based synergies.</summary>
-        public void OnKill()
+        public void OnKill(bool isBoss = false, bool isElite = false)
         {
             if (playerHealth != null && !playerHealth.IsDead)
             {
                 if (lifestealPerKill > 0f)
                 {
                     playerHealth.Heal(lifestealPerKill);
+                }
+
+                if (trophyHunter && (isBoss || isElite))
+                {
+                    playerHealth.Heal(playerHealth.MaxHealth * (isBoss ? 0.30f : 0.10f));
                 }
 
                 if (adrenalineDamagePerKill > 0f)
@@ -832,16 +857,16 @@ namespace Shooter.Upgrades
                 {
                     Id = "Speed Loader",
                     Rarity = AugmentRarity.Standard,
-                    Title = "Speed Loader",
-                    Description = "Reloads are 35% faster",
+                    Title = "Rapid Recharge",
+                    Description = "Recharges are 35% faster",
                     Apply = manager => manager.AddReloadSpeedMultiplier(0.35f),
                 },
                 new AugmentDef
                 {
                     Id = "Big Magazine",
                     Rarity = AugmentRarity.Standard,
-                    Title = "Big Magazine",
-                    Description = "Magazine holds 50% more rounds",
+                    Title = "Expanded Power Cell",
+                    Description = "Power cell holds 50% more energy",
                     Apply = manager => manager.AddMagazineMultiplier(0.5f),
                 },
                 new AugmentDef
@@ -849,7 +874,7 @@ namespace Shooter.Upgrades
                     Id = "Deep Pockets",
                     Rarity = AugmentRarity.Standard,
                     Title = "Deep Pockets",
-                    Description = "+120 reserve ammo (and max)",
+                    Description = "+120 reserve energy and capacity",
                     Apply = manager => manager.AddReserveBonus(120),
                 },
                 new AugmentDef
@@ -921,7 +946,7 @@ namespace Shooter.Upgrades
                 {
                     Id = "Piercing Rounds",
                     Rarity = AugmentRarity.Advanced,
-                    Title = "Piercing Rounds",
+                    Title = "Piercing Bolts",
                     Description = "Shots pierce 1 extra enemy",
                     CanOffer = manager => manager.BonusPierce < 3,
                     Apply = manager => manager.AddBonusPierce(1),
@@ -930,8 +955,8 @@ namespace Shooter.Upgrades
                 {
                     Id = "Ricochet Rounds",
                     Rarity = AugmentRarity.Advanced,
-                    Title = "Ricochet Rounds",
-                    Description = "Rifle rounds bounce off walls once for 70% damage. Stacks twice.",
+                    Title = "Ricochet Bolts",
+                    Description = "Rifle bolts bounce off walls once for 70% damage. Stacks twice.",
                     CanOffer = manager => manager.RicochetBounces < 2,
                     Apply = manager => manager.AddRicochetBounce(),
                 },
@@ -939,7 +964,7 @@ namespace Shooter.Upgrades
                 {
                     Id = "High-Velocity Rounds",
                     Rarity = AugmentRarity.Advanced,
-                    Title = "High-Velocity Rounds",
+                    Title = "High-Velocity Bolts",
                     Description = "+35% rifle velocity: full damage carries much farther",
                     CanOffer = manager => manager.BulletVelocityMultiplier < 1.7f,
                     Apply = manager => manager.AddBulletVelocity(0.35f),
@@ -948,8 +973,8 @@ namespace Shooter.Upgrades
                 {
                     Id = "Explosive Rounds",
                     Rarity = AugmentRarity.Master,
-                    Title = "Explosive Rounds",
-                    Description = "Rifle rounds detonate on impact for 35% damage in a 2.4 m radius",
+                    Title = "Explosive Bolts",
+                    Description = "Rifle bolts detonate on impact for 35% damage in a 2.4 m radius",
                     CanOffer = manager => manager.ExplosionRadius < 2.4f,
                     Apply = manager => manager.AddBulletExplosion(2.4f, 0.35f),
                 },
@@ -958,7 +983,7 @@ namespace Shooter.Upgrades
                     Id = "Breach Tube",
                     Rarity = AugmentRarity.Master,
                     Title = "Breach Tube",
-                    Description = "Mount a four-shell underbarrel shotgun. Uses the Shotgun binding.",
+                    Description = "Mount an underbarrel energy shotgun with four charges. Uses the Shotgun binding.",
                     CanOffer = manager => !manager.ShotgunUnlocked,
                     Apply = manager => manager.UnlockShotgun(),
                 },
@@ -1129,8 +1154,8 @@ namespace Shooter.Upgrades
                 {
                     Id = "Salvage Rounds",
                     Rarity = AugmentRarity.Advanced,
-                    Title = "Salvage Rounds",
-                    Description = "Kills refund 10% of a magazine as reserve ammo",
+                    Title = "Energy Recovery",
+                    Description = "Kills return 10% of a full power cell to reserve energy",
                     Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
                 },
                 new AugmentDef
@@ -1189,6 +1214,51 @@ namespace Shooter.Upgrades
                         manager.AddMaxHealth(20f);
                         manager.AddRegen(1.5f);
                     },
+                },
+                new AugmentDef
+                {
+                    Id = "Siege Breaker",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Siege Breaker",
+                    Description = "+50% direct damage to bosses and +20% to elites",
+                    CanOffer = manager => !manager.siegeBreaker,
+                    Apply = manager => manager.siegeBreaker = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Trophy Hunter",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Trophy Hunter",
+                    Description = "Recover 30% max health on boss kills and 10% on elite kills",
+                    CanOffer = manager => !manager.trophyHunter,
+                    Apply = manager => manager.trophyHunter = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Incendiary Rounds",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Incendiary Rounds",
+                    Description = "Direct hits burn for 20 damage per second for 2s. Hits refresh the burn.",
+                    CanOffer = manager => !manager.IncendiaryHits,
+                    Apply = manager => manager.IncendiaryHits = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Cryo Coating",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Cryo Coating",
+                    Description = "Direct hits slow movement by 25% for 2s (10% on bosses)",
+                    CanOffer = manager => !manager.CryoHits,
+                    Apply = manager => manager.CryoHits = true,
+                },
+                new AugmentDef
+                {
+                    Id = "Target Paint",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Target Paint",
+                    Description = "Direct hits mark enemies for 2s. Follow-up direct hits deal 18% more damage.",
+                    CanOffer = manager => !manager.MarkingHits,
+                    Apply = manager => manager.MarkingHits = true,
                 },
             };
         }

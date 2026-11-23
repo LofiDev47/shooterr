@@ -48,7 +48,7 @@ namespace Shooter.Managers
             new BindingDef { Id = ActionSprint, Label = "SPRINT", DefaultKey = Key.LeftShift },
             new BindingDef { Id = ActionDash, Label = "DASH", DefaultKey = Key.LeftShift },
             new BindingDef { Id = ActionSlide, Label = "SLIDE", DefaultKey = Key.C },
-            new BindingDef { Id = ActionReload, Label = "RELOAD", DefaultKey = Key.R },
+            new BindingDef { Id = ActionReload, Label = "RECHARGE", DefaultKey = Key.R },
             new BindingDef { Id = ActionShotgun, Label = "SHOTGUN", DefaultKey = Key.G },
             new BindingDef { Id = ActionMelee, Label = "MELEE", DefaultKey = Key.E },
             new BindingDef { Id = ActionInspect, Label = "INSPECT WEAPON", DefaultKey = Key.F },

@@ -128,7 +128,7 @@ namespace Shooter.Weapons
             }
 
             AudioManager.Instance?.PlayAmmoPickup(transform.position);
-            hud?.ShowToast($"+{added} AMMO");
+            hud?.ShowToast($"+{added} ENERGY");
 
             if (respawnDelay <= 0f)
             {

@@ -56,6 +56,7 @@ namespace Shooter.EditorTools
             TestBossPhaseThresholds();
             TestBossPhaseStepping();
             TestBossCoreDamage();
+            TestBossAndStatusAugments();
 
             Debug.Log($"[SelfTest] Finished: {checks - failures}/{checks} checks passed, {failures} failed.");
 
@@ -797,6 +798,63 @@ namespace Shooter.EditorTools
                 "normal damage applies once the roar ends");
 
             Object.DestroyImmediate(gameObject);
+        }
+
+        private static void TestBossAndStatusAugments()
+        {
+            const System.Reflection.BindingFlags privateInstance =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var root = new GameObject("BossAndStatusAugments");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var player = root.AddComponent<PlayerHealth>();
+            upgrades.playerHealth = player;
+            player.ResetState();
+            player.TakeDamage(50f);
+
+            var pool = (AugmentDef[])typeof(UpgradeManager)
+                .GetMethod("BuildPool", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                .Invoke(null, null);
+
+            foreach (string id in new[] { "Siege Breaker", "Trophy Hunter", "Incendiary Rounds", "Cryo Coating", "Target Paint" })
+            {
+                var card = System.Array.Find(pool, def => def.Id == id);
+                card.Apply(upgrades);
+                Check(!card.CanOffer(upgrades), id + " stops appearing after selection");
+            }
+
+            var enemyObject = new GameObject("StatusTarget");
+            var enemy = enemyObject.AddComponent<EnemyHealth>();
+            enemy.Initialize(10f, isBoss: true);
+            enemy.SetInvulnerable(true);
+            Check(enemy.TakeWeaponHit(20f, Vector3.zero, upgrades) == 0f && enemy.MovementStatusMultiplier == 1f,
+                "boss immunity blocks direct damage and status application");
+
+            enemy.SetInvulnerable(false);
+            enemy.IncomingDamageScale = 2f;
+            Check(Mathf.Approximately(enemy.TakeWeaponHit(20f, Vector3.zero, upgrades), 60f),
+                "the first hit applies Siege Breaker and core exposure");
+            Check(Mathf.Approximately(enemy.MovementStatusMultiplier, 0.90f), "bosses have reduced chill");
+            Check(Mathf.Approximately(enemy.TakeWeaponHit(20f, Vector3.zero, upgrades), 70.8f),
+                "the existing mark boosts the next hit");
+
+            enemy.IncomingDamageScale = 1f;
+            float beforeBurn = enemy.CurrentHealth;
+            var updateStatuses = typeof(EnemyHealth).GetMethod("UpdateStatuses", privateInstance);
+            updateStatuses.Invoke(enemy, new object[] { Time.time + 2.25f });
+            Check(Mathf.Approximately(enemy.CurrentHealth, beforeBurn - 40f),
+                "repeat hits refresh a single four-tick burn");
+            updateStatuses.Invoke(enemy, new object[] { Time.time + 3f });
+            Check(Mathf.Approximately(enemy.CurrentHealth, beforeBurn - 40f), "burn ends after its last tick");
+
+            upgrades.OnKill(isElite: true);
+            upgrades.OnKill(isBoss: true, isElite: true);
+            Check(Mathf.Approximately(player.CurrentHealth, 90f), "boss and elite trophy heals apply once each");
+            upgrades.ResetAugments();
+            Check(!upgrades.IncendiaryHits && !upgrades.CryoHits && !upgrades.MarkingHits &&
+                upgrades.PriorityTargetDamageMultiplier(true, true) == 1f, "reset clears the new augments");
+
+            Object.DestroyImmediate(enemyObject);
+            Object.DestroyImmediate(root);
         }
 
         private static void Check(bool condition, string description)

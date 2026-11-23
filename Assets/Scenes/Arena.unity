@@ -3009,7 +3009,7 @@ Light:
   m_Enabled: 0
   serializedVersion: 13
   m_Type: 2
-  m_Color: {r: 1, g: 0.82, b: 0.45, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_Intensity: 7
   m_Range: 8
   m_SpotAngle: 30
@@ -4018,7 +4018,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: RELOADING
+  m_Text: CHARGING
 --- !u!1 &187621373
 GameObject:
   m_ObjectHideFlags: 0
@@ -6457,7 +6457,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: AMMO
+  m_Text: ENERGY
 --- !u!222 &266051618
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -17419,7 +17419,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "WASD move   \xB7   SHIFT sprint   \xB7   SPACE jump   \xB7   LMB fire   \xB7   RMB aim   \xB7   V melee   \xB7   C slide   \xB7   R reload   \xB7   ESC free cursor"
+  m_Text: "WASD move   \xB7   SHIFT sprint   \xB7   SPACE jump   \xB7   LMB fire   \xB7   RMB aim   \xB7   V melee   \xB7   C slide   \xB7   R recharge   \xB7   ESC free cursor"
 --- !u!1 &1007052044
 GameObject:
   m_ObjectHideFlags: 0
@@ -28087,7 +28087,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 1}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 0.012
+    widthMultiplier: 0.028
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -28134,7 +28134,7 @@ LineRenderer:
       m_NumColorKeys: 2
       m_NumAlphaKeys: 2
     numCornerVertices: 0
-    numCapVertices: 0
+    numCapVertices: 4
     alignment: 0
     textureMode: 0
     textureScale: {x: 1, y: 1}
@@ -28192,17 +28192,13 @@ MonoBehaviour:
   recoilPitch: 1.1
   recoilYaw: 0.25
   muzzleFlashTime: 0.045
-  tracerTime: 0.03
+  tracerTime: 0.06
   reloadDrop: 0.12
   kickbackStiffness: 90
   kickbackSpringDamping: 11
   slide: {fileID: 91958715}
-  shellEjectPoint: {fileID: 1715221786}
-  shellMaterial: {fileID: 2100000, guid: 4d62347a057814ca5b8a4f225f0a54a1, type: 2}
   slideTravel: 0.045
   slideCycleDuration: 0.11
-  shellEjectSpeed: 1.6
-  shellLifetime: 2.5
   swayPositionScale: 0.0012
   swayRotationScale: 0.055
   swayDamping: 9
@@ -28219,7 +28215,6 @@ MonoBehaviour:
   shotgunMuzzle: {fileID: 656594386}
   shotgunFlash: {fileID: 1009798550}
   shotgunLight: {fileID: 2143917067}
-  shotgunEjectPoint: {fileID: 42008968}
   pump: {fileID: 2012589646}
   tracer: {fileID: 1783729662}
   audioSource: {fileID: 1783729661}
@@ -34032,7 +34027,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: SHELLS 4/4
+  m_Text: BREACH 4/4
 --- !u!1 &2092347518
 GameObject:
   m_ObjectHideFlags: 0
@@ -34983,7 +34978,7 @@ Light:
   m_Enabled: 0
   serializedVersion: 13
   m_Type: 2
-  m_Color: {r: 1, g: 0.68, b: 0.28, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_Intensity: 0
   m_Range: 10
   m_SpotAngle: 30

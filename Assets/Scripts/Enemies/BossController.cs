@@ -465,7 +465,7 @@ namespace Shooter.Enemies
             }
 
             verticalVelocity += gravity * deltaTime;
-            controller.Move((planarVelocity + Vector3.up * verticalVelocity) * deltaTime);
+            controller.Move((planarVelocity * health.MovementStatusMultiplier + Vector3.up * verticalVelocity) * deltaTime);
         }
 
         private void ApplyGravityOnly()

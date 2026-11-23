@@ -27,7 +27,7 @@ namespace Shooter.Enemies
 
         [Header("Melee telegraph")]
         [Tooltip("Seconds between the swipe starting and the damage landing.")]
-        [SerializeField] private float attackWindup = 0.34f;
+        [SerializeField] private float attackWindup = 0.1f;
         [Tooltip("Degrees the model leans back during the wind-up.")]
         [SerializeField] private float meleeLeanAngle = 14f;
 
@@ -46,11 +46,16 @@ namespace Shooter.Enemies
         [SerializeField] private float rangedHoldDistance;
         [SerializeField] private float rangedStrafeSpeed = 2.6f;
 
+        private const float LungeDistance = 0.4f;
+        private const float StrikeRadius = 0.28f;
+
+        private static readonly Collider[] StrikeContacts = new Collider[16];
         private static readonly Collider[] Neighbors = new Collider[128];
 
         private CharacterController controller;
         private EnemyHealth health;
         private EnemyAnimator animator;
+        private EnemyExploder exploder;
         private PlayerHealth target;
         private Transform model;
         private Vector3 planarVelocity;
@@ -59,7 +64,8 @@ namespace Shooter.Enemies
         private float nextAttackTime;
         private float attackStrikeTime = -1f;
         private float leanAngle;
-        private float lungeTimer;
+        private float recoveryEndsAt;
+        private float lungeProgress;
         private int strafeDirection = 1;
         private float strafeSwitchAt;
         private Vector3 lastPosition;
@@ -79,6 +85,7 @@ namespace Shooter.Enemies
             controller = GetComponent<CharacterController>();
             health = GetComponent<EnemyHealth>();
             animator = GetComponent<EnemyAnimator>();
+            exploder = GetComponent<EnemyExploder>();
             model = transform.Find("Model");
             lastPosition = transform.position;
 
@@ -96,6 +103,7 @@ namespace Shooter.Enemies
             attackDamage += damageBonus;
             nextAttackTime = Time.time + 0.6f;
             attackStrikeTime = -1f;
+            recoveryEndsAt = 0f;
             lastPosition = transform.position;
         }
 
@@ -167,29 +175,36 @@ namespace Shooter.Enemies
             float distance = toTarget.magnitude;
             Vector3 direction = distance > 0.001f ? toTarget / distance : transform.forward;
 
-            Face(direction, deltaTime);
+            bool committed = IsAttacking || Time.time < recoveryEndsAt;
+            if (!committed)
+            {
+                Face(direction, deltaTime);
+            }
 
             if (rangedHoldDistance > 0.01f)
             {
                 UpdateRangedMovement(direction, distance, deltaTime);
             }
-            else if (attackStrikeTime >= 0f)
+            else if (committed)
             {
-                // Mid-swing: plant the feet. The pause is the dodge window.
-                planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, acceleration * deltaTime);
+                planarVelocity = Vector3.zero;
             }
-            else if (distance <= attackRange)
+            else if (distance <= MeleeStartRange && (exploder == null || !exploder.IsActive))
             {
                 planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, acceleration * deltaTime);
-                BeginAttack();
+                if (Vector3.Dot(transform.forward, direction) >= 0.98f)
+                {
+                    BeginAttack();
+                }
             }
             else
             {
                 Steer(direction, deltaTime);
             }
 
-            UpdateMeleeSwing(deltaTime);
+            UpdateLean(deltaTime);
             Move(deltaTime);
+            UpdateMeleeSwing();
             UpdateStuckDetection(deltaTime);
             animator?.SetLocomotion(planarVelocity.magnitude, moveSpeed);
         }
@@ -283,10 +298,8 @@ namespace Shooter.Enemies
             return push * separationStrength;
         }
 
-        /// <summary>
-        /// Starts a telegraphed swipe. Damage is applied later in
-        /// <see cref="UpdateMeleeSwing"/>, so stepping out of range is a dodge.
-        /// </summary>
+        private float MeleeStartRange => Mathf.Max(StrikeRadius, attackRange - StrikeRadius);
+
         private void BeginAttack()
         {
             if (Time.time < nextAttackTime)
@@ -294,47 +307,76 @@ namespace Shooter.Enemies
                 return;
             }
 
+            float windup = Mathf.Max(EnemyAnimator.MeleeSwingDuration, attackWindup);
             nextAttackTime = Time.time + attackCooldown;
-            attackStrikeTime = Time.time + attackWindup;
-            animator?.TriggerAttack(attackWindup);
+            attackStrikeTime = Time.time + windup;
+            recoveryEndsAt = attackStrikeTime + EnemyAnimator.MeleeRecovery(windup);
+            lungeProgress = 0f;
+            planarVelocity = Vector3.zero;
+            animator?.TriggerAttack(windup);
             AudioManager.Instance?.PlayEnemyAttack(transform.position);
         }
 
-        private void UpdateMeleeSwing(float deltaTime)
+        private void UpdateMeleeSwing()
         {
-            if (attackStrikeTime >= 0f && Time.time >= attackStrikeTime)
+            if (!IsAttacking)
             {
-                attackStrikeTime = -1f;
-                lungeTimer = 0.16f;
-
-                if (target != null && !target.IsDead)
-                {
-                    Vector3 toTarget = target.transform.position - transform.position;
-                    toTarget.y = 0f;
-
-                    if (toTarget.magnitude <= attackRange * 1.2f)
-                    {
-                        target.TakeDamage(attackDamage);
-
-                        // Small forward jab so the hit reads visually.
-                        controller.Move(transform.forward * 0.22f);
-                    }
-                }
+                return;
             }
 
-            UpdateLean(deltaTime);
+            // Advance the jab even on a miss. The controller stops it at solid obstacles.
+            float progress = Mathf.Clamp01(1f - (attackStrikeTime - Time.time) / EnemyAnimator.MeleeSwingDuration);
+            if (progress > lungeProgress)
+            {
+                controller.Move(transform.forward * (LungeDistance * (progress - lungeProgress)));
+                lungeProgress = progress;
+            }
+
+            if (Time.time < attackStrikeTime)
+            {
+                return;
+            }
+
+            attackStrikeTime = -1f;
+            TryMeleeHit();
+        }
+
+        private void TryMeleeHit()
+        {
+            // The swing occupies a narrow volume in front of the enemy at chest height.
+            Vector3 origin = transform.TransformPoint(controller.center + Vector3.up * 0.25f);
+            float forwardReach = Mathf.Max(0f, MeleeStartRange - LungeDistance - StrikeRadius);
+            Vector3 reach = origin + transform.forward * forwardReach;
+            int count = Physics.OverlapCapsuleNonAlloc(origin, reach, StrikeRadius,
+                StrikeContacts, ~0, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < count; i++)
+            {
+                Collider contact = StrikeContacts[i];
+                if (contact.GetComponentInParent<PlayerHealth>() != target)
+                {
+                    continue;
+                }
+
+                Vector3 contactPoint = contact.bounds.center;
+                contactPoint.y = Mathf.Clamp(origin.y, contact.bounds.min.y, contact.bounds.max.y);
+                if (Physics.Linecast(origin, contactPoint, out RaycastHit obstruction, ~0,
+                    QueryTriggerInteraction.Ignore) &&
+                    obstruction.collider.GetComponentInParent<PlayerHealth>() != target)
+                {
+                    continue;
+                }
+
+                target.TakeDamage(attackDamage);
+                break;
+            }
         }
 
         private void UpdateLean(float deltaTime)
         {
-            if (lungeTimer > 0f)
-            {
-                lungeTimer -= deltaTime;
-            }
-
-            float targetLean = lungeTimer > 0f
-                ? meleeLeanAngle
-                : attackStrikeTime >= 0f ? -meleeLeanAngle : 0f;
+            float targetLean = IsAttacking
+                ? Mathf.Lerp(-meleeLeanAngle, meleeLeanAngle, lungeProgress)
+                : Time.time < recoveryEndsAt ? meleeLeanAngle * 0.4f : 0f;
 
             leanAngle = Mathf.Lerp(leanAngle, targetLean, 1f - Mathf.Exp(-16f * deltaTime));
 
@@ -364,7 +406,8 @@ namespace Shooter.Enemies
 
             verticalVelocity += gravity * deltaTime;
 
-            Vector3 motion = planarVelocity + Vector3.up * verticalVelocity;
+            Vector3 motion = planarVelocity * (health != null ? health.MovementStatusMultiplier : 1f)
+                + Vector3.up * verticalVelocity;
 
             if (pendingKnockback.sqrMagnitude > 0.0001f)
             {
@@ -386,7 +429,8 @@ namespace Shooter.Enemies
         private void UpdateStuckDetection(float deltaTime)
         {
             float moved = (transform.position - lastPosition).magnitude;
-            float expected = planarVelocity.magnitude * deltaTime;
+            float expected = planarVelocity.magnitude *
+                (health != null ? health.MovementStatusMultiplier : 1f) * deltaTime;
             lastPosition = transform.position;
 
             if (expected > 0.001f && moved < expected * 0.35f)

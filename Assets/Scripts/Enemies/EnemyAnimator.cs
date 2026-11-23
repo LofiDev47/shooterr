@@ -38,8 +38,14 @@ namespace Shooter.Enemies
         private float walkPhase;
         private float moveBlend;
         private float targetMove;
-        private float attackTimer;
-        private float attackDuration;
+        // The Foundry Slam clip reaches impact at frame 26 of its 59-frame take.
+        private const float AuthoredStrikePhase = 26f / 59f;
+        private const float MeleeClipDuration = 0.77f;
+        internal const float MeleeSwingDuration = 0.09f;
+
+        private float attackStartedAt;
+        private float attackWindup;
+        private float attackEndsAt;
         private float hitTimer;
         private float aimBlend;
         private float aimTarget;
@@ -56,7 +62,7 @@ namespace Shooter.Enemies
             legL != null && legR != null;
 
         public float MoveBlend => moveBlend;
-        public bool IsAttacking => attackTimer > 0f;
+        public bool IsAttacking => Time.time < attackEndsAt;
 
         private void Awake()
         {
@@ -94,12 +100,22 @@ namespace Shooter.Enemies
             groundSpeed = planarSpeed;
         }
 
-        /// <summary>Starts the arm-swing portion of a telegraphed melee attack.</summary>
+        private static float MeleePlaybackDuration(float windup) =>
+            Mathf.Max(MeleeClipDuration, windup / AuthoredStrikePhase);
+
+        internal static float MeleeRecovery(float windup) =>
+            MeleePlaybackDuration(windup) * (1f - AuthoredStrikePhase);
+
+        /// <summary>Starts a wind-up, strike, and recovery timed to the melee hitbox.</summary>
         public void TriggerAttack(float windup)
         {
-            attackDuration = Mathf.Max(0.05f, windup);
-            attackTimer = attackDuration;
-            PlayAuthored("Slam", attackDuration / (26f / 30f));
+            attackStartedAt = Time.time;
+            attackWindup = Mathf.Max(MeleeSwingDuration, windup);
+            attackEndsAt = attackStartedAt + attackWindup + MeleeRecovery(attackWindup);
+            // Skip the early preparation so the punch and follow-through keep their pace.
+            float duration = MeleePlaybackDuration(attackWindup);
+            float startPhase = Mathf.Max(0f, AuthoredStrikePhase - attackWindup / duration);
+            PlayAuthored("Slam", duration, startPhase, 0.035f);
         }
 
         /// <summary>Short recoil on the torso and head when a shot lands.</summary>
@@ -126,7 +142,7 @@ namespace Shooter.Enemies
             dying = true;
         }
 
-        private void PlayAuthored(string clip, float seconds = 0f)
+        private void PlayAuthored(string clip, float seconds = 0f, float startPhase = 0f, float fade = 0.075f)
         {
             if (authored == null || dying)
                 return;
@@ -136,9 +152,9 @@ namespace Shooter.Enemies
                 return;
 
             state.speed = seconds > 0f ? state.length / seconds : 1f;
-            authored.CrossFade(clip, 0.075f);
-            state.time = 0f;
-            authoredUntil = Time.time + state.length / state.speed;
+            authored.CrossFade(clip, fade);
+            state.normalizedTime = startPhase;
+            authoredUntil = Time.time + (1f - startPhase) * state.length / state.speed;
             authoredLoop = null;
         }
 
@@ -153,7 +169,6 @@ namespace Shooter.Enemies
             moveBlend = Mathf.Lerp(moveBlend, targetMove, 1f - Mathf.Exp(-12f * deltaTime));
             if (authored != null)
             {
-                attackTimer = Mathf.Max(0f, attackTimer - deltaTime);
                 if (!dying && Time.time >= authoredUntil)
                 {
                     string loop = groundSpeed > 0.12f ? "Walk" : "Idle";
@@ -181,12 +196,17 @@ namespace Shooter.Enemies
             float breathe = Mathf.Sin(Time.time * 1.6f) * 0.8f;
 
             float attack = 0f;
-
-            if (attackTimer > 0f)
+            if (IsAttacking)
             {
-                attackTimer = Mathf.Max(0f, attackTimer - deltaTime);
-                float progress = 1f - attackTimer / attackDuration;
-                attack = Mathf.Sin(Mathf.Clamp01(progress) * Mathf.PI);
+                float elapsed = Time.time - attackStartedAt;
+                float swingStart = attackWindup - MeleeSwingDuration;
+                float strike = Mathf.InverseLerp(swingStart, attackWindup, elapsed);
+                float recovery = Mathf.InverseLerp(attackWindup, attackEndsAt - attackStartedAt, elapsed);
+
+                // Pull the arms back, snap them forward at impact, then lower them.
+                attack = elapsed < swingStart
+                    ? Mathf.Lerp(0f, -0.5f, Mathf.InverseLerp(0f, swingStart, elapsed))
+                    : Mathf.Lerp(-0.5f, 1.5f, strike) * (1f - recovery);
             }
 
             if (hitTimer > 0f)

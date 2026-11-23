@@ -3,6 +3,7 @@ using System.Linq;
 using Shooter.Combat;
 using Shooter.Effects;
 using Shooter.Managers;
+using Shooter.Upgrades;
 using UnityEngine;
 
 namespace Shooter.Enemies
@@ -73,6 +74,17 @@ namespace Shooter.Enemies
         private Color tintColor = Color.white;
         private bool hasTint;
 
+        private const float StatusDuration = 2f;
+        private const float BurnTickInterval = 0.5f;
+        private const float BurnTickDamage = 10f;
+        private float burnUntil;
+        private float nextBurnTick;
+        private float chillUntil;
+        private float markUntil;
+
+        public float MovementStatusMultiplier =>
+            Time.time < chillUntil ? (IsBoss ? 0.90f : 0.75f) : 1f;
+
         private void Awake()
         {
             CacheComponents();
@@ -102,11 +114,13 @@ namespace Shooter.Enemies
             incomingDamageScale = 1f;
             IsInvulnerable = false;
             holdDeathSeconds = 0f;
+            burnUntil = nextBurnTick = chillUntil = markUntil = 0f;
+            flashUntil = 0f;
             transform.localScale = Vector3.one * Mathf.Max(0.1f, scale);
 
             hasTint = tint.HasValue;
             tintColor = tint ?? Color.white;
-            ApplyTint();
+            ClearFlash();
 
             if (bodyCollider != null)
             {
@@ -142,26 +156,113 @@ namespace Shooter.Enemies
         /// <inheritdoc />
         public void TakeDamage(float amount, Vector3 hitPoint)
         {
+            ApplyDamage(amount, hitPoint, true);
+        }
+
+        /// <summary>Applies direct weapon damage and returns the amount for hit feedback.</summary>
+        public float TakeWeaponHit(float amount, Vector3 hitPoint, UpgradeManager upgrades)
+        {
+            float now = Time.time;
+            amount *= upgrades != null ? upgrades.PriorityTargetDamageMultiplier(IsBoss, IsElite) : 1f;
+
+            if (now < markUntil)
+            {
+                amount *= 1.18f;
+            }
+
+            float dealt = ApplyDamage(amount, hitPoint, true);
+            if (dealt <= 0f || IsDead || upgrades == null)
+            {
+                return dealt;
+            }
+
+            if (upgrades.IncendiaryHits)
+            {
+                if (burnUntil <= now)
+                {
+                    nextBurnTick = now + BurnTickInterval;
+                }
+
+                burnUntil = now + StatusDuration;
+            }
+
+            if (upgrades.CryoHits)
+            {
+                chillUntil = now + StatusDuration;
+            }
+
+            if (upgrades.MarkingHits)
+            {
+                markUntil = now + StatusDuration;
+            }
+
+            return dealt;
+        }
+
+        private float ApplyDamage(float amount, Vector3 hitPoint, bool directFeedback)
+        {
             if (IsDead || IsInvulnerable || amount <= 0f)
             {
-                return;
+                return 0f;
             }
 
             amount *= incomingDamageScale;
             CurrentHealth = Mathf.Max(0f, CurrentHealth - amount);
             lastHitDamage = amount;
-            Flash();
-            AudioManager.Instance?.PlayEnemyHit(hitPoint);
-            Damaged?.Invoke(amount, hitPoint);
+
+            if (directFeedback)
+            {
+                Flash();
+                AudioManager.Instance?.PlayEnemyHit(hitPoint);
+                Damaged?.Invoke(amount, hitPoint);
+            }
 
             if (CurrentHealth <= 0f)
             {
                 Die();
             }
+
+            return amount;
+        }
+
+        private void UpdateStatuses(float now)
+        {
+            if (IsDead || (GameManager.Instance != null && !GameManager.Instance.IsPlaying))
+            {
+                return;
+            }
+
+            while (burnUntil > 0f && nextBurnTick <= burnUntil && nextBurnTick <= now && !IsDead)
+            {
+                nextBurnTick += BurnTickInterval;
+                ApplyDamage(BurnTickDamage, transform.position, false);
+            }
+
+            bool expired = ExpireStatus(ref burnUntil, now);
+            expired |= ExpireStatus(ref chillUntil, now);
+            expired |= ExpireStatus(ref markUntil, now);
+
+            if (expired && flashUntil == 0f && !IsDead)
+            {
+                ClearFlash();
+            }
+        }
+
+        private static bool ExpireStatus(ref float until, float now)
+        {
+            if (until <= 0f || now < until)
+            {
+                return false;
+            }
+
+            until = 0f;
+            return true;
         }
 
         private void Update()
         {
+            UpdateStatuses(Time.time);
+
             if (flashUntil > 0f && Time.time >= flashUntil)
             {
                 ClearFlash();
@@ -215,7 +316,7 @@ namespace Shooter.Enemies
             GameManager.Instance?.RequestKillHitStop();
 
             // Lifesteal augments heal off every confirmed kill.
-            Upgrades.UpgradeManager.Instance?.OnKill();
+            UpgradeManager.Instance?.OnKill(IsBoss, IsElite);
 
             ChainExplode(lastHitDamage);
 
@@ -231,7 +332,7 @@ namespace Shooter.Enemies
         /// </summary>
         private void ChainExplode(float triggeringDamage)
         {
-            Upgrades.UpgradeManager upgrades = Upgrades.UpgradeManager.Instance;
+            UpgradeManager upgrades = UpgradeManager.Instance;
 
             if (upgrades == null || upgrades.ExplosiveRadius <= 0)
             {
@@ -288,10 +389,28 @@ namespace Shooter.Enemies
         {
             flashUntil = 0f;
 
-            // Elites keep their tint; plain enemies fall back to the shared material colour.
-            if (hasTint)
+            float now = Time.time;
+            bool burning = !IsDead && now < burnUntil;
+            bool chilled = !IsDead && now < chillUntil;
+            bool marked = !IsDead && now < markUntil;
+
+            if (burning || chilled || marked || hasTint)
             {
-                ApplyTint();
+                Color color = tintColor;
+                if (marked)
+                {
+                    color = Color.Lerp(color, new Color(0.85f, 0.25f, 1f), 0.55f);
+                }
+                if (chilled)
+                {
+                    color = Color.Lerp(color, new Color(0.15f, 0.75f, 1f), 0.55f);
+                }
+                if (burning)
+                {
+                    color = Color.Lerp(color, new Color(1f, 0.35f, 0.08f), 0.55f);
+                }
+
+                ApplyTint(color);
                 return;
             }
 
@@ -309,9 +428,9 @@ namespace Shooter.Enemies
             }
         }
 
-        private void ApplyTint()
+        private void ApplyTint(Color color)
         {
-            if (!hasTint || renderers == null || renderers.Length == 0)
+            if (renderers == null || renderers.Length == 0)
             {
                 return;
             }
@@ -326,7 +445,7 @@ namespace Shooter.Enemies
                 }
 
                 renderer.GetPropertyBlock(propertyBlock);
-                propertyBlock.SetColor(BaseColorId, tintColor);
+                propertyBlock.SetColor(BaseColorId, color);
                 renderer.SetPropertyBlock(propertyBlock);
             }
         }

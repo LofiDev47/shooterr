@@ -3682,7 +3682,7 @@ GameObject:
   - component: {fileID: 89966900}
   - component: {fileID: 89966899}
   m_Layer: 0
-  m_Name: Cartridge1
+  m_Name: ChargeBar1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3704,8 +3704,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 20, y: 67}
-  m_SizeDelta: {x: 3, y: 9}
+  m_AnchoredPosition: {x: 15, y: 71}
+  m_SizeDelta: {x: 13, y: 2}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &89966899
 MonoBehaviour:
@@ -3720,7 +3720,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -5760,7 +5760,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -7248,40 +7248,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 173553282}
   m_CullTransparentMesh: 1
---- !u!1 &173625602
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 173625603}
-  m_Layer: 2
-  m_Name: ReplacementMagazine
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &173625603
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 173625602}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.07, y: 0.103, z: -0.505}
-  m_LocalScale: {x: 0.001, y: 0.001, z: 0.001}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 2092335361}
-  - {fileID: 468267912}
-  - {fileID: 2115259851}
-  m_Father: {fileID: 1961611299}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &177812799
 GameObject:
   m_ObjectHideFlags: 0
@@ -8948,7 +8914,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: db16a2a3651c1ff4a9ec419b749159f0, type: 2}
+  - {fileID: 2100000, guid: 78c1dff49d0615346b2b001311bc5df3, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -13788,7 +13754,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -16937,7 +16903,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -17593,7 +17559,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R reload  /  ESC pause
+  m_Text: WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause
 --- !u!1 &433764134
 GameObject:
   m_ObjectHideFlags: 0
@@ -17929,7 +17895,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.4014, g: 0.3877, b: 0.3197, a: 1}
+  m_Color: {r: 0.2124, g: 0.4039, b: 0.4817, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -18134,96 +18100,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 465346723}
   m_Mesh: {fileID: -6862742248936730721, guid: 3a975c9b0e9b2e94aaaaf6ccecd5e72f, type: 3}
---- !u!1 &468267911
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 468267912}
-  - component: {fileID: 468267914}
-  - component: {fileID: 468267913}
-  m_Layer: 2
-  m_Name: MagazineBody.001
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &468267912
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 468267911}
-  serializedVersion: 2
-  m_LocalRotation: {x: -7.1054274e-15, y: 0, z: -0, w: 1}
-  m_LocalPosition: {x: -0, y: 0, z: 0.000016780816}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 173625603}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &468267913
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 468267911}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: 6a0cdb9733b55534bb4aab2d2cf564be, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &468267914
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 468267911}
-  m_Mesh: {fileID: 4524683765633735268, guid: e1ba2934d56bd2c4fb9d83b34f27bc52, type: 3}
 --- !u!1 &470410217
 GameObject:
   m_ObjectHideFlags: 0
@@ -19609,7 +19485,7 @@ GameObject:
   - component: {fileID: 516946617}
   - component: {fileID: 516946616}
   m_Layer: 0
-  m_Name: Cartridge2
+  m_Name: ChargeBar2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -19631,8 +19507,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 25, y: 67}
-  m_SizeDelta: {x: 3, y: 9}
+  m_AnchoredPosition: {x: 15, y: 75}
+  m_SizeDelta: {x: 13, y: 2}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &516946616
 MonoBehaviour:
@@ -19647,7 +19523,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -23227,7 +23103,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -26177,7 +26053,7 @@ GameObject:
   - component: {fileID: 682220795}
   - component: {fileID: 682220794}
   m_Layer: 0
-  m_Name: Cartridge0
+  m_Name: ChargeBar0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -26200,7 +26076,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 15, y: 67}
-  m_SizeDelta: {x: 3, y: 9}
+  m_SizeDelta: {x: 13, y: 2}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &682220794
 MonoBehaviour:
@@ -26215,7 +26091,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -27515,7 +27391,7 @@ Light:
   m_Enabled: 0
   serializedVersion: 13
   m_Type: 2
-  m_Color: {r: 1, g: 0.82, b: 0.45, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_Intensity: 7
   m_Range: 8
   m_SpotAngle: 30
@@ -29650,7 +29526,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -29670,7 +29546,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: MAGAZINE
+  m_Text: ENERGY
 --- !u!222 &761502886
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -30120,7 +29996,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -37296,7 +37172,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -38098,7 +37974,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -38263,7 +38139,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -44106,7 +43982,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -45776,7 +45652,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -45981,7 +45857,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 1}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 0.012
+    widthMultiplier: 0.028
     widthCurve:
       serializedVersion: 2
       m_Curve:
@@ -46028,7 +45904,7 @@ LineRenderer:
       m_NumColorKeys: 2
       m_NumAlphaKeys: 2
     numCornerVertices: 0
-    numCapVertices: 0
+    numCapVertices: 4
     alignment: 0
     textureMode: 0
     textureScale: {x: 1, y: 1}
@@ -46086,17 +45962,13 @@ MonoBehaviour:
   recoilPitch: 1.1
   recoilYaw: 0.25
   muzzleFlashTime: 0.045
-  tracerTime: 0.03
+  tracerTime: 0.06
   reloadDrop: 0.12
   kickbackStiffness: 90
   kickbackSpringDamping: 11
   slide: {fileID: 1408537573}
-  shellEjectPoint: {fileID: 376941950}
-  shellMaterial: {fileID: 2100000, guid: 4d62347a057814ca5b8a4f225f0a54a1, type: 2}
   slideTravel: 0.045
   slideCycleDuration: 0.11
-  shellEjectSpeed: 1.6
-  shellLifetime: 2.5
   swayPositionScale: 0.0012
   swayRotationScale: 0.055
   swayDamping: 9
@@ -46113,14 +45985,12 @@ MonoBehaviour:
   shotgunMuzzle: {fileID: 76477350}
   shotgunFlash: {fileID: 1762580980}
   shotgunLight: {fileID: 1809882052}
-  shotgunEjectPoint: {fileID: 2142441844}
   pump: {fileID: 924527881}
   viewAnimation: {fileID: 1565301322}
   sightModel: {fileID: 920536233}
   sightDot: {fileID: 1260133679}
   muzzleBurst: {fileID: 144020842}
   breachBurst: {fileID: 1972820549}
-  spentCell: {fileID: 359800721737942980, guid: 3d2ad892db2bbc74c80d7e995ea30706, type: 3}
   impactMark: {fileID: 7154308836113840482, guid: 3ab8ec8a7d5167b4baedfa3acd36e109, type: 3}
   tracer: {fileID: 1236641024}
   audioSource: {fileID: 1236641023}
@@ -55596,7 +55466,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -57635,7 +57505,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -61912,7 +61782,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -61932,7 +61802,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: RELOADING
+  m_Text: CHARGING
 --- !u!1 &1579327258
 GameObject:
   m_ObjectHideFlags: 0
@@ -65842,7 +65712,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -70597,7 +70467,7 @@ Light:
   m_Enabled: 0
   serializedVersion: 13
   m_Type: 2
-  m_Color: {r: 1, g: 0.68, b: 0.28, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_Intensity: 0
   m_Range: 10
   m_SpotAngle: 30
@@ -76171,7 +76041,6 @@ Transform:
   - {fileID: 1278115032}
   - {fileID: 72893406}
   - {fileID: 1451177887}
-  - {fileID: 173625603}
   - {fileID: 137352915}
   - {fileID: 2142441844}
   - {fileID: 1532479991}
@@ -82642,7 +82511,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.76, b: 0.4, a: 1}
+  m_Color: {r: 0.3, g: 0.82, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -82690,96 +82559,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 156, y: 22}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!1 &2092335360
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2092335361}
-  - component: {fileID: 2092335363}
-  - component: {fileID: 2092335362}
-  m_Layer: 2
-  m_Name: MagazineBase.001
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2092335361
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2092335360}
-  serializedVersion: 2
-  m_LocalRotation: {x: -7.1054274e-15, y: 0, z: -0, w: 1}
-  m_LocalPosition: {x: -0, y: -0.017997742, z: -0.10697785}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 173625603}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &2092335362
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2092335360}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: db16a2a3651c1ff4a9ec419b749159f0, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &2092335363
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2092335360}
-  m_Mesh: {fileID: 8080788336827612579, guid: e1ba2934d56bd2c4fb9d83b34f27bc52, type: 3}
 --- !u!1 &2093571673
 GameObject:
   m_ObjectHideFlags: 0
@@ -83960,96 +83739,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2114132760}
   m_Mesh: {fileID: -3196806064485822628, guid: 4157af869dce5dd4c934f50b1377607a, type: 3}
---- !u!1 &2115259850
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2115259851}
-  - component: {fileID: 2115259853}
-  - component: {fileID: 2115259852}
-  m_Layer: 2
-  m_Name: MagazineRib.001
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2115259851
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2115259850}
-  serializedVersion: 2
-  m_LocalRotation: {x: -7.1054274e-15, y: 0, z: -0, w: 1}
-  m_LocalPosition: {x: -0, y: 0, z: 0.010026546}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 173625603}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &2115259852
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2115259850}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: db16a2a3651c1ff4a9ec419b749159f0, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &2115259853
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2115259850}
-  m_Mesh: {fileID: -4259518566418282023, guid: e1ba2934d56bd2c4fb9d83b34f27bc52, type: 3}
 --- !u!1 &2115714023
 GameObject:
   m_ObjectHideFlags: 0

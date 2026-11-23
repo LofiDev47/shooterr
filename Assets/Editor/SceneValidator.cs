@@ -369,8 +369,6 @@ namespace Shooter.EditorTools
                 }
                 Check(sceneWeapon.SlideWired && sceneWeapon.slide != null,
                     "weapon has an animated bolt");
-                Check(sceneWeapon.shellEjectPoint != null && sceneWeapon.shellMaterial != null,
-                    "weapon has a wired shell ejection point");
                 Check(sceneWeapon.shotgunMuzzle != null && sceneWeapon.shotgunFlash != null &&
                       sceneWeapon.shotgunLight != null,
                     "underbarrel shotgun muzzle and flash are wired");
@@ -378,8 +376,6 @@ namespace Shooter.EditorTools
                     "underbarrel shotgun has an animated pump");
                 Check(sceneWeapon.explosionMaterial != null,
                     "weapon has an explosion material");
-                Check(sceneWeapon.shotgunEjectPoint != null,
-                    "underbarrel shotgun has an ejection point");
             }
 
             // --- arena layout ------------------------------------------------------

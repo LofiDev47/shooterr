@@ -87,7 +87,7 @@ namespace Shooter.Weapons
         [SerializeField] private float recoilPitch = 1.1f;
         [SerializeField] private float recoilYaw = 0.25f;
         [SerializeField] private float muzzleFlashTime = 0.045f;
-        [SerializeField] private float tracerTime = 0.03f;
+        [SerializeField] private float tracerTime = 0.06f;
         [SerializeField] private float reloadDrop = 0.12f;
 
         [Header("Kickback spring")]
@@ -97,15 +97,9 @@ namespace Shooter.Weapons
         [Header("Firing animation")]
         [Tooltip("Bolt/slide transform from the rifle model. Moves back on every shot.")]
         public Transform slide;
-        [Tooltip("Where spent cases are thrown from.")]
-        public Transform shellEjectPoint;
-        public Material shellMaterial;
         [SerializeField] private float slideTravel = 0.045f;
         [Tooltip("Seconds for the bolt to travel back and return. Matches the base fire interval.")]
         [SerializeField] private float slideCycleDuration = 0.11f;
-        [Tooltip("Multiplier applied to the casing's initial velocity.")]
-        [SerializeField] private float shellEjectSpeed = 1.6f;
-        [SerializeField] private float shellLifetime = 2.5f;
 
         [Header("Sway")]
         [Tooltip("Metres the weapon drifts per pixel of mouse movement.")]
@@ -131,7 +125,6 @@ namespace Shooter.Weapons
         public Transform shotgunMuzzle;
         public GameObject shotgunFlash;
         public Light shotgunLight;
-        public Transform shotgunEjectPoint;
         public Transform pump;
         public Animation viewAnimation;
         public Transform sightModel;
@@ -139,7 +132,6 @@ namespace Shooter.Weapons
         public float SightBlend { get; private set; }
         public Animation muzzleBurst;
         public Animation breachBurst;
-        public GameObject spentCell;
         public GameObject impactMark;
         public LineRenderer tracer;
         public AudioSource audioSource;
@@ -652,9 +644,9 @@ namespace Shooter.Weapons
                 }
 
                 Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (range * 0.5f));
-                target.TakeDamage(appliedDamage, hitPoint);
+                float dealt = DealWeaponHit(target, appliedDamage, hitPoint, upgrades);
                 hud?.ShowHitMarker(false);
-                hud?.ShowDamageNumber(hitPoint, ReportedDamage(target, appliedDamage), false, false);
+                hud?.ShowDamageNumber(hitPoint, dealt, false, false);
                 AudioManager.Instance?.PlayEnemyHit(hitPoint);
             }
 
@@ -772,9 +764,9 @@ namespace Shooter.Weapons
                         appliedDamage *= upgrades.CriticalDamageMultiplier;
                     }
 
-                    target.TakeDamage(appliedDamage, hit.point);
+                    float dealt = DealWeaponHit(target, appliedDamage, hit.point, upgrades);
                     hud?.ShowHitMarker(headshot);
-                    hud?.ShowDamageNumber(hit.point, ReportedDamage(target, appliedDamage), headshot, critical);
+                    hud?.ShowDamageNumber(hit.point, dealt, headshot, critical);
                     AudioManager.Instance?.PlayWeaponHit(hit.point);
 
                     if (upgrades != null && upgrades.ExplosionRadius > 0f)
@@ -861,12 +853,14 @@ namespace Shooter.Weapons
             return Vector3.Dot(forward.normalized, toTarget.normalized) >= minimumDot;
         }
 
-        /// <summary>
-        /// The damage the target will actually lose, so floated numbers stay
-        /// honest against armoured or exposed targets (see <see cref="IDamageScale"/>).
-        /// </summary>
-        private static float ReportedDamage(IDamageable target, float amount)
+        private static float DealWeaponHit(IDamageable target, float amount, Vector3 point, UpgradeManager upgrades)
         {
+            if (target is EnemyHealth enemy)
+            {
+                return enemy.TakeWeaponHit(amount, point, upgrades);
+            }
+
+            target.TakeDamage(amount, point);
             return target is IDamageScale scaled ? amount * scaled.IncomingDamageScale : amount;
         }
 
@@ -1099,9 +1093,9 @@ namespace Shooter.Weapons
                 Vector3 point = pointByTarget[pair.Key];
                 bool headshot = headshotTargets.Contains(pair.Key);
 
-                pair.Key.TakeDamage(pair.Value, point);
+                float dealt = DealWeaponHit(pair.Key, pair.Value, point, upgrades);
                 hud?.ShowHitMarker(headshot);
-                hud?.ShowDamageNumber(point, ReportedDamage(pair.Key, pair.Value), headshot, anyCrit);
+                hud?.ShowDamageNumber(point, dealt, headshot, anyCrit);
                 upgrades?.TakeSpeedPenalty();
             }
 
@@ -1119,7 +1113,6 @@ namespace Shooter.Weapons
             ApplyShotgunRecoil();
             PlayViewAction("BreachFire");
             CyclePump();
-            EjectShell(shotgunEjectPoint != null ? shotgunEjectPoint : shellEjectPoint, 0.05f);
             PlayShotgunAudio();
 
             lastFireTime = now;
@@ -1429,8 +1422,7 @@ namespace Shooter.Weapons
         }
 
         /// <summary>
-        /// Starts the cyclic action: the bolt is kicked backward and a spent case
-        /// is thrown from the ejection port. Both are pure code; no animation clip.
+        /// Starts the bolt animation for each shot.
         /// </summary>
         private void CycleAction()
         {
@@ -1438,7 +1430,6 @@ namespace Shooter.Weapons
             // closes over a fixed duration, so slow frames cannot skip the cycle.
             slideOffset = slideTravel;
             slideCycleStartedAt = Time.time;
-            EjectShell();
         }
 
         private void UpdateSlide()
@@ -1482,54 +1473,6 @@ namespace Shooter.Weapons
                 : 0f;
 
             pump.localPosition = pumpRestLocalPosition + pumpBackAxis * pumpOffset;
-        }
-
-        private void EjectShell() => EjectShell(shellEjectPoint, 0.034f);
-
-        private void EjectShell(Transform origin, float casingLength)
-        {
-            if (shellMaterial == null || origin == null)
-            {
-                return;
-            }
-
-            GameObject casing = spentCell != null ? Instantiate(spentCell) : GameObject.CreatePrimitive(PrimitiveType.Cube);
-            casing.name = "Shell Casing";
-            casing.layer = 2; // Ignore Raycast, matching every other effect piece.
-            casing.transform.position = origin.position;
-            casing.transform.rotation = Random.rotation;
-            casing.transform.localScale = new Vector3(0.014f, 0.014f, Mathf.Max(0.02f, casingLength));
-
-            Collider collider = casing.GetComponent<Collider>();
-
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
-
-            MeshRenderer renderer = casing.GetComponent<MeshRenderer>();
-
-            if (renderer != null)
-            {
-                renderer.sharedMaterial = shellMaterial;
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            }
-
-            Rigidbody body = casing.AddComponent<Rigidbody>();
-            body.mass = 0.015f;
-            body.linearDamping = 0.2f;
-            body.angularDamping = 0.1f;
-
-            // The port sits on the visible (left) side of the rifle, so throw the
-            // casing out of that side rather than through the receiver.
-            Vector3 velocity = -transform.right * Random.Range(1.2f, 2.0f)
-                + transform.up * Random.Range(0.7f, 1.3f)
-                - transform.forward * 0.15f;
-
-            body.AddForce(velocity * shellEjectSpeed, ForceMode.VelocityChange);
-            body.AddTorque(Random.insideUnitSphere * 10f, ForceMode.VelocityChange);
-
-            Destroy(casing, shellLifetime);
         }
 
         /// <summary>

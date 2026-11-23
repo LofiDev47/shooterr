@@ -420,7 +420,7 @@ namespace Shooter.Managers
                 // Boss rules: both drops are guaranteed, so the reward is not RNG.
                 DropAmmoCache(enemy.transform.position);
                 DropHealthCache(enemy.transform.position, bossDropHeal);
-                hud?.ShowToast("THE WARDEN FALLS  ·  +AMMO +HEAL");
+                hud?.ShowToast("THE WARDEN FALLS  ·  +ENERGY +HEAL");
                 return;
             }
 
@@ -462,7 +462,7 @@ namespace Shooter.Managers
                 pickup.weapon = null; // Resolved at runtime: the cache is spawned mid-wave.
             }
 
-            hud?.ShowToast("ELITE DOWN  ·  AMMO CACHE DROPPED");
+            hud?.ShowToast("ELITE DOWN  ·  ENERGY CACHE DROPPED");
             Debug.Log($"[Shooter] Elite dropped an ammo cache at {dropPosition}.");
         }
 

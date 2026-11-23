@@ -503,7 +503,7 @@ namespace Shooter.UI
 
             if (settings == null)
             {
-                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R reload · G shotgun · ESC pause" +
+                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R recharge · G shotgun · ESC pause" +
                     "\nAt a wall, hold W + SPACE to climb or press SPACE airborne to kick away.";
                 return;
             }
@@ -522,7 +522,7 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionMelee)} melee" +
                 $" · {K(SettingsManager.ActionInspect)} inspect" +
                 $" · {K(SettingsManager.ActionSlide)} slide" +
-                $" · {K(SettingsManager.ActionReload)} reload" +
+                $" · {K(SettingsManager.ActionReload)} recharge" +
                 $" · {K(SettingsManager.ActionShotgun)} shotgun" +
                 $" · {K(SettingsManager.ActionPause)} pause" +
                 $"\nAt a wall, hold {K(SettingsManager.ActionForward)} + {K(SettingsManager.ActionJump)} to climb" +

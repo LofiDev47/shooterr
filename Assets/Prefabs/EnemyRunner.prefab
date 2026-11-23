@@ -462,7 +462,7 @@ MonoBehaviour:
   attackRange: 2
   attackCooldown: 1.2
   attackDamage: 9
-  attackWindup: 0.34
+  attackWindup: 0.1
   meleeLeanAngle: 14
   neighborRadius: 1.1
   separationStrength: 2.5

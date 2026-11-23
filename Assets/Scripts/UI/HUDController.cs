@@ -84,13 +84,13 @@ namespace Shooter.UI
         [SerializeField] private float crosshairMaxSpread = 14f;
 
         private const string HintBase =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   C slide   ·   R reload   ·   ESC pause";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   C slide   ·   R recharge   ·   ESC pause";
         private const string HintWithShotgun =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R reload   ·   ESC pause";
+            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R recharge   ·   ESC pause";
 
         private static readonly Color HealthyColor = new Color(0.46f, 0.91f, 0.80f);
-        private static readonly Color AmmoColor = new Color(1f, 0.76f, 0.40f);
-        private static readonly Color ReloadColor = new Color(1f, 0.90f, 0.65f);
+        private static readonly Color EnergyColor = new Color(0.30f, 0.82f, 1f);
+        private static readonly Color ReloadColor = new Color(0.71f, 0.93f, 1f);
         private static readonly Color CriticalColor = new Color(0.92f, 0.22f, 0.22f);
         private static readonly Color NormalHitColor = new Color(1f, 0.95f, 0.75f, 1f);
         private static readonly Color HeadshotColor = new Color(1f, 0.68f, 0.14f, 1f);
@@ -346,8 +346,7 @@ namespace Shooter.UI
             float reloadProgress = reloading ? weapon.ReloadProgress01 : 0f;
             int capacity = weapon.State != null ? weapon.State.MagazineSize : 0;
             float meterFill = reloading ? reloadProgress : capacity > 0 ? (float)magazine / capacity : 0f;
-            Color readyColor = reserveText != null ? AmmoColor : HealthyColor;
-            Color meterColor = reloading ? ReloadColor : magazine <= 5 ? CriticalColor : readyColor;
+            Color meterColor = reloading ? ReloadColor : magazine <= 5 ? CriticalColor : EnergyColor;
             UpdateMeter(ammoSegments, ammoFill, meterFill, meterColor);
 
             if (reloadText == null)
@@ -362,7 +361,7 @@ namespace Shooter.UI
                     int percent = Mathf.RoundToInt(reloadProgress * 100f);
                     if (percent != lastReloadPercent)
                     {
-                        reloadText.text = $"RELOADING {percent}%";
+                        reloadText.text = $"CHARGING {percent}%";
                         lastReloadPercent = percent;
                     }
                 }
@@ -428,14 +427,14 @@ namespace Shooter.UI
 
             if (weapon.IsShotgunReloading)
             {
-                text = "SHELLS  RELOADING";
-                color = new Color(1f, 0.55f, 0.18f);
+                text = "BREACH  CHARGING";
+                color = ReloadColor;
             }
             else
             {
-                text = $"SHELLS {weapon.ShotgunShells}/{weapon.ShotgunCapacity}";
+                text = $"BREACH {weapon.ShotgunShells}/{weapon.ShotgunCapacity}";
                 color = weapon.ShotgunShells > 0
-                    ? new Color(1f, 0.78f, 0.32f)
+                    ? EnergyColor
                     : new Color(1f, 1f, 1f, 0.3f);
             }
 

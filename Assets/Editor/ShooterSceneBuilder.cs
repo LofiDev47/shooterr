@@ -122,7 +122,6 @@ namespace Shooter.EditorTools
             public Material Hazard;
             public Material EnemyBolt;
             public Material Grip;
-            public Material Brass;
         }
 
         private static ArenaMaterials CreateMaterials()
@@ -162,7 +161,7 @@ namespace Shooter.EditorTools
                 GunAccent = GetOrCreateLitMaterial("GunAccent", new Color(0.38f, 0.38f, 0.43f), 0.5f, 0.7f),
                 Impact = GetOrCreateUnlitMaterial("Impact", new Color(0.03f, 0.03f, 0.03f)),
                 Muzzle = GetOrCreateUnlitMaterial("Muzzle", new Color(1f, 0.85f, 0.35f)),
-                Tracer = GetOrCreateUnlitMaterial("Tracer", new Color(1f, 0.92f, 0.55f)),
+                Tracer = GetOrCreateUnlitMaterial("Tracer", new Color(0.30f, 0.82f, 1f)),
                 Ammo = GetOrCreateUnlitMaterial("Ammo", new Color(0.45f, 1f, 0.5f)),
                 Spark = GetOrCreateUnlitMaterial("Spark", new Color(1f, 0.87f, 0.45f)),
                 EnemyDebris = GetOrCreateLitMaterial("EnemyDebris", new Color(0.42f, 0.09f, 0.11f), 0.3f, 0f),
@@ -178,7 +177,6 @@ namespace Shooter.EditorTools
                     new Color(1f, 0.28f, 0.03f) * 1.7f),
                 EnemyBolt = GetOrCreateUnlitMaterial("EnemyBolt", new Color(1f, 0.24f, 0.1f)),
                 Grip = GetOrCreateLitMaterial("Grip", new Color(0.035f, 0.04f, 0.045f), 0.08f, 0.05f),
-                Brass = GetOrCreateLitMaterial("Brass", new Color(0.62f, 0.44f, 0.12f), 0.7f, 0.85f),
                 Skybox = GetOrCreateSkyboxMaterial(),
             };
         }
@@ -1020,7 +1018,6 @@ namespace Shooter.EditorTools
 
             Transform muzzleAnchor = FindDeep(rifle.transform, "MuzzlePoint");
             Transform slide = FindDeep(rifle.transform, "Slide");
-            Transform ejectPoint = FindDeep(rifle.transform, "EjectPoint");
 
             if (muzzleAnchor == null)
             {
@@ -1049,14 +1046,13 @@ namespace Shooter.EditorTools
             flashLightObject.transform.SetParent(muzzle.transform, false);
             Light flashLight = flashLightObject.AddComponent<Light>();
             flashLight.type = LightType.Point;
-            flashLight.color = new Color(1f, 0.82f, 0.45f);
+            flashLight.color = new Color(0.30f, 0.82f, 1f);
             flashLight.range = 8f;
             flashLight.intensity = 7f;
             flashLight.shadows = LightShadows.None;
 
             // Underbarrel shotgun anchors and a second, wider flash rig.
             Transform shotgunMuzzleAnchor = FindDeep(rifle.transform, "ShotgunMuzzle");
-            Transform shotgunEjectPoint = FindDeep(rifle.transform, "ShotgunEjectPoint");
             Transform pump = FindDeep(rifle.transform, "Pump");
             Transform shotgunMuzzle = null;
             GameObject shotgunFlashRoot = null;
@@ -1085,7 +1081,7 @@ namespace Shooter.EditorTools
                 shotgunLightObject.transform.SetParent(shotgunMuzzle, false);
                 shotgunLight = shotgunLightObject.AddComponent<Light>();
                 shotgunLight.type = LightType.Point;
-                shotgunLight.color = new Color(1f, 0.68f, 0.28f);
+                shotgunLight.color = new Color(0.30f, 0.82f, 1f);
                 shotgunLight.range = 10f;
                 shotgunLight.intensity = 0f;
                 shotgunLight.shadows = LightShadows.None;
@@ -1094,8 +1090,8 @@ namespace Shooter.EditorTools
             LineRenderer tracer = weaponObject.AddComponent<LineRenderer>();
             tracer.useWorldSpace = true;
             tracer.positionCount = 2;
-            tracer.widthMultiplier = 0.012f;
-            tracer.numCapVertices = 0;
+            tracer.widthMultiplier = 0.028f;
+            tracer.numCapVertices = 4;
             tracer.alignment = LineAlignment.View;
             tracer.textureMode = LineTextureMode.Stretch;
             tracer.shadowCastingMode = ShadowCastingMode.Off;
@@ -1115,7 +1111,6 @@ namespace Shooter.EditorTools
             weapon.muzzleFlash = flashRoot;
             weapon.muzzleBurst = muzzleBurst;
             weapon.breachBurst = breachBurst;
-            weapon.spentCell = BuildLooseProp("SpentCell", materials.Brass);
             weapon.impactMark = BuildLooseProp("ImpactMark", materials.Impact);
             weapon.muzzleLight = flashLight;
             weapon.tracer = tracer;
@@ -1127,12 +1122,9 @@ namespace Shooter.EditorTools
             weapon.viewAnimation = viewAnimation;
             weapon.sightModel = model.transform;
             weapon.sightDot = FindDeep(rifle.transform, "OpticDot");
-            weapon.shellEjectPoint = ejectPoint;
-            weapon.shellMaterial = materials.Brass;
             weapon.shotgunMuzzle = shotgunMuzzle;
             weapon.shotgunFlash = shotgunFlashRoot;
             weapon.shotgunLight = shotgunLight;
-            weapon.shotgunEjectPoint = shotgunEjectPoint;
             weapon.pump = pump;
 
             flashRoot.SetActive(false);
@@ -1649,7 +1641,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R reload  /  ESC pause",
+                "WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
@@ -1744,7 +1736,7 @@ namespace Shooter.EditorTools
             Vector2 bottomCenter = new Vector2(0.5f, 0f);
             Vector2 bottomRight = new Vector2(1f, 0f);
             Color mint = new Color(0.46f, 0.91f, 0.80f);
-            Color amber = new Color(1f, 0.76f, 0.40f);
+            Color energy = new Color(0.30f, 0.82f, 1f);
             Color muted = new Color(0.66f, 0.75f, 0.81f);
             Sprite plate = FoundryHudSkin.Plate;
 
@@ -1754,7 +1746,7 @@ namespace Shooter.EditorTools
             hud.combatReadout = readout;
 
             RectTransform health = BuildInstrumentPanel(readout, "HealthPanel", 206f, false, mint, plate);
-            RectTransform ammo = BuildInstrumentPanel(readout, "AmmoPanel", 218f, true, amber, plate);
+            RectTransform ammo = BuildInstrumentPanel(readout, "AmmoPanel", 218f, true, energy, plate);
 
             AddImage(CreateRect("MedicalCrossHorizontal", health, Vector2.zero, bottomCenter,
                 new Vector2(21f, 70f), new Vector2(12f, 3f)), mint);
@@ -1762,13 +1754,13 @@ namespace Shooter.EditorTools
                 new Vector2(21f, 66f), new Vector2(3f, 11f)), mint);
             for (int i = 0; i < 3; i++)
             {
-                AddImage(CreateRect("Cartridge" + i, ammo, Vector2.zero, Vector2.zero,
-                    new Vector2(15f + i * 5f, 67f), new Vector2(3f, 9f)), amber);
+                AddImage(CreateRect("ChargeBar" + i, ammo, Vector2.zero, Vector2.zero,
+                    new Vector2(15f, 67f + i * 4f), new Vector2(13f, 2f)), energy);
             }
 
             CreateText(health, "HealthLabel", "HEALTH", 13, mint, TextAnchor.MiddleLeft,
                 Vector2.zero, Vector2.zero, new Vector2(34f, 62f), new Vector2(86f, 20f), font, FontStyle.Bold);
-            CreateText(ammo, "AmmoLabel", "MAGAZINE", 13, amber, TextAnchor.MiddleLeft,
+            CreateText(ammo, "AmmoLabel", "ENERGY", 13, energy, TextAnchor.MiddleLeft,
                 Vector2.zero, Vector2.zero, new Vector2(35f, 62f), new Vector2(99f, 20f), font, FontStyle.Bold);
             hud.healthText = CreateText(health, "HealthText", "", 36, Color.white, TextAnchor.MiddleLeft,
                 Vector2.zero, Vector2.zero, new Vector2(15f, 22f), new Vector2(176f, 42f), font, FontStyle.Bold);
@@ -1784,8 +1776,8 @@ namespace Shooter.EditorTools
 
             Sprite indicator = FoundryHudSkin.Indicator;
             hud.healthSegments = BuildReadoutMeter(health, "HealthMeter", 176f, 10, mint, indicator);
-            hud.ammoSegments = BuildReadoutMeter(ammo, "AmmoMeter", 188f, 12, amber, indicator);
-            hud.reloadText = CreateText(ammo, "ReloadText", "RELOADING", 12, amber, TextAnchor.MiddleRight,
+            hud.ammoSegments = BuildReadoutMeter(ammo, "AmmoMeter", 188f, 12, energy, indicator);
+            hud.reloadText = CreateText(ammo, "ReloadText", "CHARGING", 12, energy, TextAnchor.MiddleRight,
                 bottomRight, bottomRight, new Vector2(-15f, 63f), new Vector2(86f, 19f), font, FontStyle.Bold);
             hud.reloadText.enabled = false;
 
@@ -1795,7 +1787,7 @@ namespace Shooter.EditorTools
                 new Vector2(0f, 5f), new Vector2(176f, 26f));
             AddImage(shellChip, new Color(0.09f, 0.13f, 0.16f, 0.96f)).sprite = plate;
             hud.shotgunChip = shellChip.gameObject;
-            hud.shotgunText = CreateText(shellChip, "ShotgunText", "", 13, amber,
+            hud.shotgunText = CreateText(shellChip, "ShotgunText", "", 13, energy,
                 TextAnchor.MiddleCenter, center, center, Vector2.zero, new Vector2(156f, 22f),
                 font, FontStyle.Bold);
             hud.shotgunChip.SetActive(false);
