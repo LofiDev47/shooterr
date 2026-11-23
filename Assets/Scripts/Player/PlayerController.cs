@@ -17,6 +17,7 @@ namespace Shooter.Player
         [Header("Speeds")]
         [SerializeField] private float walkSpeed = 5.2f;
         [SerializeField] private float sprintSpeed = 8.8f;
+        [SerializeField] private float sprintTapWindow = 0.28f;
         [Tooltip("Movement multiplier while aiming down sights.")]
         [SerializeField] private float aimSpeedMultiplier = 0.65f;
 
@@ -40,9 +41,7 @@ namespace Shooter.Player
         [Range(0f, 1f)]
         [SerializeField] private float jumpCutMultiplier = 0.45f;
 
-        [Header("Wall movement")]
-        [SerializeField] private float wallClimbSpeed = 5.2f;
-        [SerializeField] private float wallClimbDuration = 0.68f;
+        [Header("Wall jump")]
         [SerializeField] private float wallJumpPush = 7f;
         [SerializeField] private float wallJumpSteerDelay = 0.14f;
         [SerializeField] private float wallReach = 0.20f;
@@ -51,7 +50,7 @@ namespace Shooter.Player
         [SerializeField] private float slideSpeedMultiplier = 1.15f;
         [SerializeField] private float slideFriction = 4.5f;
 
-        [Header("Dash (air dash, Ultrakill-style)")]
+        [Header("Air dash")]
         [SerializeField] private float dashSpeed = 17f;
         [SerializeField] private float dashDuration = 0.16f;
         [SerializeField] private float dashCooldown = 0.55f;
@@ -139,7 +138,8 @@ namespace Shooter.Player
         private float suppressFireUntil;
         private bool cursorLocked;
         private bool wasGrounded = true;
-        private float climbTime;
+        private float lastForwardTap = float.NegativeInfinity;
+        private bool sprintRequested;
         private float wallSteerUntil;
         private Vector3 lastKickedWall;
 
@@ -284,6 +284,8 @@ namespace Shooter.Player
             {
                 IsAiming = false;
                 IsSprinting = false;
+                sprintRequested = false;
+                lastForwardTap = float.NegativeInfinity;
                 planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, groundDeceleration * deltaTime);
 
                 // Keep gravity and grounding integrated while controls are disabled
@@ -409,16 +411,16 @@ namespace Shooter.Player
         private void ReadMovement(float deltaTime)
         {
             Vector2 input = Vector2.zero;
-            bool sprintHeld = false;
+            bool forwardHeld = false;
             bool crouchHeld = false;
-            bool jumpHeld = false;
             bool jumpPressed = false;
 
             SettingsManager settings = SettingsManager.Instance;
 
             if (Keyboard.current != null)
             {
-                if (IsHeld(settings, SettingsManager.ActionForward)) input.y += 1f;
+                forwardHeld = IsHeld(settings, SettingsManager.ActionForward);
+                if (forwardHeld) input.y += 1f;
                 if (IsHeld(settings, SettingsManager.ActionBackward)) input.y -= 1f;
                 if (IsHeld(settings, SettingsManager.ActionStrafeRight)) input.x += 1f;
                 if (IsHeld(settings, SettingsManager.ActionStrafeLeft)) input.x -= 1f;
@@ -428,9 +430,7 @@ namespace Shooter.Player
                     input.Normalize();
                 }
 
-                sprintHeld = IsHeld(settings, SettingsManager.ActionSprint);
                 crouchHeld = IsHeld(settings, SettingsManager.ActionSlide);
-                jumpHeld = IsHeld(settings, SettingsManager.ActionJump);
                 jumpPressed = WasPressed(settings, SettingsManager.ActionJump);
 
                 if (jumpPressed)
@@ -444,22 +444,25 @@ namespace Shooter.Player
                 }
             }
 
-            // Auto-run: sprint speed is the baseline now, so the player is always
-            // running. Shift (bound to ActionDash) triggers the air dash instead.
-            IsSprinting = !IsAiming && !isSliding && controller.isGrounded && input.sqrMagnitude > 0.01f;
-
-            // Dash trigger (works on ground and once in the air).
-            bool dashPressed = WasPressed(settings, SettingsManager.ActionDash);
-            if (dashPressed && Time.time >= dashCooldownEnd &&
-                (controller.isGrounded || !dashUsedInAir))
+            if (WasPressed(settings, SettingsManager.ActionForward))
             {
-                StartDash(input);
+                sprintRequested = Time.time - lastForwardTap <= sprintTapWindow;
+                lastForwardTap = sprintRequested ? float.NegativeInfinity : Time.time;
             }
 
-            // Refresh the air-dash token on landing.
-            if (controller.isGrounded)
+            if (!forwardHeld || input.y <= 0f || IsAiming)
             {
-                dashUsedInAir = false;
+                sprintRequested = false;
+            }
+
+            IsSprinting = sprintRequested && !isSliding && controller.isGrounded;
+
+            if (UpgradeManager.Instance != null && UpgradeManager.Instance.HasAirDash &&
+                !controller.isGrounded && !dashUsedInAir && Time.time >= dashCooldownEnd &&
+                WasPressed(settings, SettingsManager.ActionDash))
+            {
+                EndSlide();
+                StartDash(input);
             }
 
             TryStartSlide(input, crouchHeld);
@@ -481,9 +484,10 @@ namespace Shooter.Player
                 }
             }
 
-            bool climbed = UpdateWallMovement(input, jumpPressed, jumpHeld, deltaTime);
-            if (!climbed)
+            if (!TryWallJump(jumpPressed))
+            {
                 UpdateJump();
+            }
 
             // Gravity and ground contact. Ground state here is from the PREVIOUS
             // Move, so it must not be used to re-arm the coyote window or reset
@@ -495,8 +499,7 @@ namespace Shooter.Player
             }
 
             float fallSpeed = verticalVelocity;
-            if (!climbed)
-                verticalVelocity += gravity * deltaTime;
+            verticalVelocity += gravity * deltaTime;
 
             Vector3 motion = planarVelocity + Vector3.up * verticalVelocity;
             controller.Move(motion * deltaTime);
@@ -509,7 +512,8 @@ namespace Shooter.Player
             if (groundedNow)
             {
                 lastGroundedTime = Time.time;
-                climbTime = 0f;
+                dashUsedInAir = false;
+                isDashing = false;
                 wallSteerUntil = 0f;
                 lastKickedWall = Vector3.zero;
                 UpgradeManager.Instance?.ResetAirJumps();
@@ -563,19 +567,19 @@ namespace Shooter.Player
             dashEndTime = Time.time + dashDuration;
             dashCooldownEnd = Time.time + dashCooldown;
 
-            if (!controller.isGrounded)
-            {
-                dashUsedInAir = true;
-            }
+            dashUsedInAir = true;
         }
 
         private void UpdateWalk(Vector2 input, float deltaTime)
         {
             float speedScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f;
-            // Auto-run: sprint speed is the baseline.
-            float targetSpeed = (IsAiming
-                ? walkSpeed * aimSpeedMultiplier
-                : sprintSpeed) * speedScale;
+            float targetSpeed = IsSprinting ? sprintSpeed : walkSpeed;
+            if (IsAiming)
+            {
+                targetSpeed *= aimSpeedMultiplier;
+            }
+
+            targetSpeed *= speedScale;
 
             Vector3 wish = transform.right * input.x + transform.forward * input.y;
 
@@ -764,44 +768,31 @@ namespace Shooter.Player
             jumpBufferedUntil = -1f;
         }
 
-        private bool UpdateWallMovement(Vector2 input, bool jumpPressed, bool jumpHeld, float deltaTime)
+        private bool TryWallJump(bool jumpPressed)
         {
-            if (controller.isGrounded || isSliding || Time.time < wallSteerUntil ||
-                (!jumpPressed && (!jumpHeld || input.y <= 0.1f)))
-                return false;
-
-            UpgradeManager upgrades = UpgradeManager.Instance;
-            float climbLimit = wallClimbDuration * (upgrades != null ? upgrades.WallClimbMultiplier : 1f);
-            if (!jumpPressed && climbTime >= climbLimit)
-                return false;
-
-            Vector3 forward = transform.forward;
-            if (!ProbeWall(forward, out Vector3 normal) &&
-                (!jumpPressed || (!ProbeWall(transform.right, out normal) &&
-                    !ProbeWall(-transform.right, out normal) && !ProbeWall(-forward, out normal))))
-                return false;
-
-            bool sameWall = Vector3.Dot(lastKickedWall, normal) > 0.7f;
-            if (jumpPressed && !sameWall)
+            if (!jumpPressed || controller.isGrounded || isSliding || Time.time < wallSteerUntil)
             {
-                float push = wallJumpPush * (upgrades != null ? upgrades.WallKickMultiplier : 1f);
-                planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * push;
-                float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
-                verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
-                wallSteerUntil = Time.time + wallJumpSteerDelay;
-                lastKickedWall = normal;
-                jumpBufferedUntil = -1f;
-                lastGroundedTime = -999f;
                 return false;
             }
 
-            if (sameWall || !jumpHeld || climbTime >= climbLimit ||
-                input.y <= 0.1f || Vector3.Dot(forward, normal) > -0.45f)
+            Vector3 forward = transform.forward;
+            Vector3 right = transform.right;
+            if (!ProbeWall(forward, out Vector3 normal) && !ProbeWall(right, out normal) &&
+                !ProbeWall(-right, out normal) && !ProbeWall(-forward, out normal))
+            {
                 return false;
+            }
 
-            climbTime += deltaTime;
-            verticalVelocity = wallClimbSpeed;
-            planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.4f - normal * 1.5f;
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float push = wallJumpPush * (upgrades != null ? upgrades.WallKickMultiplier : 1f);
+            float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
+            planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * push;
+            verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
+            wallSteerUntil = Time.time + wallJumpSteerDelay;
+            lastKickedWall = normal;
+            jumpBufferedUntil = -1f;
+            lastGroundedTime = -999f;
+            isDashing = false;
             return true;
         }
 
@@ -810,10 +801,11 @@ namespace Shooter.Player
             Vector3 center = transform.TransformPoint(controller.center);
             const float probeRadius = 0.10f;
             float distance = controller.radius + wallReach - probeRadius;
-            // At the lower probe, climbing continues until the feet reach the lip.
             Vector3 lower = center - Vector3.up * (controller.height * 0.5f - 0.20f);
-            return TryWallCast(center, direction, probeRadius, distance, out normal) ||
-                TryWallCast(lower, direction, probeRadius, distance, out normal);
+            return (TryWallCast(center, direction, probeRadius, distance, out normal) &&
+                    Vector3.Dot(lastKickedWall, normal) <= 0.7f) ||
+                   (TryWallCast(lower, direction, probeRadius, distance, out normal) &&
+                    Vector3.Dot(lastKickedWall, normal) <= 0.7f);
         }
 
         private static bool TryWallCast(Vector3 center, Vector3 direction, float radius, float distance, out Vector3 normal)

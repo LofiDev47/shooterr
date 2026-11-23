@@ -503,8 +503,8 @@ namespace Shooter.UI
 
             if (settings == null)
             {
-                menuHint.text = "WASD move · SHIFT sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R recharge · G shotgun · ESC pause" +
-                    "\nAt a wall, hold W + SPACE to climb or press SPACE airborne to kick away.";
+                menuHint.text = "WASD move · double-tap W sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R recharge · G shotgun · ESC pause" +
+                    "\nPress SPACE near a wall while airborne to wall jump. Traversal Harness unlocks SHIFT air dash.";
                 return;
             }
 
@@ -516,7 +516,7 @@ namespace Shooter.UI
             menuHint.text =
                 $"{K(SettingsManager.ActionForward)}{K(SettingsManager.ActionStrafeLeft)}" +
                 $"{K(SettingsManager.ActionBackward)}{K(SettingsManager.ActionStrafeRight)} move" +
-                $" · {K(SettingsManager.ActionSprint)} sprint" +
+                $" · double-tap {K(SettingsManager.ActionForward)} sprint" +
                 $" · {K(SettingsManager.ActionJump)} jump" +
                 " · LMB fire · RMB aim" +
                 $" · {K(SettingsManager.ActionMelee)} melee" +
@@ -525,8 +525,8 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionReload)} recharge" +
                 $" · {K(SettingsManager.ActionShotgun)} shotgun" +
                 $" · {K(SettingsManager.ActionPause)} pause" +
-                $"\nAt a wall, hold {K(SettingsManager.ActionForward)} + {K(SettingsManager.ActionJump)} to climb" +
-                $" or press {K(SettingsManager.ActionJump)} airborne to kick away.";
+                $"\nPress {K(SettingsManager.ActionJump)} near a wall while airborne to wall jump." +
+                $" Traversal Harness unlocks {K(SettingsManager.ActionDash)} air dash.";
         }
 
         private static string QualityName(int index)

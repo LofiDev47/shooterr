@@ -84,9 +84,9 @@ namespace Shooter.UI
         [SerializeField] private float crosshairMaxSpread = 14f;
 
         private const string HintBase =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   C slide   ·   R recharge   ·   ESC pause";
+            "WASD move   ·   double-tap W sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   C slide   ·   R recharge   ·   ESC pause";
         private const string HintWithShotgun =
-            "WASD move   ·   SHIFT sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R recharge   ·   ESC pause";
+            "WASD move   ·   double-tap W sprint   ·   SPACE jump   ·   LMB fire   ·   RMB aim   ·   E melee   ·   F inspect   ·   G shotgun   ·   C slide   ·   R recharge   ·   ESC pause";
 
         private static readonly Color HealthyColor = new Color(0.46f, 0.91f, 0.80f);
         private static readonly Color EnergyColor = new Color(0.30f, 0.82f, 1f);

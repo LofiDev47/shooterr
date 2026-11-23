@@ -42,9 +42,13 @@ namespace Shooter.Enemies
         [SerializeField] private float flinchKnockback = 0.09f;
 
         [Header("Ranged behaviour")]
-        [Tooltip("Set by the spawner for marksmen. Zero keeps melee behaviour.")]
+        [Tooltip("Set by the spawner for ranged enemies. Zero keeps melee behaviour.")]
         [SerializeField] private float rangedHoldDistance;
         [SerializeField] private float rangedStrafeSpeed = 2.6f;
+
+        [Header("Flight")]
+        [SerializeField] private float hoverHeight;
+        private float hoverPhase;
 
         private const float LungeDistance = 0.4f;
         private const float StrikeRadius = 0.28f;
@@ -105,6 +109,10 @@ namespace Shooter.Enemies
             attackStrikeTime = -1f;
             recoveryEndsAt = 0f;
             lastPosition = transform.position;
+            if (hoverHeight > 0f)
+            {
+                hoverPhase = Random.Range(0f, 2f * Mathf.PI);
+            }
         }
 
         /// <summary>
@@ -399,12 +407,22 @@ namespace Shooter.Enemies
 
         private void Move(float deltaTime)
         {
-            if (controller.isGrounded && verticalVelocity < 0f)
+            if (hoverHeight > 0f && target != null && !target.IsDead)
             {
-                verticalVelocity = -2f;
+                float altitude = Mathf.Clamp(target.transform.position.y + 3.4f, hoverHeight, hoverHeight + 1f);
+                altitude += Mathf.Sin(Time.time * 2.2f + hoverPhase) * 0.32f;
+                float climbSpeed = Mathf.Clamp((altitude - transform.position.y) * 3f, -3f, 3f);
+                verticalVelocity = Mathf.MoveTowards(verticalVelocity, climbSpeed, acceleration * deltaTime);
             }
+            else
+            {
+                if (controller.isGrounded && verticalVelocity < 0f)
+                {
+                    verticalVelocity = -2f;
+                }
 
-            verticalVelocity += gravity * deltaTime;
+                verticalVelocity += gravity * deltaTime;
+            }
 
             Vector3 motion = planarVelocity * (health != null ? health.MovementStatusMultiplier : 1f)
                 + Vector3.up * verticalVelocity;
@@ -428,7 +446,9 @@ namespace Shooter.Enemies
 
         private void UpdateStuckDetection(float deltaTime)
         {
-            float moved = (transform.position - lastPosition).magnitude;
+            Vector3 movement = transform.position - lastPosition;
+            movement.y = 0f;
+            float moved = movement.magnitude;
             float expected = planarVelocity.magnitude *
                 (health != null ? health.MovementStatusMultiplier : 1f) * deltaTime;
             lastPosition = transform.position;

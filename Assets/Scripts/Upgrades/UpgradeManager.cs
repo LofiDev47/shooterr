@@ -176,7 +176,7 @@ namespace Shooter.Upgrades
         public float SpreadMultiplier => spreadMultiplier;
         public float RecoilMultiplier => recoilMultiplier;
         public float SpeedMultiplier => speedMultiplier;
-        public float WallClimbMultiplier => traversalHarness ? 1.35f : 1f;
+        public bool HasAirDash => traversalHarness;
         public float WallKickMultiplier => traversalHarness ? 1.15f : 1f;
         public float MeleeRangeMultiplier => brawlerKit ? 1.20f : 1f;
         public float MeleeDamageMultiplier => brawlerKit ? 1.30f : 1f;
@@ -1163,7 +1163,7 @@ namespace Shooter.Upgrades
                     Id = "Traversal Harness",
                     Rarity = AugmentRarity.Advanced,
                     Title = "Traversal Harness",
-                    Description = "Climb walls 35% longer and kick off 15% faster",
+                    Description = "Unlock air dash (Shift by default) and kick off walls 15% faster",
                     CanOffer = manager => !manager.traversalHarness,
                     Apply = manager => manager.traversalHarness = true,
                 },

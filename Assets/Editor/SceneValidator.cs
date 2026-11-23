@@ -309,6 +309,13 @@ namespace Shooter.EditorTools
                         $"{name} can run as an exploder");
                 }
 
+                GameObject drone = waveSpawner.dronePrefab;
+                EnemyAI droneAI = drone != null ? drone.GetComponent<EnemyAI>() : null;
+                Check(droneAI != null && new SerializedObject(droneAI).FindProperty("hoverHeight").floatValue > 0f,
+                    "wave spawner has a drone configured for flight");
+                Check(drone != null && drone.GetComponent<EnemyRangedAttack>() != null &&
+                      drone.GetComponent<EnemyHealth>() != null, "drone can fire and take damage");
+
                 Check(waveSpawner.ammoCachePrefab != null, "wave spawner has an elite ammo cache prefab");
                 Check(waveSpawner.healthCachePrefab != null, "wave spawner has a health cache prefab");
 
@@ -388,6 +395,9 @@ namespace Shooter.EditorTools
 
             Check(platforms.Length == 4, "arena has four raised corner platforms");
             Check(ramps.Length == 4, "arena has four platform ramps");
+            Check(new[] { "Catwalk West", "Catwalk East" }.All(name =>
+                FindArenaObjects(name, true).Any(obj => obj.GetComponent<BoxCollider>() != null)),
+                "both raised side catwalks have walkable collision");
             Check(pad.Length == 1, "arena has a central pad");
             Check(pillars.Length == 4, "arena has four inner pillars");
             Check(perimeterWalls == 4, "arena has four perimeter walls");

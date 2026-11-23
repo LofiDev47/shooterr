@@ -275,16 +275,17 @@ namespace Shooter.EditorTools
             AugmentDef traversal = System.Array.Find(pool, card => card.Id == "Traversal Harness");
             AugmentDef brawler = System.Array.Find(pool, card => card.Id == "Brawler Kit");
 
+            Check(!upgrades.HasAirDash, "air dash starts locked");
             traversal.Apply(upgrades);
             brawler.Apply(upgrades);
-            Check(Mathf.Approximately(upgrades.WallClimbMultiplier, 1.35f) &&
-                  Mathf.Approximately(upgrades.WallKickMultiplier, 1.15f), "Traversal Harness buffs both wall moves");
+            Check(upgrades.HasAirDash &&
+                  Mathf.Approximately(upgrades.WallKickMultiplier, 1.15f), "Traversal Harness unlocks air dash and buffs wall jumps");
             Check(Mathf.Approximately(upgrades.MeleeRangeMultiplier, 1.20f) &&
                   Mathf.Approximately(upgrades.MeleeDamageMultiplier, 1.30f), "Brawler Kit buffs melee reach and damage");
             Check(!traversal.CanOffer(upgrades) && !brawler.CanOffer(upgrades), "specialized augments are offered once per run");
 
             upgrades.ResetAugments();
-            Check(upgrades.WallClimbMultiplier == 1f && upgrades.WallKickMultiplier == 1f &&
+            Check(!upgrades.HasAirDash && upgrades.WallKickMultiplier == 1f &&
                   upgrades.MeleeRangeMultiplier == 1f && upgrades.MeleeDamageMultiplier == 1f &&
                   traversal.CanOffer(upgrades) && brawler.CanOffer(upgrades), "new runs clear and restore specialized augments");
 

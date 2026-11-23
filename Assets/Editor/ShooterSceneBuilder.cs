@@ -18,7 +18,7 @@ namespace Shooter.EditorTools
     /// <summary>
     /// Builds the entire playable arena from code so the scene is reproducible:
     /// menu item "Shooter/Rebuild Arena Scene" or -executeMethod Shooter.EditorTools.ShooterSceneBuilder.Build.
-    /// Rebuilds Foundry visuals around the arena's original collision layout.
+    /// Builds the Foundry geometry, combat encounters and interface.
     /// </summary>
     public static class ShooterSceneBuilder
     {
@@ -356,6 +356,7 @@ namespace Shooter.EditorTools
 
             BuildCentralPad(materials, arena.transform);
             BuildCornerPlatforms(materials, arena.transform);
+            BuildCatwalks(materials, arena.transform);
             BuildInnerPillars(materials, arena.transform);
             BuildCoverClusters(materials, arena.transform);
             BuildBarrels(materials, arena.transform);
@@ -494,6 +495,40 @@ namespace Shooter.EditorTools
                     new Vector3(rampX, rampCenterY, center.z),
                     new Vector3(slopeLength, rampThickness, rampWidth), materials.CoverAlt, parent,
                     Quaternion.Euler(0f, 0f, eastSide ? rampAngle : -rampAngle));
+            }
+        }
+
+        private static void BuildCatwalks(ArenaMaterials materials, Transform parent)
+        {
+            foreach (float side in new[] { -1f, 1f })
+            {
+                float x = 15.5f * side;
+                CreatePrimitive(side < 0f ? "Catwalk West" : "Catwalk East", PrimitiveType.Cube,
+                    new Vector3(x, 2.45f, 0f), new Vector3(2.4f, 0.3f, 23.4f), materials.DarkMetal, parent);
+
+                foreach (float edge in new[] { -1f, 1f })
+                {
+                    GameObject trim = CreatePrimitive("Catwalk Edge Light", PrimitiveType.Cube,
+                        new Vector3(x + edge * 1.15f, 2.61f, 0f), new Vector3(0.09f, 0.04f, 23.4f),
+                        materials.Accent, parent);
+                    StripCollider(trim);
+                }
+
+                foreach (float end in new[] { -1f, 1f })
+                {
+                    // Low treads let players run from the corner decks onto the catwalk.
+                    for (int step = 1; step <= 2; step++)
+                    {
+                        float height = step * 0.2f;
+                        CreatePrimitive("Catwalk Step", PrimitiveType.Cube,
+                            new Vector3(x, 2f + height * 0.5f, end * (13.05f - step * 0.55f)),
+                            new Vector3(2.4f, height, 0.57f), materials.Wall, parent);
+                    }
+                }
+
+                // The support adds cover and a kick-off surface in the lower lane.
+                CreatePrimitive("Catwalk Support", PrimitiveType.Cube, new Vector3(x, 1.15f, 0f),
+                    new Vector3(0.75f, 2.3f, 1.8f), materials.Wall, parent);
             }
         }
 
@@ -1157,6 +1192,7 @@ namespace Shooter.EditorTools
             public GameObject Runner;
             public GameObject Bulwark;
             public GameObject Marksman;
+            public GameObject Drone;
             public GameObject Elite;
         }
 
@@ -1176,38 +1212,48 @@ namespace Shooter.EditorTools
                 Runner = CreateEnemyPrefab("Runner", materials),
                 Bulwark = CreateEnemyPrefab("Bulwark", materials),
                 Marksman = CreateEnemyPrefab("Marksman", materials),
+                Drone = CreateEnemyPrefab("Drone", materials),
                 Elite = CreateEnemyPrefab("Elite", materials),
             };
         }
 
         /// <summary>
-        /// Builds one enemy prefab around a Blender model. All five models share
-        /// the same named joint hierarchy, so EnemyAnimator works on every variant.
+        /// Builds a combat prefab with the variant’s model and hit volume.
         /// </summary>
         private static GameObject CreateEnemyPrefab(string variant, ArenaMaterials materials)
         {
             var root = new GameObject("Enemy" + variant);
+            bool drone = variant == "Drone";
 
             CharacterController controller = root.AddComponent<CharacterController>();
-            controller.height = 1.8f;
-            controller.radius = 0.4f;
-            controller.center = new Vector3(0f, 0.9f, 0f);
+            controller.height = drone ? 0.9f : 1.8f;
+            controller.radius = drone ? 0.45f : 0.4f;
+            controller.center = Vector3.up * (controller.height * 0.5f);
             controller.slopeLimit = 45f;
-            controller.stepOffset = 0.3f;
+            controller.stepOffset = drone ? 0f : 0.3f;
 
             // The model lives under one child so the CharacterController defines
             // the physics shape and no visual piece contributes a collider.
             var model = new GameObject("Model");
             model.transform.SetParent(root.transform, false);
 
-            GameObject source = FoundryAssets.LoadActor("Enemy" + variant);
-            GameObject rig = Object.Instantiate(source, model.transform, false);
-            rig.name = "Rig";
-            FoundryAssets.Skin(rig);
-            Animation animation = FoundryAssets.Bind(rig, source, FoundryAssets.ActorNames);
             EnemyPalette palette = EnemyPaletteFor(variant, materials);
+            if (drone)
+            {
+                BuildDroneModel(model.transform, materials);
+            }
+            else
+            {
+                GameObject source = FoundryAssets.LoadActor("Enemy" + variant);
+                GameObject rig = Object.Instantiate(source, model.transform, false);
+                rig.name = "Rig";
+                FoundryAssets.Skin(rig);
+                EnemyAnimator animator = root.AddComponent<EnemyAnimator>();
+                animator.model = model.transform;
+                animator.authored = FoundryAssets.Bind(rig, source, FoundryAssets.ActorNames);
+            }
 
-            foreach (Transform part in rig.GetComponentsInChildren<Transform>(true))
+            foreach (Transform part in model.GetComponentsInChildren<Transform>(true))
             {
                 part.gameObject.layer = 2; // Ignore Raycast, matching the player rig.
 
@@ -1222,16 +1268,25 @@ namespace Shooter.EditorTools
             EnemyHealth health = root.AddComponent<EnemyHealth>();
             health.debrisMaterial = palette.Body;
 
-            root.AddComponent<EnemyAI>();
-
-            EnemyAnimator animator = root.AddComponent<EnemyAnimator>();
-            animator.model = model.transform;
-            animator.authored = animation;
+            EnemyAI ai = root.AddComponent<EnemyAI>();
 
             EnemyRangedAttack ranged = root.AddComponent<EnemyRangedAttack>();
             ranged.projectileMaterial = materials.EnemyBolt;
             ranged.telegraphMaterial = materials.EnemyBolt;
             ranged.sparkMaterial = materials.Spark;
+
+            if (drone)
+            {
+                var flightSettings = new SerializedObject(ai);
+                flightSettings.FindProperty("hoverHeight").floatValue = 3.7f;
+                flightSettings.ApplyModifiedPropertiesWithoutUndo();
+
+                var weaponSettings = new SerializedObject(ranged);
+                weaponSettings.FindProperty("eyeHeight").floatValue = 0.47f;
+                weaponSettings.FindProperty("muzzleForward").floatValue = 0.65f;
+                weaponSettings.FindProperty("damage").floatValue = 7f;
+                weaponSettings.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             // Every enemy also carries the exploder component, inert until the
             // spawner initialises it for the Boomer variant.
@@ -1247,6 +1302,26 @@ namespace Shooter.EditorTools
             return prefab;
         }
 
+        private static void BuildDroneModel(Transform model, ArenaMaterials materials)
+        {
+            CreatePrimitive("Armored Chassis", PrimitiveType.Sphere, new Vector3(0f, 0.45f, 0f),
+                new Vector3(0.77f, 0.56f, 0.92f), materials.BulwarkBody, model);
+            CreatePrimitive("Optic", PrimitiveType.Sphere, new Vector3(0f, 0.47f, 0.41f),
+                new Vector3(0.33f, 0.22f, 0.24f), materials.Hazard, model);
+
+            foreach (float side in new[] { -1f, 1f })
+            {
+                CreatePrimitive("Wing", PrimitiveType.Cube, new Vector3(side * 0.36f, 0.47f, -0.07f),
+                    new Vector3(0.49f, 0.10f, 0.34f), materials.DarkMetal, model,
+                    Quaternion.Euler(0f, -side * 22f, side * 12f));
+                CreatePrimitive("Thruster", PrimitiveType.Cylinder, new Vector3(side * 0.55f, 0.42f, -0.14f),
+                    new Vector3(0.32f, 0.10f, 0.40f), materials.BulwarkBody, model);
+                CreatePrimitive("Thruster Core", PrimitiveType.Cylinder,
+                    new Vector3(side * 0.55f, 0.31f, -0.14f), new Vector3(0.21f, 0.04f, 0.28f),
+                    materials.Accent, model);
+            }
+        }
+
         private static EnemyPalette EnemyPaletteFor(string variant, ArenaMaterials materials)
         {
             return variant switch
@@ -1255,7 +1330,7 @@ namespace Shooter.EditorTools
                 {
                     Body = materials.RunnerBody, Dark = materials.RunnerDark, Glow = materials.RunnerGlow,
                 },
-                "Bulwark" => new EnemyPalette
+                "Bulwark" or "Drone" => new EnemyPalette
                 {
                     Body = materials.BulwarkBody, Dark = materials.BulwarkDark, Glow = materials.BulwarkGlow,
                 },
@@ -1505,6 +1580,7 @@ namespace Shooter.EditorTools
             waveSpawner.runnerPrefab = enemyPrefabs.Runner;
             waveSpawner.bulwarkPrefab = enemyPrefabs.Bulwark;
             waveSpawner.marksmanPrefab = enemyPrefabs.Marksman;
+            waveSpawner.dronePrefab = enemyPrefabs.Drone;
             waveSpawner.elitePrefab = enemyPrefabs.Elite;
             waveSpawner.bossPrefab = bossPrefab;
             waveSpawner.ammoCachePrefab = ammoCachePrefab;
@@ -1641,7 +1717,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move  /  SHIFT sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause",
+                "WASD move  /  double-tap W sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 
@@ -1968,8 +2044,8 @@ namespace Shooter.EditorTools
                 new Vector3(-8.2f, 0.55f, 0f),
                 new Vector3(0f, 0.55f, 8.2f),
                 new Vector3(0f, 0.55f, -8.2f),
-                new Vector3(15.5f, 2.3f, 15.5f),
-                new Vector3(-15.5f, 2.3f, -15.5f),
+                new Vector3(15.5f, 2.95f, 0f),
+                new Vector3(-15.5f, 2.95f, 0f),
             };
 
             foreach (Vector3 position in positions)

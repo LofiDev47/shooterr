@@ -29,6 +29,7 @@ namespace Shooter.Managers
         public GameObject runnerPrefab;
         public GameObject bulwarkPrefab;
         public GameObject marksmanPrefab;
+        public GameObject dronePrefab;
         public GameObject elitePrefab;
         public GameObject bossPrefab;
         public GameObject ammoCachePrefab;
@@ -59,6 +60,9 @@ namespace Shooter.Managers
         [SerializeField] private float runnerDamagePenalty = 0.55f;
         [SerializeField] private int runnerScoreValue = 15;
         [SerializeField] private float runnerScale = 0.80f;
+
+        [Header("Drone variant")]
+        [SerializeField] private int droneFromWave = 3;
 
         [Header("Marksman variant")]
         [SerializeField] private int marksmanFromWave = 2;
@@ -226,16 +230,19 @@ namespace Shooter.Managers
             float waveIndex = CurrentWave - 1;
 
             bool boss = IsBossWave && !bossSpawnedThisWave;
-            bool elite = !boss && CurrentWave >= eliteFromWave && Random.value < eliteChance;
-            bool exploder = !boss && !elite && CurrentWave >= exploderFromWave && Random.value < exploderChance;
-            bool marksman = !boss && !elite && !exploder && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
-            bool runner = !boss && !elite && !exploder && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
-            bool bulwark = !boss && !elite && !exploder && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
+            // Introduce one drone early in each eligible wave.
+            bool drone = !boss && dronePrefab != null && CurrentWave >= droneFromWave && spawnedThisWave == 1;
+            bool elite = !boss && !drone && CurrentWave >= eliteFromWave && Random.value < eliteChance;
+            bool exploder = !boss && !drone && !elite && CurrentWave >= exploderFromWave && Random.value < exploderChance;
+            bool marksman = !boss && !drone && !elite && !exploder && CurrentWave >= marksmanFromWave && Random.value < marksmanChance;
+            bool runner = !boss && !drone && !elite && !exploder && !marksman && CurrentWave >= runnerFromWave && Random.value < runnerChance;
+            bool bulwark = !boss && !drone && !elite && !exploder && !marksman && !runner && CurrentWave >= bulwarkFromWave && Random.value < bulwarkChance;
 
             // Pick the dedicated model for this variant. enemyPrefab stays as a
             // fallback for older scenes and tests.
             GameObject prefab = boss && bossPrefab != null ? bossPrefab
                 : boss ? elitePrefab
+                : drone ? dronePrefab
                 : elite ? elitePrefab
                 : exploder && exploderPrefab != null ? exploderPrefab
                 : marksman ? marksmanPrefab
@@ -248,7 +255,8 @@ namespace Shooter.Managers
                 prefab = enemyPrefab;
             }
 
-            GameObject instance = Instantiate(prefab, point.position, Quaternion.identity);
+            Vector3 spawnPosition = point.position + (drone ? Vector3.up * 3.8f : Vector3.zero);
+            GameObject instance = Instantiate(prefab, spawnPosition, Quaternion.identity);
             float healthMultiplier = 1f + waveIndex * healthPerWave;
             float speedBonus = waveIndex * speedPerWave;
             float damageBonus = waveIndex * damagePerWave;
@@ -286,6 +294,12 @@ namespace Shooter.Managers
                 scale = exploderScale;
                 tint = exploderTint;
                 scoreValue = exploderScoreValue;
+            }
+            else if (drone)
+            {
+                healthMultiplier *= 0.65f;
+                speedBonus += 0.8f;
+                scoreValue = 20;
             }
             else if (marksman)
             {
@@ -339,7 +353,12 @@ namespace Shooter.Managers
                 ai.Initialize(playerTarget, speedBonus, damageBonus);
             }
 
-            if ((marksman || boss) && ranged != null)
+            if (drone)
+            {
+                ai?.SetRanged(10f, 3.8f);
+            }
+
+            if ((drone || marksman || boss) && ranged != null)
             {
                 if (marksman)
                 {

@@ -20,7 +20,6 @@ namespace Shooter.Managers
         public static readonly string ActionStrafeLeft = "StrafeLeft";
         public static readonly string ActionStrafeRight = "StrafeRight";
         public static readonly string ActionJump = "Jump";
-        public static readonly string ActionSprint = "Sprint";
         public static readonly string ActionDash = "Dash";
         public static readonly string ActionSlide = "Slide";
         public static readonly string ActionReload = "Reload";
@@ -45,8 +44,7 @@ namespace Shooter.Managers
             new BindingDef { Id = ActionStrafeLeft, Label = "STRAFE LEFT", DefaultKey = Key.A },
             new BindingDef { Id = ActionStrafeRight, Label = "STRAFE RIGHT", DefaultKey = Key.D },
             new BindingDef { Id = ActionJump, Label = "JUMP", DefaultKey = Key.Space },
-            new BindingDef { Id = ActionSprint, Label = "SPRINT", DefaultKey = Key.LeftShift },
-            new BindingDef { Id = ActionDash, Label = "DASH", DefaultKey = Key.LeftShift },
+            new BindingDef { Id = ActionDash, Label = "AIR DASH", DefaultKey = Key.LeftShift },
             new BindingDef { Id = ActionSlide, Label = "SLIDE", DefaultKey = Key.C },
             new BindingDef { Id = ActionReload, Label = "RECHARGE", DefaultKey = Key.R },
             new BindingDef { Id = ActionShotgun, Label = "SHOTGUN", DefaultKey = Key.G },
