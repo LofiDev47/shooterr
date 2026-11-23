@@ -22,8 +22,11 @@ namespace Shooter.Player
 
         [Header("Acceleration")]
         [SerializeField] private float groundAcceleration = 55f;
-        [SerializeField] private float groundDeceleration = 70f;
+        [SerializeField] private float groundDeceleration = 40f;
+        [SerializeField] private float groundFriction = 6f;
         [SerializeField] private float airAcceleration = 14f;
+        [Tooltip("Quake-style wish speed in air; only caps the projected component, so strafing builds speed.")]
+        [SerializeField] private float airWishSpeed = 2.2f;
 
         [Header("Jump")]
         [Tooltip("How high a jump reaches in metres. 2 m lets you land on the arena's platforms.")]
@@ -45,8 +48,15 @@ namespace Shooter.Player
         [SerializeField] private float wallReach = 0.20f;
 
         [Header("Slide")]
-        [SerializeField] private float slideSpeedMultiplier = 1.4f;
+        [SerializeField] private float slideSpeedMultiplier = 1.15f;
         [SerializeField] private float slideFriction = 4.5f;
+
+        [Header("Dash (air dash, Ultrakill-style)")]
+        [SerializeField] private float dashSpeed = 17f;
+        [SerializeField] private float dashDuration = 0.16f;
+        [SerializeField] private float dashCooldown = 0.55f;
+        [SerializeField] private float dashVerticalBoost = 2.5f;
+        [SerializeField] private float dashHopBoost = 1.08f;
         [SerializeField] private float slideDuration = 1.1f;
         [SerializeField] private float slideCooldown = 0.6f;
         [Tooltip("How quickly a slide can be steered, in degrees per second.")]
@@ -147,6 +157,13 @@ namespace Shooter.Player
         private float slideSpeed;
         private float slideEndTime;
         private float lastSlideEndTime = -999f;
+
+        // Dash state.
+        private bool isDashing;
+        private float dashEndTime;
+        private float dashCooldownEnd = -999f;
+        private bool dashUsedInAir;
+        private float lastLandingTime = -999f;
 
         /// <summary>Damped mouse movement in pixels per frame; the weapon sways with it.</summary>
         public Vector2 SmoothedLookDelta => smoothedLookDelta;
@@ -427,7 +444,23 @@ namespace Shooter.Player
                 }
             }
 
-            IsSprinting = sprintHeld && input.y > 0.1f && !IsAiming && !isSliding && controller.isGrounded;
+            // Auto-run: sprint speed is the baseline now, so the player is always
+            // running. Shift (bound to ActionDash) triggers the air dash instead.
+            IsSprinting = !IsAiming && !isSliding && controller.isGrounded && input.sqrMagnitude > 0.01f;
+
+            // Dash trigger (works on ground and once in the air).
+            bool dashPressed = WasPressed(settings, SettingsManager.ActionDash);
+            if (dashPressed && Time.time >= dashCooldownEnd &&
+                (controller.isGrounded || !dashUsedInAir))
+            {
+                StartDash(input);
+            }
+
+            // Refresh the air-dash token on landing.
+            if (controller.isGrounded)
+            {
+                dashUsedInAir = false;
+            }
 
             TryStartSlide(input, crouchHeld);
 
@@ -437,7 +470,15 @@ namespace Shooter.Player
             }
             else if (Time.time >= wallSteerUntil)
             {
-                UpdateWalk(input, deltaTime);
+                if (isDashing && Time.time < dashEndTime)
+                {
+                    // Keep the dash velocity; don't steer it mid-dash.
+                }
+                else
+                {
+                    isDashing = false;
+                    UpdateWalk(input, deltaTime);
+                }
             }
 
             bool climbed = UpdateWallMovement(input, jumpPressed, jumpHeld, deltaTime);
@@ -476,6 +517,7 @@ namespace Shooter.Player
 
             if (JustLanded(wasGrounded, groundedNow))
             {
+                lastLandingTime = Time.time;
                 UpgradeManager.Instance?.OnLanded();
             }
             else if (JustLeftGround(wasGrounded, groundedNow))
@@ -487,18 +529,53 @@ namespace Shooter.Player
             {
                 // A spring instead of a fixed offset: the camera dips and settles with a
                 // hint of bounce, scaled by how hard we hit the ground.
-                landingVelocity = fallSpeed * 0.09f;
+                landingVelocity = -fallSpeed * 0.09f;
             }
 
             wasGrounded = groundedNow;
         }
 
+        private void StartDash(Vector2 input)
+        {
+            Vector3 dir = transform.forward;
+            if (input.sqrMagnitude > 0.01f)
+            {
+                dir = transform.right * input.x + transform.forward * input.y;
+            }
+            else if (planarVelocity.sqrMagnitude > 0.01f)
+            {
+                dir = planarVelocity;
+            }
+
+            dir.y = 0f;
+
+            if (dir.sqrMagnitude < 0.01f)
+            {
+                dir = transform.forward;
+            }
+
+            dir.Normalize();
+
+            float speedScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f;
+            planarVelocity = dir * (dashSpeed * speedScale);
+            verticalVelocity = Mathf.Max(verticalVelocity, dashVerticalBoost);
+            isDashing = true;
+            dashEndTime = Time.time + dashDuration;
+            dashCooldownEnd = Time.time + dashCooldown;
+
+            if (!controller.isGrounded)
+            {
+                dashUsedInAir = true;
+            }
+        }
+
         private void UpdateWalk(Vector2 input, float deltaTime)
         {
             float speedScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f;
+            // Auto-run: sprint speed is the baseline.
             float targetSpeed = (IsAiming
                 ? walkSpeed * aimSpeedMultiplier
-                : (IsSprinting ? sprintSpeed : walkSpeed)) * speedScale;
+                : sprintSpeed) * speedScale;
 
             Vector3 wish = transform.right * input.x + transform.forward * input.y;
 
@@ -509,13 +586,49 @@ namespace Shooter.Player
 
             Vector3 targetVelocity = wish * targetSpeed;
 
-            float acceleration = controller.isGrounded
-                ? (targetVelocity.sqrMagnitude >= planarVelocity.sqrMagnitude
-                    ? groundAcceleration
-                    : groundDeceleration)
-                : airAcceleration;
+            if (controller.isGrounded)
+            {
+                if (wish.sqrMagnitude > 0.01f)
+                {
+                    // Accelerate toward the (capped) target, but never drag speed below
+                    // what the player already has while turning — keeps momentum.
+                    float accel = targetVelocity.sqrMagnitude >= planarVelocity.sqrMagnitude
+                        ? groundAcceleration
+                        : groundDeceleration;
+                    planarVelocity = Vector3.MoveTowards(planarVelocity, targetVelocity, accel * deltaTime);
+                }
+                else
+                {
+                    // Multiplicative friction: bleeds speed gradually instead of snapping.
+                    float drop = groundFriction * deltaTime * planarVelocity.magnitude;
+                    planarVelocity = Vector3.MoveTowards(planarVelocity, Vector3.zero, drop);
+                }
+            }
+            else
+            {
+                // Quake-style air strafe: only cap the projected component along the
+                // wish direction, so strafing builds speed and existing speed is kept.
+                Vector3 wishDir = wish.sqrMagnitude > 0.01f ? wish.normalized : Vector3.zero;
 
-            planarVelocity = Vector3.MoveTowards(planarVelocity, targetVelocity, acceleration * deltaTime);
+                if (wishDir.sqrMagnitude > 0.01f)
+                {
+                    float current = Vector3.Dot(planarVelocity, wishDir);
+                    float add = airWishSpeed - current;
+
+                    if (add > 0f)
+                    {
+                        float accel = Mathf.Min(airAcceleration * airWishSpeed * deltaTime, add);
+                        planarVelocity += wishDir * accel;
+                    }
+                }
+
+                // Safety cap so strafing can't accelerate to infinity.
+                float maxAirSpeed = sprintSpeed * speedScale * 1.7f;
+                if (planarVelocity.magnitude > maxAirSpeed)
+                {
+                    planarVelocity = planarVelocity.normalized * maxAirSpeed;
+                }
+            }
         }
 
         private void TryStartSlide(Vector2 input, bool crouchHeld)
@@ -552,7 +665,9 @@ namespace Shooter.Player
             }
 
             slideDirection = direction.normalized;
-            slideSpeed = Mathf.Max(planarVelocity.magnitude, sprintSpeed) * slideSpeedMultiplier *
+            // Derive slide speed from actual momentum so it doesn't jump to a fixed
+            // sprint*1.4 regardless of how fast the player is moving.
+            slideSpeed = Mathf.Max(planarVelocity.magnitude * 1.1f, sprintSpeed) *
                 (upgrades != null ? upgrades.SlideSpeedMultiplier : 1f);
             slideEndTime = Time.time + slideDuration;
             isSliding = true;
@@ -629,6 +744,19 @@ namespace Shooter.Player
             if (isSliding)
             {
                 EndSlide(); // Slide-jumping keeps the slide momentum.
+            }
+
+            // Bunny-hop boost: a well-timed hop (within the coyote window of
+            // landing) carries a little extra speed, rewarding chained movement.
+            if (groundedJump && Time.time - lastLandingTime <= 0.18f &&
+                planarVelocity.magnitude > walkSpeed * 1.05f)
+            {
+                planarVelocity *= dashHopBoost;
+                float cap = sprintSpeed * (upgrades != null ? upgrades.SpeedMultiplier : 1f) * 1.7f;
+                if (planarVelocity.magnitude > cap)
+                {
+                    planarVelocity = planarVelocity.normalized * cap;
+                }
             }
 
             verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
@@ -775,6 +903,10 @@ namespace Shooter.Player
                 if (IsAiming)
                 {
                     targetFov = effectiveAimFov;
+                }
+                else if (isDashing)
+                {
+                    targetFov = effectiveSprintFov + 8f;
                 }
                 else if (isSliding)
                 {
