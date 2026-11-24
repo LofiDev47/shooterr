@@ -356,13 +356,13 @@ namespace Shooter.EditorTools
 
             BuildCentralPad(materials, arena.transform);
             BuildCornerPlatforms(materials, arena.transform);
-            BuildCatwalks(materials, arena.transform);
             BuildInnerPillars(materials, arena.transform);
             BuildCoverClusters(materials, arena.transform);
             BuildBarrels(materials, arena.transform);
             BuildFloorGuides(materials, arena.transform);
             BuildArenaDetails(materials, arena.transform);
             ApplyArenaModels(arena.transform);
+            BuildCatwalks(arena.transform);
 
             ground.isStatic = true;
         }
@@ -498,38 +498,70 @@ namespace Shooter.EditorTools
             }
         }
 
-        private static void BuildCatwalks(ArenaMaterials materials, Transform parent)
+        private static void BuildCatwalks(Transform arena)
         {
-            foreach (float side in new[] { -1f, 1f })
-            {
-                float x = 15.5f * side;
-                CreatePrimitive(side < 0f ? "Catwalk West" : "Catwalk East", PrimitiveType.Cube,
-                    new Vector3(x, 2.45f, 0f), new Vector3(2.4f, 0.3f, 23.4f), materials.DarkMetal, parent);
+            const int spanCount = 6;
+            const float spanLength = 3.9f;
+            const float deckHeight = 2.6f;
+            const float deckWidth = 2.4f;
+            const float halfLength = spanCount * spanLength / 2f;
 
-                foreach (float edge in new[] { -1f, 1f })
+            GameObject span = FoundryAssets.LoadProp("CatwalkSpan");
+            GameObject landing = FoundryAssets.LoadProp("CatwalkLanding");
+            GameObject pier = FoundryAssets.LoadProp("CatwalkPier");
+
+            foreach (int side in new[] { -1, 1 })
+            {
+                var deck = new GameObject(side < 0 ? "Catwalk West" : "Catwalk East");
+                deck.transform.SetParent(arena, false);
+                deck.transform.localPosition = new Vector3(15.5f * side, deckHeight, 0f);
+
+                // A continuous box under the deck keeps traversal smooth over model seams.
+                BoxCollider deckCollider = deck.AddComponent<BoxCollider>();
+                deckCollider.center = new Vector3(0f, -0.15f, 0f);
+                deckCollider.size = new Vector3(deckWidth, 0.3f, 2f * halfLength);
+
+                for (int index = 0; index < spanCount; index++)
                 {
-                    GameObject trim = CreatePrimitive("Catwalk Edge Light", PrimitiveType.Cube,
-                        new Vector3(x + edge * 1.15f, 2.61f, 0f), new Vector3(0.09f, 0.04f, 23.4f),
-                        materials.Accent, parent);
-                    StripCollider(trim);
+                    float z = (index + 0.5f) * spanLength - halfLength;
+                    PlaceCatwalkModule(span, deck.transform, new Vector3(0f, 0f, z), Quaternion.identity);
                 }
 
-                foreach (float end in new[] { -1f, 1f })
+                foreach (int end in new[] { -1, 1 })
                 {
-                    // Low treads let players run from the corner decks onto the catwalk.
-                    for (int step = 1; step <= 2; step++)
+                    // The landing model starts at platform height and descends toward +Z.
+                    Vector3 position = new Vector3(0f, 2f - deckHeight, end * halfLength);
+                    Quaternion rotation = Quaternion.Euler(0f, end == 1 ? 0f : 180f, 0f);
+                    GameObject steps = PlaceCatwalkModule(landing, deck.transform, position, rotation);
+
+                    for (int index = 0; index < 2; index++)
                     {
-                        float height = step * 0.2f;
-                        CreatePrimitive("Catwalk Step", PrimitiveType.Cube,
-                            new Vector3(x, 2f + height * 0.5f, end * (13.05f - step * 0.55f)),
-                            new Vector3(2.4f, height, 0.57f), materials.Wall, parent);
+                        float height = 0.4f - 0.2f * index;
+                        BoxCollider tread = steps.AddComponent<BoxCollider>();
+                        tread.center = new Vector3(0f, height / 2f, 0.27f + 0.56f * index);
+                        tread.size = new Vector3(deckWidth, height, 0.57f);
                     }
                 }
 
-                // The support adds cover and a kick-off surface in the lower lane.
-                CreatePrimitive("Catwalk Support", PrimitiveType.Cube, new Vector3(x, 1.15f, 0f),
-                    new Vector3(0.75f, 2.3f, 1.8f), materials.Wall, parent);
+                GameObject support = PlaceCatwalkModule(pier, deck.transform,
+                    Vector3.down * deckHeight, Quaternion.identity);
+                BoxCollider supportCollider = support.AddComponent<BoxCollider>();
+                supportCollider.center = Vector3.up * 1.15f;
+                supportCollider.size = new Vector3(0.75f, 2.3f, 1.8f);
             }
+        }
+
+        private static GameObject PlaceCatwalkModule(GameObject asset, Transform parent,
+            Vector3 position, Quaternion rotation)
+        {
+            var module = new GameObject(asset.name);
+            module.transform.SetParent(parent, false);
+            module.transform.SetLocalPositionAndRotation(position, rotation);
+
+            // The FBX root carries Blender's axis conversion. Rotate the mount instead.
+            var visual = (GameObject)PrefabUtility.InstantiatePrefab(asset, module.transform);
+            FoundryAssets.Skin(visual);
+            return module;
         }
 
         /// <summary>Four pillars framing the central pad; they break long sight lines.</summary>
@@ -1240,7 +1272,9 @@ namespace Shooter.EditorTools
             EnemyPalette palette = EnemyPaletteFor(variant, materials);
             if (drone)
             {
-                BuildDroneModel(model.transform, materials);
+                GameObject hull = Object.Instantiate(FoundryAssets.LoadProp("EnemyDrone"), model.transform, false);
+                hull.name = "Drone Hull";
+                FoundryAssets.Skin(hull);
             }
             else
             {
@@ -1300,26 +1334,6 @@ namespace Shooter.EditorTools
 
             Debug.Log($"[Shooter] Enemy{variant} prefab saved to {path}.");
             return prefab;
-        }
-
-        private static void BuildDroneModel(Transform model, ArenaMaterials materials)
-        {
-            CreatePrimitive("Armored Chassis", PrimitiveType.Sphere, new Vector3(0f, 0.45f, 0f),
-                new Vector3(0.77f, 0.56f, 0.92f), materials.BulwarkBody, model);
-            CreatePrimitive("Optic", PrimitiveType.Sphere, new Vector3(0f, 0.47f, 0.41f),
-                new Vector3(0.33f, 0.22f, 0.24f), materials.Hazard, model);
-
-            foreach (float side in new[] { -1f, 1f })
-            {
-                CreatePrimitive("Wing", PrimitiveType.Cube, new Vector3(side * 0.36f, 0.47f, -0.07f),
-                    new Vector3(0.49f, 0.10f, 0.34f), materials.DarkMetal, model,
-                    Quaternion.Euler(0f, -side * 22f, side * 12f));
-                CreatePrimitive("Thruster", PrimitiveType.Cylinder, new Vector3(side * 0.55f, 0.42f, -0.14f),
-                    new Vector3(0.32f, 0.10f, 0.40f), materials.BulwarkBody, model);
-                CreatePrimitive("Thruster Core", PrimitiveType.Cylinder,
-                    new Vector3(side * 0.55f, 0.31f, -0.14f), new Vector3(0.21f, 0.04f, 0.28f),
-                    materials.Accent, model);
-            }
         }
 
         private static EnemyPalette EnemyPaletteFor(string variant, ArenaMaterials materials)

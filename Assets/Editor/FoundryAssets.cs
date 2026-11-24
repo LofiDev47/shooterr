@@ -119,8 +119,9 @@ namespace Shooter.EditorTools
                 source.name == "FoundryWarning";
             if (luminous)
             {
-                material.EnableKeyword("_EMISSION");
                 material.SetColor("_EmissionColor", color * 2f);
+                material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                material.EnableKeyword("_EMISSION");
             }
             AssetDatabase.CreateAsset(material, path);
             return material;
