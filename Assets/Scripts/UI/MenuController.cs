@@ -70,7 +70,9 @@ namespace Shooter.UI
         private Toggle fpsToggle;
         private Toggle fullscreenToggle;
         private Toggle vsyncToggle;
-        private Button resolutionButton;
+        private Toggle postProcessingToggle;
+        private Button frameRateButton;
+        private Text frameRateValue;
         private Text resolutionValue;
         private readonly Dictionary<string, Button> keybindButtons = new Dictionary<string, Button>();
 
@@ -80,10 +82,12 @@ namespace Shooter.UI
 
         private static readonly (int width, int height)[] ResolutionPresets =
         {
+            (960, 540),
             (1280, 720),
             (1600, 900),
             (1920, 1080),
             (2560, 1440),
+            (3840, 2160),
         };
 
         /// <summary>Which menu page is on screen; focus is placed once per change.</summary>
@@ -444,7 +448,7 @@ namespace Shooter.UI
                 qualitySlider.SetValueWithoutNotify(settings.QualityIndex);
                 if (qualityValue != null)
                 {
-                    qualityValue.text = QualityName(settings.QualityIndex);
+                    qualityValue.text = SettingsManager.QualityName(settings.QualityIndex).ToUpperInvariant();
                 }
             }
 
@@ -474,6 +478,22 @@ namespace Shooter.UI
             if (vsyncToggle != null)
             {
                 vsyncToggle.SetIsOnWithoutNotify(settings.VSyncEnabled);
+            }
+
+            if (postProcessingToggle != null)
+            {
+                postProcessingToggle.SetIsOnWithoutNotify(settings.PostProcessingEnabled);
+            }
+
+            if (frameRateButton != null)
+            {
+                frameRateButton.interactable = !settings.VSyncEnabled;
+                frameRateValue.text = settings.VSyncEnabled ? "VSync active" : settings.FrameRateLimit switch
+                {
+                    -1 => "Unlimited",
+                    0 => "Preset default",
+                    _ => $"{settings.FrameRateLimit} FPS",
+                };
             }
 
             if (resolutionValue != null)
@@ -527,17 +547,6 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionPause)} pause" +
                 $"\nPress {K(SettingsManager.ActionJump)} near a wall while airborne to wall jump." +
                 $" Traversal Harness unlocks {K(SettingsManager.ActionDash)} air dash.";
-        }
-
-        private static string QualityName(int index)
-        {
-            return index switch
-            {
-                0 => "LOW",
-                1 => "MEDIUM",
-                2 => "HIGH",
-                _ => "ULTRA",
-            };
         }
 
         private void RefreshKeybindLabels()
@@ -612,7 +621,7 @@ namespace Shooter.UI
                 return;
             }
 
-            int current = 2;
+            int current = 0;
 
             for (int i = 0; i < ResolutionPresets.Length; i++)
             {
@@ -798,33 +807,52 @@ namespace Shooter.UI
                 new Vector2(1f, 1f), new Vector2(-180f, -60f), new Vector2(300f, 60f), ResetSettings);
 
             Transform column = bg.transform;
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            RectTransform gameplay = CreateRect("GameplaySettings", column, center, new Vector2(-340f, 0f), Vector2.zero);
+            RectTransform graphics = CreateRect("GraphicsSettings", column, center, new Vector2(300f, 0f), Vector2.zero);
 
-            sensitivitySlider = CreateSliderRow(column, "Sensitivity", 0.02f, 0.5f, settings != null ? settings.Sensitivity : 0.12f,
-                370f, new Vector2(560f, 32f), out sensitivityValue, value => settings?.SetSensitivity(value));
-            volumeSlider = CreateSliderRow(column, "Volume", 0f, 1f, settings != null ? settings.MasterVolume : 0.8f,
-                320f, new Vector2(560f, 32f), out volumeValue, value => settings?.SetMasterVolume(value));
-            fovSlider = CreateSliderRow(column, "Field Of View", 60f, 110f, settings != null ? settings.FieldOfView : 75f,
-                270f, new Vector2(560f, 32f), out fovValue, value => settings?.SetFieldOfView(value));
-            qualitySlider = CreateSliderRow(column, "Quality", 0f, 3f, settings != null ? settings.QualityIndex : 2,
-                220f, new Vector2(560f, 32f), out qualityValue, value => settings?.SetQualityIndex(Mathf.RoundToInt(value)), 1f);
+            CreateText(gameplay, "GameplayTitle", "GAMEPLAY", 24, SignalAccent, TextAnchor.MiddleLeft,
+                center, center, new Vector2(-80f, 382f), new Vector2(240f, 30f), font, FontStyle.Bold);
+            CreateText(graphics, "GraphicsTitle", "GRAPHICS", 24, SignalAccent, TextAnchor.MiddleLeft,
+                center, center, new Vector2(-80f, 382f), new Vector2(240f, 30f), font, FontStyle.Bold);
 
-            invertToggle = CreateToggleRow(column, "Invert Y", settings != null && settings.InvertY,
-                168f, value => settings?.SetInvertY(value));
-            shakeToggle = CreateToggleRow(column, "Screen Shake", settings == null || settings.ShakeEnabled,
-                125f, value => settings?.SetShakeEnabled(value));
-            damageToggle = CreateToggleRow(column, "Damage Numbers", settings == null || settings.ShowDamageNumbers,
-                82f, value => settings?.SetShowDamageNumbers(value));
-            fpsToggle = CreateToggleRow(column, "Show FPS", settings != null && settings.ShowFps,
-                39f, value => settings?.SetShowFps(value));
-            fullscreenToggle = CreateToggleRow(column, "Fullscreen", settings == null || settings.Fullscreen,
-                -4f, value => settings?.SetFullscreen(value));
-            vsyncToggle = CreateToggleRow(column, "VSync", settings == null || settings.VSyncEnabled,
-                -47f, value => settings?.SetVSync(value));
+            Vector2 sliderSize = new Vector2(230f, 28f);
+            sensitivitySlider = CreateSliderRow(gameplay, "Sensitivity", 0.02f, 0.5f, settings != null ? settings.Sensitivity : 0.12f,
+                327f, sliderSize, out sensitivityValue, value => settings?.SetSensitivity(value));
+            volumeSlider = CreateSliderRow(gameplay, "Volume", 0f, 1f, settings != null ? settings.MasterVolume : 0.8f,
+                260f, sliderSize, out volumeValue, value => settings?.SetMasterVolume(value));
+            fovSlider = CreateSliderRow(gameplay, "Field Of View", 60f, 110f, settings != null ? settings.FieldOfView : 75f,
+                193f, sliderSize, out fovValue, value => settings?.SetFieldOfView(value));
 
-            CreateText(column, "ResolutionLabel", "RESOLUTION", 18, Color.white, TextAnchor.MiddleLeft,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-80f, -92f), new Vector2(160f, 30f), font);
-            resolutionButton = CreateButton(column, "ResolutionButton", "1920x1080",
-                new Vector2(0.5f, 0.5f), new Vector2(260f, -92f), new Vector2(340f, 44f), CycleResolution, 18);
+            invertToggle = CreateToggleRow(gameplay, "Invert Y", settings != null && settings.InvertY,
+                126f, value => settings?.SetInvertY(value));
+            shakeToggle = CreateToggleRow(gameplay, "Screen Shake", settings == null || settings.ShakeEnabled,
+                70f, value => settings?.SetShakeEnabled(value));
+            damageToggle = CreateToggleRow(gameplay, "Damage Numbers", settings == null || settings.ShowDamageNumbers,
+                14f, value => settings?.SetShowDamageNumbers(value));
+
+            qualitySlider = CreateSliderRow(graphics, "Quality Preset", 0f, SettingsManager.QualityPresetCount - 1,
+                settings != null ? settings.QualityIndex : SettingsManager.DefaultQualityIndex,
+                327f, sliderSize, out qualityValue, value => settings?.SetQualityIndex((int)value), wholeNumbers: true);
+            postProcessingToggle = CreateToggleRow(graphics, "Post-processing", settings == null || settings.PostProcessingEnabled,
+                260f, value => settings?.SetPostProcessing(value));
+            fullscreenToggle = CreateToggleRow(graphics, "Fullscreen", settings == null || settings.Fullscreen,
+                204f, value => settings?.SetFullscreen(value));
+            vsyncToggle = CreateToggleRow(graphics, "VSync", settings == null || settings.VSyncEnabled,
+                148f, value => settings?.SetVSync(value));
+            fpsToggle = CreateToggleRow(graphics, "Show FPS", settings != null && settings.ShowFps,
+                92f, value => settings?.SetShowFps(value));
+
+            CreateText(graphics, "FrameRateLabel", "FRAME RATE LIMIT", 18, Color.white, TextAnchor.MiddleLeft,
+                center, center, new Vector2(-80f, 36f), new Vector2(240f, 30f), font);
+            frameRateButton = CreateButton(graphics, "FrameRateButton", "VSync active", center,
+                new Vector2(200f, 36f), new Vector2(230f, 44f), () => settings?.CycleFrameRateLimit(), 18);
+            frameRateValue = frameRateButton.GetComponentInChildren<Text>();
+
+            CreateText(graphics, "ResolutionLabel", "RESOLUTION", 18, Color.white, TextAnchor.MiddleLeft,
+                center, center, new Vector2(-80f, -20f), new Vector2(240f, 30f), font);
+            Button resolutionButton = CreateButton(graphics, "ResolutionButton", "1920x1080", center,
+                new Vector2(200f, -20f), new Vector2(230f, 44f), CycleResolution, 18);
             resolutionValue = resolutionButton.GetComponentInChildren<Text>();
 
             CreateText(column, "KeybindTitle", "KEYBINDS — click a key, then press a new key (Esc cancels)", 18,
@@ -934,7 +962,7 @@ namespace Shooter.UI
         }
 
         private Slider CreateSliderRow(Transform parent, string label, float min, float max, float value, float y,
-            Vector2 size, out Text valueText, UnityEngine.Events.UnityAction<float> onChanged, float step = 0f)
+            Vector2 size, out Text valueText, UnityEngine.Events.UnityAction<float> onChanged, bool wholeNumbers = false)
         {
             CreateText(parent, label + "Label", label.ToUpperInvariant(), 18, Color.white, TextAnchor.MiddleLeft,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-80f, y), new Vector2(240f, 30f), font);
@@ -958,24 +986,14 @@ namespace Shooter.UI
             slider.targetGraphic = handleImage;
             slider.minValue = min;
             slider.maxValue = max;
+            slider.wholeNumbers = wholeNumbers;
             slider.value = value;
-            if (step > 0f)
-            {
-                slider.navigation = new Navigation { mode = Navigation.Mode.None };
-                // Snap by quantizing in the callback wrapper below.
-            }
 
             valueText = CreateText(track, "Value", "", 16, Color.white, TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -30f), new Vector2(120f, 20f), font);
 
             slider.onValueChanged.AddListener(v =>
             {
-                if (step > 0f)
-                {
-                    v = Mathf.Round(v / step) * step;
-                    slider.SetValueWithoutNotify(v);
-                }
-
                 onChanged?.Invoke(v);
                 SyncSettingsUI();
             });

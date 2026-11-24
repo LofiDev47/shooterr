@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering.Universal;
 
 namespace Shooter.Managers
 {
@@ -68,10 +69,19 @@ namespace Shooter.Managers
         private const string KeyQuality = "Shooter.Quality";
         private const string KeyFullscreen = "Shooter.Fullscreen";
         private const string KeyVSync = "Shooter.VSync";
+        private const string KeyFrameRateLimit = "Shooter.FrameRateLimit";
+        private const string KeyPostProcessing = "Shooter.PostProcessing";
         private const string KeyResolutionWidth = "Shooter.ResWidth";
         private const string KeyResolutionHeight = "Shooter.ResHeight";
         private const string KeyBestScore = "Shooter.BestScore";
         private const string KeyBestWave = "Shooter.BestWave";
+
+        private static readonly string[] QualityNames = { "Low", "Medium", "High", "Ultra" };
+        private static readonly int[] FrameRateLimits = { 0, 30, 60, 90, 120, 144, 165, 240, -1 };
+
+        public const int DefaultQualityIndex = 2;
+        public static int QualityPresetCount => QualityNames.Length;
+        public static string QualityName(int index) => QualityNames[index];
 
         public event Action SettingsChanged;
 
@@ -82,7 +92,9 @@ namespace Shooter.Managers
         public bool ShakeEnabled { get; private set; } = true;
         public bool ShowDamageNumbers { get; private set; } = true;
         public bool ShowFps { get; private set; }
-        public int QualityIndex { get; private set; } = 2;
+        public int QualityIndex { get; private set; } = DefaultQualityIndex;
+        public int FrameRateLimit { get; private set; }
+        public bool PostProcessingEnabled => postProcessingOverride ?? QualityIndex != 0;
         public bool Fullscreen { get; private set; } = true;
         public bool VSyncEnabled { get; private set; } = true;
         public int ResWidth { get; private set; } = 1920;
@@ -92,6 +104,8 @@ namespace Shooter.Managers
         public int BestWave { get; private set; }
 
         private readonly Dictionary<string, Key> boundKeys = new Dictionary<string, Key>();
+        private bool? postProcessingOverride;
+        private UniversalAdditionalCameraData cameraData;
 
         private void Awake()
         {
@@ -276,10 +290,37 @@ namespace Shooter.Managers
 
         public void SetQualityIndex(int value)
         {
-            QualityIndex = Mathf.Clamp(value, 0, 3);
+            int preset = Mathf.Clamp(value, 0, QualityPresetCount - 1);
+            if (preset == QualityIndex)
+            {
+                return;
+            }
+
+            QualityIndex = preset;
+            postProcessingOverride = null;
             PlayerPrefs.SetInt(KeyQuality, QualityIndex);
+            PlayerPrefs.DeleteKey(KeyPostProcessing);
             PlayerPrefs.Save();
             ApplyQuality();
+            SettingsChanged?.Invoke();
+        }
+
+        public void CycleFrameRateLimit()
+        {
+            int index = Array.IndexOf(FrameRateLimits, FrameRateLimit);
+            FrameRateLimit = FrameRateLimits[(index + 1) % FrameRateLimits.Length];
+            PlayerPrefs.SetInt(KeyFrameRateLimit, FrameRateLimit);
+            PlayerPrefs.Save();
+            ApplyFramePacing();
+            SettingsChanged?.Invoke();
+        }
+
+        public void SetPostProcessing(bool value)
+        {
+            postProcessingOverride = value;
+            PlayerPrefs.SetInt(KeyPostProcessing, value ? 1 : 0);
+            PlayerPrefs.Save();
+            ApplyPostProcessing();
             SettingsChanged?.Invoke();
         }
 
@@ -297,7 +338,7 @@ namespace Shooter.Managers
             VSyncEnabled = value;
             PlayerPrefs.SetInt(KeyVSync, value ? 1 : 0);
             PlayerPrefs.Save();
-            ApplyQuality();
+            ApplyFramePacing();
             SettingsChanged?.Invoke();
         }
 
@@ -346,7 +387,9 @@ namespace Shooter.Managers
             ShakeEnabled = true;
             ShowDamageNumbers = true;
             ShowFps = false;
-            QualityIndex = 2;
+            QualityIndex = DefaultQualityIndex;
+            FrameRateLimit = 0;
+            postProcessingOverride = null;
             Fullscreen = true;
             VSyncEnabled = true;
             ResWidth = 1920;
@@ -363,6 +406,8 @@ namespace Shooter.Managers
             PlayerPrefs.SetInt(KeyQuality, QualityIndex);
             PlayerPrefs.SetInt(KeyFullscreen, 1);
             PlayerPrefs.SetInt(KeyVSync, 1);
+            PlayerPrefs.DeleteKey(KeyFrameRateLimit);
+            PlayerPrefs.DeleteKey(KeyPostProcessing);
             PlayerPrefs.SetInt(KeyResolutionWidth, ResWidth);
             PlayerPrefs.SetInt(KeyResolutionHeight, ResHeight);
 
@@ -400,12 +445,35 @@ namespace Shooter.Managers
                 return;
             }
 
-            int count = QualitySettings.names != null ? QualitySettings.names.Length : 1;
-            int target = Mathf.Clamp(QualityIndex, 0, Mathf.Max(0, count - 1));
-            QualitySettings.SetQualityLevel(target, true);
+            int target = Array.IndexOf(QualitySettings.names, QualityName(QualityIndex));
+            if (target >= 0 && target != QualitySettings.GetQualityLevel())
+            {
+                QualitySettings.SetQualityLevel(target, true);
+            }
+
+            ApplyPostProcessing();
+            ApplyFramePacing();
+        }
+
+        private void ApplyPostProcessing()
+        {
+            if (cameraData == null && Camera.main is Camera camera)
+            {
+                camera.TryGetComponent(out cameraData);
+            }
+
+            if (cameraData != null)
+            {
+                cameraData.renderPostProcessing = PostProcessingEnabled;
+            }
+        }
+
+        private void ApplyFramePacing()
+        {
             QualitySettings.vSyncCount = VSyncEnabled ? 1 : 0;
-            QualitySettings.antiAliasing = QualityIndex <= 0 ? 0 : QualityIndex == 1 ? 2 : QualityIndex == 2 ? 4 : 8;
-            Application.targetFrameRate = VSyncEnabled ? -1 : (QualityIndex >= 3 ? -1 : 60);
+            int presetLimit = QualityIndex == QualityPresetCount - 1 ? -1 : 60;
+            int limit = FrameRateLimit == 0 ? presetLimit : FrameRateLimit;
+            Application.targetFrameRate = VSyncEnabled ? -1 : limit;
         }
 
         private void ApplyGraphics()
@@ -415,13 +483,15 @@ namespace Shooter.Managers
                 return;
             }
 
-            if (!Application.isEditor && Screen.currentResolution.width != ResWidth)
+            if (!Application.isEditor)
             {
-                Screen.SetResolution(ResWidth, ResHeight,
-                    Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed,
-                    Screen.currentResolution.refreshRateRatio);
+                FullScreenMode mode = Fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+                if (Screen.width != ResWidth || Screen.height != ResHeight || Screen.fullScreenMode != mode)
+                {
+                    Screen.SetResolution(ResWidth, ResHeight, mode, Screen.currentResolution.refreshRateRatio);
+                }
             }
-            else if (Application.isEditor)
+            else
             {
                 Screen.fullScreen = false;
             }
@@ -438,7 +508,11 @@ namespace Shooter.Managers
             ShakeEnabled = PlayerPrefs.GetInt(KeyShake, 1) == 1;
             ShowDamageNumbers = PlayerPrefs.GetInt(KeyDamageNumbers, 1) == 1;
             ShowFps = PlayerPrefs.GetInt(KeyShowFps, 0) == 1;
-            QualityIndex = PlayerPrefs.GetInt(KeyQuality, 2);
+            QualityIndex = Mathf.Clamp(PlayerPrefs.GetInt(KeyQuality, DefaultQualityIndex), 0, QualityPresetCount - 1);
+            int savedLimit = PlayerPrefs.GetInt(KeyFrameRateLimit, 0);
+            FrameRateLimit = Array.IndexOf(FrameRateLimits, savedLimit) >= 0 ? savedLimit : 0;
+            int savedPostProcessing = PlayerPrefs.GetInt(KeyPostProcessing, -1);
+            postProcessingOverride = savedPostProcessing < 0 ? null : savedPostProcessing == 1;
             Fullscreen = PlayerPrefs.GetInt(KeyFullscreen, 1) == 1;
             VSyncEnabled = PlayerPrefs.GetInt(KeyVSync, 1) == 1;
             ResWidth = PlayerPrefs.GetInt(KeyResolutionWidth, 1920);
