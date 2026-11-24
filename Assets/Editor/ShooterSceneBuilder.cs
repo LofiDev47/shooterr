@@ -80,7 +80,6 @@ namespace Shooter.EditorTools
         private sealed class ArenaMaterials
         {
             public Material Floor;
-            public Material Pad;
             public Material Wall;
             public Material Cover;
             public Material CoverAlt;
@@ -129,7 +128,6 @@ namespace Shooter.EditorTools
             return new ArenaMaterials
             {
                 Floor = GetOrCreateLitMaterial("Floor", new Color(0.17f, 0.18f, 0.21f), 0.15f, 0f),
-                Pad = GetOrCreateLitMaterial("Pad", new Color(0.21f, 0.24f, 0.29f), 0.35f, 0.1f),
                 Wall = GetOrCreateLitMaterial("Wall", new Color(0.30f, 0.33f, 0.39f), 0.2f, 0f),
                 Cover = GetOrCreateLitMaterial("Cover", new Color(0.48f, 0.31f, 0.16f), 0.25f, 0f),
                 CoverAlt = GetOrCreateLitMaterial("CoverAlt", new Color(0.20f, 0.36f, 0.28f), 0.25f, 0f),
@@ -354,15 +352,14 @@ namespace Shooter.EditorTools
             CreatePrimitive("Trim West", PrimitiveType.Cube, new Vector3(-ArenaHalfSize + 0.68f, 0.28f, 0f),
                 new Vector3(0.06f, 0.12f, ArenaHalfSize * 2f - 2f), materials.Accent, arena.transform);
 
-            BuildCentralPad(materials, arena.transform);
-            BuildCornerPlatforms(materials, arena.transform);
-            BuildInnerPillars(materials, arena.transform);
+            BuildFurnace(materials, arena.transform);
+            BuildLoadingDocks(materials, arena.transform);
             BuildCoverClusters(materials, arena.transform);
             BuildBarrels(materials, arena.transform);
             BuildFloorGuides(materials, arena.transform);
             BuildArenaDetails(materials, arena.transform);
             ApplyArenaModels(arena.transform);
-            BuildCatwalks(arena.transform);
+            BuildTransferBridge(arena.transform);
 
             ground.isStatic = true;
         }
@@ -376,16 +373,15 @@ namespace Shooter.EditorTools
                 string asset = label switch
                 {
                     "Ground" => "Ground",
-                    "Central Pad" => "Pad",
-                    "Pillar" or "Wall Pier" => "Pillar",
-                    "Container" or "Barrier" or "L Wall" or "L Wall Return" => "Cover",
+                    "Wall Pier" => "Pillar",
+                    "Container" or "L Wall" or "L Wall Return" => "Cover",
                     "Wall North" or "Wall South" or "Wall East" or "Wall West" => "Wall",
                     "Barrel" => "Drum",
                     "Barrel Ring" => "Conduit",
                     _ when label.StartsWith("Pipe ") => "Conduit",
                     _ when label.StartsWith("Platform ") => "Platform",
                     _ when label.StartsWith("Ramp ") => "Ramp",
-                    _ when label.StartsWith("Trim ") || label.StartsWith("Pad Trim ") => "Trim",
+                    _ when label.StartsWith("Trim ") => "Trim",
                     _ => "Hardware",
                 };
 
@@ -405,104 +401,65 @@ namespace Shooter.EditorTools
             }
         }
 
-        /// <summary>
-        /// The raised centre pad: an open 12x12 duelling floor ringed by glowing trim.
-        /// It is only 12 cm high, well under the controller step height, so nobody
-        /// stumbles on the way in.
-        /// </summary>
-        private static void BuildCentralPad(ArenaMaterials materials, Transform parent)
+        private const float DockHeight = 4.6f;
+        private const float DockCenterX = 15.5f;
+
+        private static void BuildFurnace(ArenaMaterials materials, Transform parent)
         {
-            CreatePrimitive("Central Pad", PrimitiveType.Cube, new Vector3(0f, 0.06f, 0f),
-                new Vector3(12f, 0.12f, 12f), materials.Pad, parent);
-
-            GameObject[] trims =
+            // The refractory shell and incandescent slots face the south receiving yard.
+            Vector3 center = new Vector3(-2f, 0f, 10f);
+            CreatePrimitive("Furnace Plinth", PrimitiveType.Cube, center + Vector3.up * 0.35f,
+                new Vector3(6f, 0.7f, 5f), materials.Stone, parent);
+            CreatePrimitive("Furnace Shell", PrimitiveType.Cube, center + Vector3.up * 2.7f,
+                new Vector3(5f, 4f, 4f), materials.DarkMetal, parent);
+            for (int row = 0; row < 3; row++)
             {
-                CreatePrimitive("Pad Trim North", PrimitiveType.Cube, new Vector3(0f, 0.13f, 5.94f),
-                    new Vector3(12f, 0.02f, 0.12f), materials.Accent, parent),
-                CreatePrimitive("Pad Trim South", PrimitiveType.Cube, new Vector3(0f, 0.13f, -5.94f),
-                    new Vector3(12f, 0.02f, 0.12f), materials.Accent, parent),
-                CreatePrimitive("Pad Trim East", PrimitiveType.Cube, new Vector3(5.94f, 0.13f, 0f),
-                    new Vector3(0.12f, 0.02f, 12f), materials.Accent, parent),
-                CreatePrimitive("Pad Trim West", PrimitiveType.Cube, new Vector3(-5.94f, 0.13f, 0f),
-                    new Vector3(0.12f, 0.02f, 12f), materials.Accent, parent),
-            };
+                GameObject slot = CreatePrimitive("Furnace Vent", PrimitiveType.Cube,
+                    center + new Vector3(0f, 1.5f + row * 0.85f, -2.03f),
+                    new Vector3(3.9f, 0.32f, 0.1f), materials.Hazard, parent);
+                StripCollider(slot);
+            }
 
-            foreach (GameObject trim in trims)
+            foreach (float x in new[] { -1.45f, 1.45f })
             {
-                StripCollider(trim);
+                CreatePrimitive("Exhaust Stack", PrimitiveType.Cube, center + new Vector3(x, 6.3f, 0f),
+                    new Vector3(1.3f, 3.2f, 1.3f), materials.Stone, parent);
+                CreatePrimitive("Exhaust Collar", PrimitiveType.Cube, center + new Vector3(x, 7.7f, 0f),
+                    new Vector3(1.5f, 0.3f, 1.5f), materials.DarkMetal, parent);
             }
         }
 
-        /// <summary>
-        /// Four raised corner platforms, each reached by a ramp from the mid lanes.
-        /// They give the player high ground and break up the skyline.
-        /// </summary>
-        private static void BuildCornerPlatforms(ArenaMaterials materials, Transform parent)
+        private static void BuildLoadingDocks(ArenaMaterials materials, Transform parent)
         {
-            const float platformSize = 8f;
-            const float platformHeight = 2f;
-            const float rampRun = 6f;
-            const float rampWidth = 3f;
-            const float rampThickness = 0.4f;
+            const float rampRun = 9f;
+            const float thickness = 0.4f;
+            float angle = Mathf.Atan2(DockHeight, rampRun) * Mathf.Rad2Deg;
+            float length = Mathf.Sqrt(rampRun * rampRun + DockHeight * DockHeight);
 
-            Vector3[] centers =
+            foreach (int side in new[] { -1, 1 })
             {
-                new Vector3(15.5f, 0f, 15.5f),
-                new Vector3(-15.5f, 0f, 15.5f),
-                new Vector3(15.5f, 0f, -15.5f),
-                new Vector3(-15.5f, 0f, -15.5f),
-            };
+                float x = side * DockCenterX;
+                string name = side < 0 ? "West" : "East";
+                CreatePrimitive($"Platform {name} Dock", PrimitiveType.Cube,
+                    new Vector3(x, DockHeight / 2f, 0f), new Vector3(8f, DockHeight, 6f),
+                    materials.Wall, parent);
 
-            float rampAngle = Mathf.Atan2(platformHeight, rampRun) * Mathf.Rad2Deg;
-            float slopeLength = Mathf.Sqrt(rampRun * rampRun + platformHeight * platformHeight);
-
-            foreach (Vector3 center in centers)
-            {
-                string side = center.x > 0f ? "East" : "West";
-
-                CreatePrimitive($"Platform {side} {(center.z > 0f ? "North" : "South")}", PrimitiveType.Cube,
-                    new Vector3(center.x, platformHeight * 0.5f, center.z),
-                    new Vector3(platformSize, platformHeight, platformSize), materials.Wall, parent);
-
-                // Glowing lip around the platform top.
-                float lip = platformSize * 0.5f - 0.06f;
-
-                foreach (int axis in new[] { 0, 1 })
+                foreach (int end in new[] { -1, 1 })
                 {
-                    for (int side2 = -1; side2 <= 1; side2 += 2)
-                    {
-                        Vector3 position = axis == 0
-                            ? new Vector3(center.x, platformHeight + 0.02f, center.z + side2 * lip)
-                            : new Vector3(center.x + side2 * lip, platformHeight + 0.02f, center.z);
-
-                        Vector3 scale = axis == 0
-                            ? new Vector3(platformSize, 0.04f, 0.12f)
-                            : new Vector3(0.12f, 0.04f, platformSize);
-
-                        GameObject trim = CreatePrimitive("Edge Trim", PrimitiveType.Cube, position, scale,
-                            materials.Accent, parent);
-                        StripCollider(trim);
-                    }
+                    Quaternion rotation = Quaternion.Euler(end * angle, 0f, 0f);
+                    Vector3 surface = new Vector3(x, DockHeight / 2f, end * (3f + rampRun / 2f));
+                    CreatePrimitive($"Ramp {name} {(end < 0 ? "South" : "North")}", PrimitiveType.Cube,
+                        surface - rotation * Vector3.up * (thickness / 2f),
+                        new Vector3(3.8f, thickness, length), materials.CoverAlt, parent, rotation);
                 }
-
-                // Ramp: rises from the arena floor up to the platform edge. The cube is
-                // rotated so its top face lands exactly on the slope line.
-                bool eastSide = center.x > 0f;
-                float rampX = eastSide ? 8.5f : -8.5f;
-                float rampCenterY = platformHeight * 0.5f - 0.21f;
-
-                CreatePrimitive($"Ramp {side} {(center.z > 0f ? "North" : "South")}", PrimitiveType.Cube,
-                    new Vector3(rampX, rampCenterY, center.z),
-                    new Vector3(slopeLength, rampThickness, rampWidth), materials.CoverAlt, parent,
-                    Quaternion.Euler(0f, 0f, eastSide ? rampAngle : -rampAngle));
             }
         }
 
-        private static void BuildCatwalks(Transform arena)
+        private static void BuildTransferBridge(Transform arena)
         {
             const int spanCount = 6;
             const float spanLength = 3.9f;
-            const float deckHeight = 2.6f;
+            const float deckHeight = DockHeight + 0.6f;
             const float deckWidth = 2.4f;
             const float halfLength = spanCount * spanLength / 2f;
 
@@ -510,44 +467,46 @@ namespace Shooter.EditorTools
             GameObject landing = FoundryAssets.LoadProp("CatwalkLanding");
             GameObject pier = FoundryAssets.LoadProp("CatwalkPier");
 
-            foreach (int side in new[] { -1, 1 })
+            var deck = new GameObject("Transfer Bridge");
+            deck.transform.SetParent(arena, false);
+            deck.transform.localPosition = Vector3.up * deckHeight;
+            deck.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+
+            // A continuous box under the deck keeps traversal smooth over model seams.
+            BoxCollider deckCollider = deck.AddComponent<BoxCollider>();
+            deckCollider.center = new Vector3(0f, -0.15f, 0f);
+            deckCollider.size = new Vector3(deckWidth, 0.3f, 2f * halfLength);
+
+            for (int index = 0; index < spanCount; index++)
             {
-                var deck = new GameObject(side < 0 ? "Catwalk West" : "Catwalk East");
-                deck.transform.SetParent(arena, false);
-                deck.transform.localPosition = new Vector3(15.5f * side, deckHeight, 0f);
+                float z = (index + 0.5f) * spanLength - halfLength;
+                PlaceCatwalkModule(span, deck.transform, new Vector3(0f, 0f, z), Quaternion.identity);
+            }
 
-                // A continuous box under the deck keeps traversal smooth over model seams.
-                BoxCollider deckCollider = deck.AddComponent<BoxCollider>();
-                deckCollider.center = new Vector3(0f, -0.15f, 0f);
-                deckCollider.size = new Vector3(deckWidth, 0.3f, 2f * halfLength);
+            foreach (int end in new[] { -1, 1 })
+            {
+                // The landing model starts at platform height and descends toward +Z.
+                Vector3 position = new Vector3(0f, DockHeight - deckHeight, end * halfLength);
+                Quaternion rotation = Quaternion.Euler(0f, end == 1 ? 0f : 180f, 0f);
+                GameObject steps = PlaceCatwalkModule(landing, deck.transform, position, rotation);
 
-                for (int index = 0; index < spanCount; index++)
+                for (int index = 0; index < 2; index++)
                 {
-                    float z = (index + 0.5f) * spanLength - halfLength;
-                    PlaceCatwalkModule(span, deck.transform, new Vector3(0f, 0f, z), Quaternion.identity);
+                    float height = 0.4f - 0.2f * index;
+                    BoxCollider tread = steps.AddComponent<BoxCollider>();
+                    tread.center = new Vector3(0f, height / 2f, 0.27f + 0.56f * index);
+                    tread.size = new Vector3(deckWidth, height, 0.57f);
                 }
+            }
 
-                foreach (int end in new[] { -1, 1 })
-                {
-                    // The landing model starts at platform height and descends toward +Z.
-                    Vector3 position = new Vector3(0f, 2f - deckHeight, end * halfLength);
-                    Quaternion rotation = Quaternion.Euler(0f, end == 1 ? 0f : 180f, 0f);
-                    GameObject steps = PlaceCatwalkModule(landing, deck.transform, position, rotation);
-
-                    for (int index = 0; index < 2; index++)
-                    {
-                        float height = 0.4f - 0.2f * index;
-                        BoxCollider tread = steps.AddComponent<BoxCollider>();
-                        tread.center = new Vector3(0f, height / 2f, 0.27f + 0.56f * index);
-                        tread.size = new Vector3(deckWidth, height, 0.57f);
-                    }
-                }
-
+            foreach (float z in new[] { -spanLength * 2f, spanLength * 2f })
+            {
                 GameObject support = PlaceCatwalkModule(pier, deck.transform,
-                    Vector3.down * deckHeight, Quaternion.identity);
-                BoxCollider supportCollider = support.AddComponent<BoxCollider>();
-                supportCollider.center = Vector3.up * 1.15f;
-                supportCollider.size = new Vector3(0.75f, 2.3f, 1.8f);
+                    new Vector3(0f, -deckHeight, z), Quaternion.identity);
+                support.transform.localScale = new Vector3(1f, deckHeight / 2.6f, 1f);
+                BoxCollider column = support.AddComponent<BoxCollider>();
+                column.center = Vector3.up * 1.15f;
+                column.size = new Vector3(0.75f, 2.3f, 1.8f);
             }
         }
 
@@ -564,75 +523,18 @@ namespace Shooter.EditorTools
             return module;
         }
 
-        /// <summary>Four pillars framing the central pad; they break long sight lines.</summary>
-        private static void BuildInnerPillars(ArenaMaterials materials, Transform parent)
-        {
-            Vector3[] positions =
-            {
-                new Vector3(8.5f, 1.7f, 8.5f),
-                new Vector3(-8.5f, 1.7f, 8.5f),
-                new Vector3(8.5f, 1.7f, -8.5f),
-                new Vector3(-8.5f, 1.7f, -8.5f),
-            };
-
-            foreach (Vector3 position in positions)
-            {
-                CreatePrimitive("Pillar", PrimitiveType.Cube, position, new Vector3(1.4f, 3.4f, 1.4f),
-                    materials.Wall, parent);
-
-                CreatePrimitive("Pillar Cap", PrimitiveType.Cube, position + new Vector3(0f, 1.76f, 0f),
-                    new Vector3(1.54f, 0.12f, 1.54f), materials.Accent, parent);
-            }
-        }
-
-        /// <summary>
-        /// Cover grouped into readable clusters: stacked containers in the east and west
-        /// lanes, L-shaped walls in the north and south lanes, and loose barriers around
-        /// the outer ring.
-        /// </summary>
         private static void BuildCoverClusters(ArenaMaterials materials, Transform parent)
         {
-            // Stacked containers: full cover in the side lanes.
-            foreach (float side in new[] { 1f, -1f })
+            // A staggered freight yard leaves a broad approach beneath the bridge.
+            foreach (Vector3 position in new[] { new Vector3(-8f, 1f, -9f),
+                new Vector3(7f, 1f, -15f), new Vector3(9f, 1f, 10f) })
             {
-                CreatePrimitive("Container", PrimitiveType.Cube, new Vector3(13.5f * side, 0.8f, 0f),
-                    new Vector3(2.2f, 1.6f, 4.2f), materials.Cover, parent,
-                    Quaternion.Euler(0f, 8f * side, 0f));
-
-                CreatePrimitive("Container Top", PrimitiveType.Cube, new Vector3(13.5f * side, 2.05f, 0f),
-                    new Vector3(1.6f, 0.9f, 2.6f), materials.CoverAlt, parent,
-                    Quaternion.Euler(0f, -18f * side, 0f));
+                CreatePrimitive("Container", PrimitiveType.Cube, position, new Vector3(4f, 2f, 2f),
+                    materials.Cover, parent);
             }
 
-            // L-shaped walls facing the centre. They sit inboard of the ramp corridors
-            // so they never block the way up to a platform.
-            CreateLWall(materials, parent, new Vector3(2.6f, 0f, 11.6f), -14f);
-            CreateLWall(materials, parent, new Vector3(-2.6f, 0f, 11.6f), 14f);
-            CreateLWall(materials, parent, new Vector3(2.6f, 0f, -11.6f), 14f);
-            CreateLWall(materials, parent, new Vector3(-2.6f, 0f, -11.6f), -14f);
-
-            // Loose barriers around the outer ring.
-            Vector3[] barrierPositions =
-            {
-                new Vector3(18.2f, 0f, 6.5f),
-                new Vector3(18.2f, 0f, -6.5f),
-                new Vector3(-18.2f, 0f, 6.5f),
-                new Vector3(-18.2f, 0f, -6.5f),
-                new Vector3(7.2f, 0f, 18.6f),
-                new Vector3(-7.2f, 0f, 18.6f),
-                new Vector3(7.2f, 0f, -18.6f),
-                new Vector3(-7.2f, 0f, -18.6f),
-            };
-
-            float[] barrierAngles = { 25f, -25f, -25f, 25f, 65f, -65f, -65f, 65f };
-
-            for (int i = 0; i < barrierPositions.Length; i++)
-            {
-                Vector3 position = barrierPositions[i];
-                CreatePrimitive("Barrier", PrimitiveType.Cube, new Vector3(position.x, 0.65f, position.z),
-                    new Vector3(3.4f, 1.3f, 0.7f), materials.Cover, parent,
-                    Quaternion.Euler(0f, barrierAngles[i], 0f));
-            }
+            CreateLWall(materials, parent, new Vector3(4f, 0f, -5f), 25f);
+            CreateLWall(materials, parent, new Vector3(-9f, 0f, 16f), 155f);
         }
 
         /// <summary>Two boxes at right angles: a wall with a short return.</summary>
@@ -658,14 +560,10 @@ namespace Shooter.EditorTools
         {
             Vector3[] barrelPositions =
             {
-                new Vector3(11.3f, 0.45f, 2.9f),
-                new Vector3(12.7f, 0.45f, 3.7f),
-                new Vector3(-11.3f, 0.45f, -2.9f),
-                new Vector3(-12.7f, 0.45f, -3.7f),
-                new Vector3(2.6f, 0.45f, 10.8f),
-                new Vector3(3.9f, 0.45f, 11.4f),
-                new Vector3(-2.6f, 0.45f, -10.8f),
-                new Vector3(-3.9f, 0.45f, -11.4f),
+                new Vector3(-10.7f, 0.45f, -9f),
+                new Vector3(-10.8f, 0.45f, -8f),
+                new Vector3(7.8f, 0.45f, 11.6f),
+                new Vector3(9f, 0.45f, 11.8f),
             };
 
             foreach (Vector3 position in barrelPositions)
@@ -682,7 +580,7 @@ namespace Shooter.EditorTools
             }
         }
 
-        /// <summary>Glowing floor strips that lead from the central pad out to the lanes.</summary>
+        /// <summary>Glowing floor strips mark the crossing beneath the transfer bridge.</summary>
         private static void BuildFloorGuides(ArenaMaterials materials, Transform parent)
         {
             Vector3[] positions =
@@ -724,7 +622,7 @@ namespace Shooter.EditorTools
             BuildWallLamp(materials, parent, new Vector3(-ArenaHalfSize + 1.1f, WallHeight - 2.6f, 0f),
                 new Vector3(0.2f, 0.32f, 4.8f), new Color(0.25f, 0.75f, 1f), materials.Accent);
 
-            // A soft fill from high over the centre pad keeps the combat readable while the
+            // A soft fill from high over the transfer bridge keeps the combat readable while the
             // perimeter goes moody. It does not replace shadows; it sculpts mid-tones.
             GameObject fill = new GameObject("Arena Fill Light");
             fill.transform.SetParent(parent, false);
@@ -971,18 +869,18 @@ namespace Shooter.EditorTools
             // sits in open ground, clear of cover, ramps and platforms.
             Vector3[] positions =
             {
-                new Vector3(17f, 0f, -3.5f),
-                new Vector3(17f, 0f, 3.5f),
-                new Vector3(-17f, 0f, 3.5f),
-                new Vector3(-17f, 0f, -3.5f),
-                new Vector3(3.5f, 0f, 17f),
-                new Vector3(-3.5f, 0f, 17f),
-                new Vector3(3.5f, 0f, -17f),
-                new Vector3(-3.5f, 0f, -17f),
-                new Vector3(0f, 0f, 19.5f),
-                new Vector3(0f, 0f, -19.5f),
-                new Vector3(19.5f, 0f, 0f),
-                new Vector3(-19.5f, 0f, 0f),
+                new Vector3(-17f, 0f, 17f),
+                new Vector3(0f, 0f, 18f),
+                new Vector3(17f, 0f, 17f),
+                new Vector3(-10f, 0f, 5f),
+                new Vector3(10f, 0f, 5f),
+                new Vector3(-19f, 0f, -9f),
+                new Vector3(19f, 0f, -9f),
+                new Vector3(-17f, 0f, -17f),
+                new Vector3(17f, 0f, -17f),
+                new Vector3(-6f, 0f, -18f),
+                new Vector3(8f, 0f, 18f),
+                new Vector3(-12f, 0f, 7f),
             };
 
             for (int i = 0; i < positions.Length; i++)
@@ -1011,7 +909,7 @@ namespace Shooter.EditorTools
         {
             var player = new GameObject("Player");
             player.layer = 2; // "Ignore Raycast": the player's own weapon ray must never hit it.
-            player.transform.position = new Vector3(0f, 0.4f, 0f);
+            player.transform.position = new Vector3(0f, 0.4f, -14f);
 
             CharacterController controller = player.AddComponent<CharacterController>();
             controller.height = 1.8f;
@@ -2054,12 +1952,12 @@ namespace Shooter.EditorTools
 
             Vector3[] positions =
             {
-                new Vector3(8.2f, 0.55f, 0f),
-                new Vector3(-8.2f, 0.55f, 0f),
-                new Vector3(0f, 0.55f, 8.2f),
-                new Vector3(0f, 0.55f, -8.2f),
-                new Vector3(15.5f, 2.95f, 0f),
-                new Vector3(-15.5f, 2.95f, 0f),
+                new Vector3(-10f, 0.55f, -5f),
+                new Vector3(9f, 0.55f, -10f),
+                new Vector3(2f, 0.55f, 13f),
+                new Vector3(-9f, 0.55f, 8f),
+                new Vector3(-DockCenterX, DockHeight + 0.55f, 0f),
+                new Vector3(DockCenterX, DockHeight + 0.55f, 0f),
             };
 
             foreach (Vector3 position in positions)

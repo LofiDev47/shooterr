@@ -388,18 +388,19 @@ namespace Shooter.EditorTools
             // --- arena layout ------------------------------------------------------
             GameObject[] platforms = FindArenaObjects("Platform ", false);
             GameObject[] ramps = FindArenaObjects("Ramp ", false);
-            GameObject[] pad = FindArenaObjects("Central Pad", true);
-            GameObject[] pillars = FindArenaObjects("Pillar", true);
             int perimeterWalls = new[] { "Wall North", "Wall South", "Wall East", "Wall West" }
                 .Count(name => FindArenaObjects(name, true).Length == 1);
 
-            Check(platforms.Length == 4, "arena has four raised corner platforms");
-            Check(ramps.Length == 4, "arena has four platform ramps");
-            Check(new[] { "Catwalk West", "Catwalk East" }.All(name =>
-                FindArenaObjects(name, true).Any(obj => obj.GetComponent<BoxCollider>() != null)),
-                "both raised side catwalks have walkable collision");
-            Check(pad.Length == 1, "arena has a central pad");
-            Check(pillars.Length == 4, "arena has four inner pillars");
+            Check(platforms.Length == 2, "arena has two loading docks");
+            Check(ramps.Length == 4, "both docks have north and south ramps");
+            BoxCollider bridge = FindArenaObjects("Transfer Bridge", true).FirstOrDefault()?.GetComponent<BoxCollider>();
+            Check(bridge != null, "transfer bridge has walkable collision");
+            CharacterController bossBody = waveSpawner?.bossPrefab?.GetComponent<CharacterController>();
+            BoxCollider ground = FindArenaObjects("Ground", true).FirstOrDefault()?.GetComponent<BoxCollider>();
+            Check(bridge != null && bossBody != null && ground != null &&
+                bridge.bounds.min.y - ground.bounds.max.y >= bossBody.height + bossBody.skinWidth,
+                "the Warden has headroom under the transfer bridge");
+            Check(FindArenaObjects("Furnace Shell", true).Length == 1, "arena has a furnace");
             Check(perimeterWalls == 4, "arena has four perimeter walls");
 
             // Spawn points must be in open ground: not inside a wall or a platform.
@@ -417,14 +418,12 @@ namespace Shooter.EditorTools
                         continue;
                     }
 
-                    foreach (GameObject platform in platforms)
+                    // Include tall boss spawns and the full height of airborne drones.
+                    if (Physics.CheckCapsule(point.position + Vector3.up * 1.1f,
+                        point.position + Vector3.up * 4.5f, 1f, Physics.DefaultRaycastLayers,
+                        QueryTriggerInteraction.Ignore))
                     {
-                        Vector3 delta = point.position - platform.transform.position;
-
-                        if (Mathf.Abs(delta.x) < 4.2f && Mathf.Abs(delta.z) < 4.2f)
-                        {
-                            allClear = false;
-                        }
+                        allClear = false;
                     }
 
                     if (Mathf.Abs(point.position.x) > 21f || Mathf.Abs(point.position.z) > 21f)

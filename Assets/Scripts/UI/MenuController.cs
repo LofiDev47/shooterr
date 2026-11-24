@@ -71,7 +71,6 @@ namespace Shooter.UI
         private Toggle fullscreenToggle;
         private Toggle vsyncToggle;
         private Toggle postProcessingToggle;
-        private Button frameRateButton;
         private Text frameRateValue;
         private Text resolutionValue;
         private readonly Dictionary<string, Button> keybindButtons = new Dictionary<string, Button>();
@@ -477,7 +476,8 @@ namespace Shooter.UI
 
             if (vsyncToggle != null)
             {
-                vsyncToggle.SetIsOnWithoutNotify(settings.VSyncEnabled);
+                vsyncToggle.interactable = settings.UsesAutomaticFrameRate;
+                vsyncToggle.SetIsOnWithoutNotify(settings.UsesAutomaticFrameRate && settings.VSyncEnabled);
             }
 
             if (postProcessingToggle != null)
@@ -485,13 +485,12 @@ namespace Shooter.UI
                 postProcessingToggle.SetIsOnWithoutNotify(settings.PostProcessingEnabled);
             }
 
-            if (frameRateButton != null)
+            if (frameRateValue != null)
             {
-                frameRateButton.interactable = !settings.VSyncEnabled;
-                frameRateValue.text = settings.VSyncEnabled ? "VSync active" : settings.FrameRateLimit switch
+                frameRateValue.text = settings.FrameRateLimit switch
                 {
                     -1 => "Unlimited",
-                    0 => "Preset default",
+                    0 => "Auto",
                     _ => $"{settings.FrameRateLimit} FPS",
                 };
             }
@@ -838,14 +837,14 @@ namespace Shooter.UI
                 260f, value => settings?.SetPostProcessing(value));
             fullscreenToggle = CreateToggleRow(graphics, "Fullscreen", settings == null || settings.Fullscreen,
                 204f, value => settings?.SetFullscreen(value));
-            vsyncToggle = CreateToggleRow(graphics, "VSync", settings == null || settings.VSyncEnabled,
+            vsyncToggle = CreateToggleRow(graphics, "VSync (Auto FPS)", settings == null || settings.VSyncEnabled,
                 148f, value => settings?.SetVSync(value));
             fpsToggle = CreateToggleRow(graphics, "Show FPS", settings != null && settings.ShowFps,
                 92f, value => settings?.SetShowFps(value));
 
             CreateText(graphics, "FrameRateLabel", "FRAME RATE LIMIT", 18, Color.white, TextAnchor.MiddleLeft,
                 center, center, new Vector2(-80f, 36f), new Vector2(240f, 30f), font);
-            frameRateButton = CreateButton(graphics, "FrameRateButton", "VSync active", center,
+            Button frameRateButton = CreateButton(graphics, "FrameRateButton", "Auto", center,
                 new Vector2(200f, 36f), new Vector2(230f, 44f), () => settings?.CycleFrameRateLimit(), 18);
             frameRateValue = frameRateButton.GetComponentInChildren<Text>();
 

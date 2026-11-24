@@ -94,6 +94,7 @@ namespace Shooter.Managers
         public bool ShowFps { get; private set; }
         public int QualityIndex { get; private set; } = DefaultQualityIndex;
         public int FrameRateLimit { get; private set; }
+        public bool UsesAutomaticFrameRate => FrameRateLimit == 0;
         public bool PostProcessingEnabled => postProcessingOverride ?? QualityIndex != 0;
         public bool Fullscreen { get; private set; } = true;
         public bool VSyncEnabled { get; private set; } = true;
@@ -470,10 +471,9 @@ namespace Shooter.Managers
 
         private void ApplyFramePacing()
         {
-            QualitySettings.vSyncCount = VSyncEnabled ? 1 : 0;
-            int presetLimit = QualityIndex == QualityPresetCount - 1 ? -1 : 60;
-            int limit = FrameRateLimit == 0 ? presetLimit : FrameRateLimit;
-            Application.targetFrameRate = VSyncEnabled ? -1 : limit;
+            bool useVSync = UsesAutomaticFrameRate && VSyncEnabled;
+            QualitySettings.vSyncCount = useVSync ? 1 : 0;
+            Application.targetFrameRate = UsesAutomaticFrameRate ? (useVSync ? -1 : 60) : FrameRateLimit;
         }
 
         private void ApplyGraphics()
