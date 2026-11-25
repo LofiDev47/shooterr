@@ -17419,7 +17419,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "WASD move   \xB7   SHIFT sprint   \xB7   SPACE jump   \xB7   LMB fire   \xB7   RMB aim   \xB7   V melee   \xB7   C slide   \xB7   R recharge   \xB7   ESC free cursor"
+  m_Text: "WASD move   \xB7   double-tap W sprint   \xB7   SPACE jump   \xB7   SHIFT air dash   \xB7   LMB fire   \xB7   RMB aim   \xB7   F melee   \xB7   C slide   \xB7   R recharge   \xB7   ESC pause"
 --- !u!1 &1007052044
 GameObject:
   m_ObjectHideFlags: 0
@@ -28179,8 +28179,8 @@ MonoBehaviour:
   falloffEnd: 60
   falloffMinimum: 0.65
   ricochetDamageMultiplier: 0.7
-  meleeRange: 2.6
-  meleeDamage: 55
+  meleeRange: 3.12
+  meleeDamage: 71.5
   meleeCooldown: 0.9
   meleeArcDot: 0.3
   meleeSwingDuration: 0.24

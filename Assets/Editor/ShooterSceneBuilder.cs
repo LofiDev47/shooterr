@@ -1629,7 +1629,7 @@ namespace Shooter.EditorTools
 
             // Control hints (bottom center).
             Text hintText = CreateText(canvasObject.transform, "HintText",
-                "WASD move  /  double-tap W sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause",
+                "WASD move  /  double-tap W sprint  /  SPACE jump  /  SHIFT air dash  /  LMB fire  /  RMB aim  /  F melee  /  C slide  /  R recharge  /  ESC pause",
                 15, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleCenter, new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 24f), font);
 

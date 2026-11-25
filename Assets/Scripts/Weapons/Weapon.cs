@@ -63,8 +63,8 @@ namespace Shooter.Weapons
         [SerializeField] private float ricochetDamageMultiplier = 0.7f;
 
         [Header("Melee")]
-        [SerializeField] private float meleeRange = 2.6f;
-        [SerializeField] private float meleeDamage = 55f;
+        [SerializeField] private float meleeRange = 3.12f;
+        [SerializeField] private float meleeDamage = 71.5f;
         [SerializeField] private float meleeCooldown = 0.9f;
         [Tooltip("Dot-product threshold for the melee cone (1 = dead ahead).")]
         [Range(-1f, 1f)]
@@ -229,7 +229,6 @@ namespace Shooter.Weapons
         private PlayerHealth viewHealth;
         private string viewLoop;
         private float viewActionUntil;
-        private float inspectUntil;
         private bool viewDying;
 
         private void Awake()
@@ -334,7 +333,6 @@ namespace Shooter.Weapons
             viewAnimation.Play(clip);
             state.time = seek;
             viewActionUntil = Time.time + remaining / state.speed;
-            inspectUntil = clip == "Inspect" ? viewActionUntil : 0f;
             viewLoop = null;
         }
 
@@ -344,11 +342,6 @@ namespace Shooter.Weapons
                 return;
 
             float now = Time.time;
-            if (now < inspectUntil && player != null && (player.IsAiming || player.IsSprinting))
-            {
-                inspectUntil = 0f;
-                viewActionUntil = 0f;
-            }
             if (now < viewActionUntil)
                 return;
 
@@ -447,7 +440,6 @@ namespace Shooter.Weapons
             HandleFireInput(now);
             HandleShotgunInput();
             HandleMeleeInput();
-            HandleInspectInput(now);
             UpdateEffects(now);
             UpdatePose(now);
             UpdateViewAnimation();
@@ -548,7 +540,7 @@ namespace Shooter.Weapons
         {
             SettingsManager settings = SettingsManager.Instance;
             bool pressed = settings != null ? settings.WasPressed(SettingsManager.ActionMelee) :
-                SettingsManager.WasPressed(Key.E);
+                SettingsManager.WasPressed(Key.F);
 
             if (!pressed)
             {
@@ -566,20 +558,6 @@ namespace Shooter.Weapons
             }
 
             TryMelee();
-        }
-
-        private void HandleInspectInput(float now)
-        {
-            if (now < viewActionUntil || State.IsReloading || IsShotgunReloading || viewDying ||
-                (GameManager.Instance != null && !GameManager.Instance.IsPlaying) ||
-                (player != null && (!player.CanFireNow || player.IsAiming || player.IsSprinting)))
-                return;
-
-            SettingsManager settings = SettingsManager.Instance;
-            bool pressed = settings != null ? settings.WasPressed(SettingsManager.ActionInspect) :
-                SettingsManager.WasPressed(Key.F);
-            if (pressed)
-                PlayViewAction("Inspect");
         }
 
         /// <summary>
@@ -605,9 +583,8 @@ namespace Shooter.Weapons
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
             Vector3 forward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
             UpgradeManager upgrades = UpgradeManager.Instance;
-            float range = meleeRange * (upgrades != null ? upgrades.MeleeRangeMultiplier : 1f);
-            float appliedDamage = meleeDamage *
-                (upgrades != null ? upgrades.EffectiveDamageMultiplier * upgrades.MeleeDamageMultiplier : 1f);
+            float range = meleeRange;
+            float appliedDamage = meleeDamage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
 
             Collider[] candidates = Physics.OverlapSphere(
                 origin + forward * (range * 0.5f),

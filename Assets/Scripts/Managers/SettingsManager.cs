@@ -26,7 +26,6 @@ namespace Shooter.Managers
         public static readonly string ActionReload = "Reload";
         public static readonly string ActionShotgun = "Shotgun";
         public static readonly string ActionMelee = "Melee";
-        public static readonly string ActionInspect = "Inspect";
         public static readonly string ActionPause = "Pause";
         public static readonly string ActionRestart = "Restart";
 
@@ -49,8 +48,7 @@ namespace Shooter.Managers
             new BindingDef { Id = ActionSlide, Label = "SLIDE", DefaultKey = Key.C },
             new BindingDef { Id = ActionReload, Label = "RECHARGE", DefaultKey = Key.R },
             new BindingDef { Id = ActionShotgun, Label = "SHOTGUN", DefaultKey = Key.G },
-            new BindingDef { Id = ActionMelee, Label = "MELEE", DefaultKey = Key.E },
-            new BindingDef { Id = ActionInspect, Label = "INSPECT WEAPON", DefaultKey = Key.F },
+            new BindingDef { Id = ActionMelee, Label = "MELEE", DefaultKey = Key.F },
             new BindingDef { Id = ActionPause, Label = "PAUSE", DefaultKey = Key.Escape },
             new BindingDef { Id = ActionRestart, Label = "RESTART", DefaultKey = Key.R },
         };
@@ -543,16 +541,19 @@ namespace Shooter.Managers
 
         private static void MigrateWeaponBindings()
         {
-            if (PlayerPrefs.GetInt(KeyWeaponBindingsVersion, 0) >= 1)
+            int version = PlayerPrefs.GetInt(KeyWeaponBindingsVersion, 0);
+            if (version >= 2)
                 return;
 
             string melee = KeyPrefixBind + ActionMelee;
             string shotgun = KeyPrefixBind + ActionShotgun;
-            if (PlayerPrefs.GetInt(melee, 0) == (int)Key.V)
+            int meleeKey = PlayerPrefs.GetInt(melee, 0);
+            if (meleeKey == (int)Key.E || (version < 1 && meleeKey == (int)Key.V))
                 PlayerPrefs.DeleteKey(melee);
-            if (PlayerPrefs.GetInt(shotgun, 0) == (int)Key.F)
+            if (version < 1 && PlayerPrefs.GetInt(shotgun, 0) == (int)Key.F)
                 PlayerPrefs.DeleteKey(shotgun);
-            PlayerPrefs.SetInt(KeyWeaponBindingsVersion, 1);
+            PlayerPrefs.DeleteKey(KeyPrefixBind + "Inspect");
+            PlayerPrefs.SetInt(KeyWeaponBindingsVersion, 2);
             PlayerPrefs.Save();
         }
     }

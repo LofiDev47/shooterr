@@ -6,6 +6,7 @@ using Shooter.Upgrades;
 using Shooter.Weapons;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Shooter.EditorTools
 {
@@ -34,7 +35,7 @@ namespace Shooter.EditorTools
             TestExploderInertUntilArmed();
             TestAugmentMultipliersAndCaps();
             TestAugmentAirJumps();
-            TestTraversalAndMeleeAugments();
+            TestBaseTraversalAndMelee();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
             TestWeaponStateRebuildTiming();
@@ -265,31 +266,21 @@ namespace Shooter.EditorTools
             Object.DestroyImmediate(root);
         }
 
-        private static void TestTraversalAndMeleeAugments()
+        private static void TestBaseTraversalAndMelee()
         {
-            var root = new GameObject("AugmentTraversalTestRoot");
-            var upgrades = root.AddComponent<UpgradeManager>();
             var poolMethod = typeof(UpgradeManager).GetMethod("BuildPool",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
             var pool = (AugmentDef[])poolMethod.Invoke(null, null);
-            AugmentDef traversal = System.Array.Find(pool, card => card.Id == "Traversal Harness");
-            AugmentDef brawler = System.Array.Find(pool, card => card.Id == "Brawler Kit");
+            Check(!System.Array.Exists(pool, card => card.Id == "Traversal Harness" || card.Id == "Brawler Kit"),
+                "base traversal and melee perks are absent from the augment pool");
 
-            Check(!upgrades.HasAirDash, "air dash starts locked");
-            traversal.Apply(upgrades);
-            brawler.Apply(upgrades);
-            Check(upgrades.HasAirDash &&
-                  Mathf.Approximately(upgrades.WallKickMultiplier, 1.15f), "Traversal Harness unlocks air dash and buffs wall jumps");
-            Check(Mathf.Approximately(upgrades.MeleeRangeMultiplier, 1.20f) &&
-                  Mathf.Approximately(upgrades.MeleeDamageMultiplier, 1.30f), "Brawler Kit buffs melee reach and damage");
-            Check(!traversal.CanOffer(upgrades) && !brawler.CanOffer(upgrades), "specialized augments are offered once per run");
-
-            upgrades.ResetAugments();
-            Check(!upgrades.HasAirDash && upgrades.WallKickMultiplier == 1f &&
-                  upgrades.MeleeRangeMultiplier == 1f && upgrades.MeleeDamageMultiplier == 1f &&
-                  traversal.CanOffer(upgrades) && brawler.CanOffer(upgrades), "new runs clear and restore specialized augments");
-
-            Object.DestroyImmediate(root);
+            SettingsManager.BindingDef[] bindings = SettingsManager.AllBindings;
+            Check(System.Array.Exists(bindings, binding => binding.Id == SettingsManager.ActionDash &&
+                  binding.DefaultKey == Key.LeftShift), "air dash defaults to Left Shift");
+            Check(System.Array.Exists(bindings, binding => binding.Id == SettingsManager.ActionMelee &&
+                  binding.DefaultKey == Key.F), "melee defaults to F");
+            Check(!System.Array.Exists(bindings, binding => binding.Id == "Inspect"),
+                "weapon inspect has no input binding");
         }
 
         private static void TestAugmentsOnPlayerHealth()

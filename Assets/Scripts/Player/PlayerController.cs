@@ -42,7 +42,7 @@ namespace Shooter.Player
         [SerializeField] private float jumpCutMultiplier = 0.45f;
 
         [Header("Wall jump")]
-        [SerializeField] private float wallJumpPush = 7f;
+        [SerializeField] private float wallJumpPush = 8.05f;
         [SerializeField] private float wallJumpSteerDelay = 0.14f;
         [SerializeField] private float wallReach = 0.20f;
 
@@ -53,7 +53,8 @@ namespace Shooter.Player
         [Header("Air dash")]
         [SerializeField] private float dashSpeed = 17f;
         [SerializeField] private float dashDuration = 0.16f;
-        [SerializeField] private float dashCooldown = 0.55f;
+        [Tooltip("Minimum seconds between air dashes, even if you land in between.")]
+        [SerializeField] private float dashCooldown = 1.5f;
         [SerializeField] private float dashVerticalBoost = 2.5f;
         [SerializeField] private float dashHopBoost = 1.08f;
         [SerializeField] private float slideDuration = 1.1f;
@@ -457,8 +458,7 @@ namespace Shooter.Player
 
             IsSprinting = sprintRequested && !isSliding && controller.isGrounded;
 
-            if (UpgradeManager.Instance != null && UpgradeManager.Instance.HasAirDash &&
-                !controller.isGrounded && !dashUsedInAir && Time.time >= dashCooldownEnd &&
+            if (!controller.isGrounded && !dashUsedInAir && Time.time >= dashCooldownEnd &&
                 WasPressed(settings, SettingsManager.ActionDash))
             {
                 EndSlide();
@@ -784,9 +784,8 @@ namespace Shooter.Player
             }
 
             UpgradeManager upgrades = UpgradeManager.Instance;
-            float push = wallJumpPush * (upgrades != null ? upgrades.WallKickMultiplier : 1f);
             float heightScale = upgrades != null ? upgrades.JumpMultiplier : 1f;
-            planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * push;
+            planarVelocity = Vector3.ProjectOnPlane(planarVelocity, normal) * 0.55f + normal * wallJumpPush;
             verticalVelocity = Mathf.Sqrt(jumpHeight * heightScale * -2f * gravity);
             wallSteerUntil = Time.time + wallJumpSteerDelay;
             lastKickedWall = normal;

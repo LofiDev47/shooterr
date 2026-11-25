@@ -522,8 +522,8 @@ namespace Shooter.UI
 
             if (settings == null)
             {
-                menuHint.text = "WASD move · double-tap W sprint · SPACE jump · LMB fire · RMB aim · E melee · F inspect · C slide · R recharge · G shotgun · ESC pause" +
-                    "\nPress SPACE near a wall while airborne to wall jump. Traversal Harness unlocks SHIFT air dash.";
+                menuHint.text = "WASD move · double-tap W sprint · SPACE jump · LMB fire · RMB aim · F melee · C slide · R recharge · G shotgun · ESC pause" +
+                    "\nWhile airborne, press SHIFT to dash or SPACE near a wall to wall jump.";
                 return;
             }
 
@@ -539,13 +539,12 @@ namespace Shooter.UI
                 $" · {K(SettingsManager.ActionJump)} jump" +
                 " · LMB fire · RMB aim" +
                 $" · {K(SettingsManager.ActionMelee)} melee" +
-                $" · {K(SettingsManager.ActionInspect)} inspect" +
                 $" · {K(SettingsManager.ActionSlide)} slide" +
                 $" · {K(SettingsManager.ActionReload)} recharge" +
                 $" · {K(SettingsManager.ActionShotgun)} shotgun" +
                 $" · {K(SettingsManager.ActionPause)} pause" +
-                $"\nPress {K(SettingsManager.ActionJump)} near a wall while airborne to wall jump." +
-                $" Traversal Harness unlocks {K(SettingsManager.ActionDash)} air dash.";
+                $"\nWhile airborne, press {K(SettingsManager.ActionDash)} to dash" +
+                $" or {K(SettingsManager.ActionJump)} near a wall to wall jump.";
         }
 
         private void RefreshKeybindLabels()

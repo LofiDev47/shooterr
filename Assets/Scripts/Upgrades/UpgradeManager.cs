@@ -150,8 +150,6 @@ namespace Shooter.Upgrades
 
         private Weapon weapon;
         private int airJumpsUsed;
-        private bool traversalHarness;
-        private bool brawlerKit;
         private bool siegeBreaker;
         private bool trophyHunter;
         public bool IncendiaryHits { get; private set; }
@@ -176,10 +174,6 @@ namespace Shooter.Upgrades
         public float SpreadMultiplier => spreadMultiplier;
         public float RecoilMultiplier => recoilMultiplier;
         public float SpeedMultiplier => speedMultiplier;
-        public bool HasAirDash => traversalHarness;
-        public float WallKickMultiplier => traversalHarness ? 1.15f : 1f;
-        public float MeleeRangeMultiplier => brawlerKit ? 1.20f : 1f;
-        public float MeleeDamageMultiplier => brawlerKit ? 1.30f : 1f;
         public float JumpMultiplier => jumpMultiplier;
         public float SlideSpeedMultiplier => slideSpeedMultiplier;
         public float SlideCooldownMultiplier => slideCooldownMultiplier;
@@ -404,8 +398,6 @@ namespace Shooter.Upgrades
         public void ResetAugments()
         {
             ownedStacks.Clear();
-            traversalHarness = false;
-            brawlerKit = false;
             damageMultiplier = 1f;
             fireRateMultiplier = 1f;
             reloadSpeedMultiplier = 1f;
@@ -1157,24 +1149,6 @@ namespace Shooter.Upgrades
                     Title = "Energy Recovery",
                     Description = "Kills return 10% of a full power cell to reserve energy",
                     Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
-                },
-                new AugmentDef
-                {
-                    Id = "Traversal Harness",
-                    Rarity = AugmentRarity.Advanced,
-                    Title = "Traversal Harness",
-                    Description = "Unlock air dash (Shift by default) and kick off walls 15% faster",
-                    CanOffer = manager => !manager.traversalHarness,
-                    Apply = manager => manager.traversalHarness = true,
-                },
-                new AugmentDef
-                {
-                    Id = "Brawler Kit",
-                    Rarity = AugmentRarity.Advanced,
-                    Title = "Brawler Kit",
-                    Description = "+20% melee reach and +30% melee damage",
-                    CanOffer = manager => !manager.brawlerKit,
-                    Apply = manager => manager.brawlerKit = true,
                 },
                 new AugmentDef
                 {

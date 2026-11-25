@@ -17587,8 +17587,8 @@ MonoBehaviour:
   falloffEnd: 60
   falloffMinimum: 0.65
   ricochetDamageMultiplier: 0.7
-  meleeRange: 2.6
-  meleeDamage: 55
+  meleeRange: 3.12
+  meleeDamage: 71.5
   meleeCooldown: 0.9
   meleeArcDot: 0.3
   meleeSwingDuration: 0.24
@@ -52368,7 +52368,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: WASD move  /  double-tap W sprint  /  SPACE jump  /  LMB fire  /  RMB aim  /  E melee  /  F inspect  /  C slide  /  R recharge  /  ESC pause
+  m_Text: WASD move  /  double-tap W sprint  /  SPACE jump  /  SHIFT air dash  /  LMB fire  /  RMB aim  /  F melee  /  C slide  /  R recharge  /  ESC pause
 --- !u!1 &1654819698
 GameObject:
   m_ObjectHideFlags: 0
@@ -54639,14 +54639,14 @@ MonoBehaviour:
   coyoteTime: 0.12
   jumpBufferTime: 0.12
   jumpCutMultiplier: 0.45
-  wallJumpPush: 7
+  wallJumpPush: 8.05
   wallJumpSteerDelay: 0.14
   wallReach: 0.2
   slideSpeedMultiplier: 1.15
   slideFriction: 4.5
   dashSpeed: 17
   dashDuration: 0.16
-  dashCooldown: 0.55
+  dashCooldown: 1.5
   dashVerticalBoost: 2.5
   dashHopBoost: 1.08
   slideDuration: 1.1
