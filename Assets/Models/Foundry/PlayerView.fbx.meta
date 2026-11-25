@@ -7,6 +7,16 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: Anodized charcoal
+    second: {fileID: 2100000, guid: 6e72eae0b26abaf8faac3260403e31e1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: "Field olive \u2022 coated body"
+    second: {fileID: 2100000, guid: 04d14742a8297fa70b91f4b4048c97b0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: FoundryCeramic
     second: {fileID: 2100000, guid: 8e5adf4b2b41fb442b5b385b12fac5bc, type: 2}
   - first:
@@ -14,6 +24,26 @@ ModelImporter:
       assembly: UnityEngine.CoreModule
       name: FoundryWarning
     second: {fileID: 2100000, guid: 9fec6467871d59544a718a0d28eee994, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Ion discharge
+    second: {fileID: 2100000, guid: 99cc3579897fda822abe1695cd9b2883, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Machined edges
+    second: {fileID: 2100000, guid: 69f4538d00415c1d7a27b5d62c803539, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: "Olive \u2022 furniture"
+    second: {fileID: 2100000, guid: db34b95423e965c87ac0c0a19c2f89b7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Rubber overmold
+    second: {fileID: 2100000, guid: b474d6b5cd950b710859c4075caf8242, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule

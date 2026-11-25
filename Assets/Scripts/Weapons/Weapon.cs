@@ -385,7 +385,8 @@ namespace Shooter.Weapons
                 float progress = State.ReloadProgress(now);
                 float pulse = 0.5f - 0.5f * Mathf.Cos(progress * 2f * Mathf.PI * 2f);
                 color = ReloadBlue;
-                brightness = Mathf.Lerp(0.20f, 0.90f, progress) + 0.25f * pulse;
+                float discharge = Mathf.Clamp01(1f - Mathf.Abs(progress - 0.70f) / 0.055f);
+                brightness = Mathf.Lerp(0.25f, 1.25f, progress) + 0.18f * pulse + 4f * discharge;
             }
 
             Color emission = color * (brightness * 3f);
@@ -1532,7 +1533,7 @@ namespace Shooter.Weapons
 
         private void UpdateSlide()
         {
-            if (slide == null)
+            if (slide == null || (State.IsReloading && viewAnimation != null && viewAnimation.IsPlaying("Reload")))
             {
                 return;
             }

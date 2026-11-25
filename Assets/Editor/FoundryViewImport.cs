@@ -27,10 +27,10 @@ namespace Shooter.EditorTools
                 return;
 
             // The Blender FBX contains constant samples for every transform.
-            // These two controls are owned by the existing weapon timing code.
+            // Gameplay drives the slide during firing and the pump during cycling.
             foreach (EditorCurveBinding curve in AnimationUtility.GetCurveBindings(clip))
             {
-                if (curve.path.EndsWith("/Slide", StringComparison.Ordinal) ||
+                if ((clip.name != "Reload" && curve.path.EndsWith("/Slide", StringComparison.Ordinal)) ||
                     curve.path.EndsWith("/Pump", StringComparison.Ordinal))
                     AnimationUtility.SetEditorCurve(clip, curve, null);
             }
