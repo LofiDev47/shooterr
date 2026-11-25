@@ -70,6 +70,8 @@ namespace Shooter.Weapons
         [Range(-1f, 1f)]
         [SerializeField] private float meleeArcDot = 0.3f;
         [SerializeField] private float meleeSwingDuration = 0.24f;
+        public GameObject punchModel;
+        private Animation punchAnimation;
 
         [Header("Aim down sights")]
         [Tooltip("Spread multiplier while aiming.")]
@@ -163,7 +165,7 @@ namespace Shooter.Weapons
 
         public bool PumpWired => pump != null;
 
-        /// <summary>True while the melee bash animation is playing.</summary>
+        /// <summary>True during the melee punch window.</summary>
         public bool MeleeActive => Time.time - meleeSwingStartedAt < meleeSwingDuration;
 
         public float MeleeCooldownRemaining => Mathf.Max(0f, meleeReadyAt - Time.time);
@@ -250,6 +252,21 @@ namespace Shooter.Weapons
                 aimCamera = GetComponentInParent<Camera>();
             }
 
+            if (punchModel != null && aimCamera != null)
+            {
+                var arm = Instantiate(punchModel, aimCamera.transform, false);
+                // The FBX camera-forward axis points down local -Z.
+                arm.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                punchAnimation = arm.GetComponent<Animation>();
+                punchAnimation.playAutomatically = false;
+                punchAnimation.cullingType = AnimationCullingType.AlwaysAnimate;
+                punchAnimation.Stop();
+                punchAnimation["Punch"].clip.SampleAnimation(arm, 0f);
+                var skin = arm.GetComponentInChildren<SkinnedMeshRenderer>();
+                skin.updateWhenOffscreen = true;
+                skin.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+
             if (player == null)
             {
                 player = GetComponentInParent<PlayerController>();
@@ -299,6 +316,9 @@ namespace Shooter.Weapons
 
         private void OnDestroy()
         {
+            if (punchAnimation != null)
+                Destroy(punchAnimation.gameObject);
+
             if (viewHealth != null)
             {
                 viewHealth.Damaged -= PlayViewHit;
@@ -308,6 +328,11 @@ namespace Shooter.Weapons
 
         private void OnDisable()
         {
+            if (punchAnimation != null)
+            {
+                punchAnimation.Stop();
+                punchAnimation["Punch"].clip.SampleAnimation(punchAnimation.gameObject, 0f);
+            }
             if (magazineLight != null)
                 magazineLight.enabled = false;
         }
@@ -644,7 +669,7 @@ namespace Shooter.Weapons
         }
 
         /// <summary>
-        /// Short-range bash. Hits every enemy in a forward cone, so it doubles as
+        /// Short-range punch. Hits every enemy in a forward cone, so it doubles as
         /// crowd control when a runner closes the gap. Includes a real cooldown so
         /// it cannot replace the gun.
         /// </summary>
@@ -661,7 +686,12 @@ namespace Shooter.Weapons
             UpgradeManager upgrades = UpgradeManager.Instance;
             meleeReadyAt = now + meleeCooldown * (upgrades != null ? upgrades.MeleeCooldownMultiplier : 1f);
             meleeSwingStartedAt = now;
-            PlayViewAction("Melee", meleeSwingDuration);
+            if (punchAnimation != null)
+            {
+                // A kill can refresh melee mid-punch. Finish the withdrawal before the next entry.
+                AnimationState punch = punchAnimation.PlayQueued("Punch", QueueMode.CompleteOthers);
+                punch.speed = punch.length / Mathf.Max(0.001f, meleeSwingDuration);
+            }
             AudioManager.Instance?.PlayMeleeSwing(transform.position);
 
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
@@ -1448,26 +1478,17 @@ namespace Shooter.Weapons
             UpdateSlide();
             UpdatePump();
 
-            float meleeProgress = viewAnimation == null && meleeSwingDuration > 0.001f
-                ? (Time.time - meleeSwingStartedAt) / meleeSwingDuration
-                : 1f;
-            float meleeWeight = meleeProgress >= 0f && meleeProgress < 1f
-                ? Mathf.Sin(meleeProgress * Mathf.PI)
-                : 0f;
-
             // Recoil now lifts and rolls the gun a touch, so the animation has
             // more than one axis instead of a straight back-and-forth slide.
             Vector3 targetPosition = hipPosition
                 + new Vector3(0f, reloadDip + kickback * 0.014f, -kickback * 0.8f * Mathf.Lerp(1f, 0.45f, eased))
-                + new Vector3(-0.16f, -0.05f, 0.18f) * meleeWeight
                 + swayPosition;
 
             float kickAngle = kickback * 130f * Mathf.Lerp(1f, 0.4f, eased);
             float kickRoll = kickback * 16f * Mathf.Lerp(1f, 0.35f, eased);
             Quaternion targetRotation = hipRotation
                 * Quaternion.Euler(-kickAngle, 0f, reloadTilt - kickRoll)
-                * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f)
-                * Quaternion.Euler(-8f * meleeWeight, -38f * meleeWeight, 22f * meleeWeight);
+                * Quaternion.Euler(swayRotation.x, swayRotation.y, 0f);
 
             float blend = 1f - Mathf.Exp(-20f * Time.deltaTime);
             transform.localPosition = Vector3.Lerp(transform.localPosition, targetPosition, blend);

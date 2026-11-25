@@ -971,6 +971,8 @@ namespace Shooter.EditorTools
             GameObject rifleAsset = FoundryAssets.LoadPlayer();
             GameObject rifle = Object.Instantiate(rifleAsset, model.transform, false);
             rifle.name = "Rifle";
+            FindDeep(rifle.transform, "HandL").gameObject.SetActive(false);
+            FindDeep(rifle.transform, "HandR").gameObject.SetActive(false);
             FoundryAssets.Skin(rifle);
             Animation viewAnimation = FoundryAssets.Bind(rifle, rifleAsset, FoundryAssets.PlayerNames);
 
@@ -1078,6 +1080,7 @@ namespace Shooter.EditorTools
 
             Weapon weapon = weaponObject.AddComponent<Weapon>();
             weapon.aimCamera = cameraTransform.GetComponent<Camera>();
+            weapon.punchModel = AssetDatabase.LoadAssetAtPath<GameObject>(FoundryAssets.Folder + "/Punch.fbx");
             weapon.player = player;
             weapon.muzzle = muzzle.transform;
             weapon.muzzleFlash = flashRoot;
