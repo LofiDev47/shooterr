@@ -216,6 +216,13 @@ namespace Shooter.Weapons
         private float aimBlend; // 0 = hip fire, 1 = fully aimed.
         private Renderer[] weaponRenderers;
         private bool renderersVisible = true;
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+        private static readonly Color MagazineBlue = new Color(0.10f, 0.57f, 1f);
+        private static readonly Color ReloadBlue = new Color(0.37f, 0.85f, 1f);
+        private readonly List<(Renderer Renderer, int Slot)> magazineIndicators = new();
+        private MaterialPropertyBlock magazineProperties;
+        private Light magazineLight;
+        private Color previousMagazineEmission;
 
         /// <summary>Seconds since the last shot; large when the gun has not fired yet.</summary>
         public float TimeSinceLastShot => Time.time - lastFireTime;
@@ -249,6 +256,8 @@ namespace Shooter.Weapons
             }
 
             weaponRenderers = GetComponentsInChildren<Renderer>(true);
+            FindMagazineIndicators();
+            UpdateMagazineGlow(Time.time);
 
             // Wire the health hooks independently of the view animation: the field may
             // be assigned after Awake in some build paths, and PlayViewAction already
@@ -295,6 +304,79 @@ namespace Shooter.Weapons
                 viewHealth.Damaged -= PlayViewHit;
                 viewHealth.Died -= PlayViewDeath;
             }
+        }
+
+        private void OnDisable()
+        {
+            if (magazineLight != null)
+                magazineLight.enabled = false;
+        }
+
+        private void FindMagazineIndicators()
+        {
+            Renderer lightAnchor = null;
+            foreach (Renderer renderer in weaponRenderers)
+            {
+                Material[] materials = renderer.sharedMaterials;
+                for (int slot = 0; slot < materials.Length; slot++)
+                {
+                    Material material = materials[slot];
+                    if (material == null || material.name != "ServiceIndicatorGlow" ||
+                        !material.HasProperty(EmissionColorId))
+                        continue;
+
+                    magazineIndicators.Add((renderer, slot));
+                    if (lightAnchor == null || renderer.name == "StatusGlow")
+                        lightAnchor = renderer;
+                }
+            }
+
+            if (lightAnchor == null)
+                return;
+
+            magazineProperties = new MaterialPropertyBlock();
+            var lightObject = new GameObject("Magazine Glow Light");
+            lightObject.transform.SetParent(lightAnchor.transform, false);
+            lightObject.transform.position = lightAnchor.bounds.center + transform.up * 0.035f;
+            magazineLight = lightObject.AddComponent<Light>();
+            magazineLight.type = LightType.Point;
+            magazineLight.range = 0.3f;
+            magazineLight.cullingMask = 1 << lightAnchor.gameObject.layer;
+            magazineLight.shadows = LightShadows.None;
+        }
+
+        private void UpdateMagazineGlow(float now)
+        {
+            if (magazineLight == null)
+                return;
+
+            float charge = (float)State.AmmoInMagazine / State.MagazineSize;
+            Color color = MagazineBlue;
+            float brightness = charge;
+            if (State.IsReloading)
+            {
+                float progress = State.ReloadProgress(now);
+                float pulse = 0.5f - 0.5f * Mathf.Cos(progress * 2f * Mathf.PI * 2f);
+                color = ReloadBlue;
+                brightness = Mathf.Lerp(0.20f, 0.90f, progress) + 0.25f * pulse;
+            }
+
+            Color emission = color * (brightness * 3f);
+            if (emission != previousMagazineEmission)
+            {
+                foreach (var (renderer, slot) in magazineIndicators)
+                {
+                    renderer.GetPropertyBlock(magazineProperties, slot);
+                    magazineProperties.SetColor(EmissionColorId, emission);
+                    renderer.SetPropertyBlock(magazineProperties, slot);
+                }
+
+                previousMagazineEmission = emission;
+                magazineLight.color = color;
+                magazineLight.intensity = brightness * 0.8f;
+            }
+
+            magazineLight.enabled = renderersVisible && brightness > 0f;
         }
 
         private void PlayViewHit(float _)
@@ -444,6 +526,7 @@ namespace Shooter.Weapons
             UpdatePose(now);
             UpdateViewAnimation();
             UpdateVisibility();
+            UpdateMagazineGlow(now);
         }
 
         /// <summary>Starts a reload if possible (used by the R key and by auto-reload on empty).</summary>
