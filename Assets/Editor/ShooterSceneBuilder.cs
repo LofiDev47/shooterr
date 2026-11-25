@@ -959,6 +959,18 @@ namespace Shooter.EditorTools
             };
         }
 
+        internal static GameObject InstantiatePlayerView(Transform parent)
+        {
+            GameObject source = FoundryAssets.LoadPlayer();
+            var rifle = (GameObject)PrefabUtility.InstantiatePrefab(source, parent);
+            rifle.name = "Rifle";
+            Animation animation = FoundryAssets.Bind(rifle, source, FoundryAssets.PlayerNames);
+            animation.cullingType = AnimationCullingType.AlwaysAnimate;
+            PrefabUtility.RecordPrefabInstancePropertyModifications(rifle);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(animation);
+            return rifle;
+        }
+
         private static Weapon BuildWeapon(Transform cameraTransform, ArenaMaterials materials, PlayerController player)
         {
             var weaponObject = new GameObject("Weapon");
@@ -968,27 +980,8 @@ namespace Shooter.EditorTools
             var model = new GameObject("Model");
             model.transform.SetParent(weaponObject.transform, false);
 
-            GameObject rifleAsset = FoundryAssets.LoadPlayer();
-            GameObject rifle = Object.Instantiate(rifleAsset, model.transform, false);
-            rifle.name = "Rifle";
-            FindDeep(rifle.transform, "HandL").gameObject.SetActive(false);
-            FindDeep(rifle.transform, "HandR").gameObject.SetActive(false);
-            FoundryAssets.Skin(rifle);
-            Animation viewAnimation = FoundryAssets.Bind(rifle, rifleAsset, FoundryAssets.PlayerNames);
-
-            // Every piece is collider-free and on the Ignore Raycast layer so the
-            // weapon can never eat its own shots.
-            foreach (Transform part in rifle.GetComponentsInChildren<Transform>(true))
-            {
-                part.gameObject.layer = 2;
-
-                Collider collider = part.GetComponent<Collider>();
-
-                if (collider != null)
-                {
-                    Object.DestroyImmediate(collider);
-                }
-            }
+            GameObject rifle = InstantiatePlayerView(model.transform);
+            Animation viewAnimation = rifle.GetComponent<Animation>();
 
             Transform muzzleAnchor = FindDeep(rifle.transform, "MuzzlePoint");
             Transform slide = FindDeep(rifle.transform, "Slide");

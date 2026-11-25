@@ -3,7 +3,52 @@ guid: e1ba2934d56bd2c4fb9d83b34f27bc52
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: FoundryCeramic
+    second: {fileID: 2100000, guid: 8e5adf4b2b41fb442b5b385b12fac5bc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: FoundryWarning
+    second: {fileID: 2100000, guid: 9fec6467871d59544a718a0d28eee994, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceFabric
+    second: {fileID: 2100000, guid: 0f5c02927beffd14e981ee83c9376d00, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceGraphite
+    second: {fileID: 2100000, guid: 6a0cdb9733b55534bb4aab2d2cf564be, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceIndicatorGlow
+    second: {fileID: 2100000, guid: 78c1dff49d0615346b2b001311bc5df3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceOpticGlow
+    second: {fileID: 2100000, guid: 963ec423bf4902247ab6b015976f7762, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServicePolymer
+    second: {fileID: 2100000, guid: c33a34b9ea7c46b4ba08aebb82a6e876, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceSteel
+    second: {fileID: 2100000, guid: db16a2a3651c1ff4a9ec419b749159f0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ServiceUnitPlate
+    second: {fileID: 2100000, guid: 5045ac45c825e0d258c4a7a86924fdb3, type: 2}
   materials:
     materialImportMode: 1
     materialName: 0
@@ -14,7 +59,7 @@ ModelImporter:
     legacyGenerateAnimations: 4
     bakeSimulation: 0
     resampleCurves: 1
-    optimizeGameObjects: 1
+    optimizeGameObjects: 0
     removeConstantScaleCurves: 1
     motionNodeName: 
     animationImportErrors: 
@@ -23,7 +68,7 @@ ModelImporter:
     animationDoRetargetingWarnings: 0
     importAnimatedCustomProperties: 0
     importConstraints: 0
-    animationCompression: 1
+    animationCompression: 0
     animationRotationError: 0.5
     animationPositionError: 0.5
     animationScaleError: 0.5
@@ -325,7 +370,7 @@ ModelImporter:
   meshes:
     lODScreenPercentages: []
     globalScale: 1
-    meshCompression: 2
+    meshCompression: 0
     addColliders: 0
     useSRGBMaterialColor: 1
     sortHierarchyByName: 1

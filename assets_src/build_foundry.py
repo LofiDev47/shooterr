@@ -6,6 +6,8 @@ The original Unity assets are kept alongside these replacements.
 
 from math import acos, atan2, cos, degrees, hypot, pi, radians, sin
 from pathlib import Path
+import subprocess
+import sys
 
 import bpy
 from mathutils import Vector
@@ -402,218 +404,17 @@ def build_actors():
         export(filename, True)
 
 
-def build_support_glove(hand, fabric, armor):
-    # Sweep oval sections along the palm and each curled digit.
-    vertices, faces = [], []
-
-    def sweep(sections):
-        start = len(vertices)
-        centers = [Vector(center) for center, _, _ in sections]
-        for index, (center, width, depth) in enumerate(sections):
-            tangent = (centers[min(index + 1, len(centers) - 1)] -
-                       centers[max(index - 1, 0)]).normalized()
-            across = (Vector((1, 0, 0)) - tangent * tangent.x).normalized()
-            normal = tangent.cross(across)
-            for side in range(8):
-                angle = side * pi / 4
-                vertices.append(Vector(center) + across * (width * cos(angle)) +
-                                normal * (depth * sin(angle)))
-        faces.append(tuple(start + side for side in reversed(range(8))))
-        for index in range(len(sections) - 1):
-            lower = start + 8 * index
-            for side in range(8):
-                following = (side + 1) % 8
-                faces.append((lower + side, lower + following,
-                              lower + following + 8, lower + side + 8))
-        last = start + 8 * (len(sections) - 1)
-        faces.append(tuple(last + side for side in range(8)))
-
-    sweep([
-        ((0.004, 0.015, -0.004), 0.019, 0.016),
-        ((0.003, 0.005, -0.003), 0.022, 0.017),
-        ((0.002, -0.017, 0), 0.032, 0.017),
-        ((0.002, -0.035, 0.004), 0.030, 0.014),
-        ((0.001, -0.044, 0.006), 0.023, 0.010),
-    ])
-    for x, length, radius in ((-0.021, 0.038, 0.0080), (-0.005, 0.044, 0.0081),
-                              (0.011, 0.041, 0.0075), (0.024, 0.032, 0.0066)):
-        sweep([
-            ((x, -0.032, 0.006), radius, radius),
-            ((x, -0.037 - length * 0.53, 0.009), radius * 0.93, radius * 0.87),
-            ((x - 0.002, -0.037 - length * 0.81, 0.020), radius * 0.82, radius * 0.80),
-            ((x - 0.003, -0.032 - length * 0.81, 0.032), radius * 0.71, radius * 0.71),
-            ((x - 0.003, -0.028 - length * 0.80, 0.035), radius * 0.35, radius * 0.35),
-        ])
-    sweep([
-        ((-0.022, -0.008, 0.002), 0.012, 0.011),
-        ((-0.038, -0.016, 0.011), 0.011, 0.010),
-        ((-0.044, -0.030, 0.020), 0.009, 0.009),
-        ((-0.039, -0.043, 0.027), 0.007, 0.007),
-        ((-0.033, -0.047, 0.027), 0.003, 0.004),
-    ])
-    # Preserve the existing scene's mesh names and local origins.
-    glove_origin = Vector((0, -0.025, 0))
-    glove = mesh("GloveL", [vertex - glove_origin for vertex in vertices],
-                 faces, glove_origin, fabric, hand, 0)
-    for face in glove.data.polygons:
-        face.use_smooth = True
-    pad_origin = Vector((0, -0.039, 0.033))
-    pads = combine_panels([
-        panel("KnucklePad", (x, -0.042, -0.001), (width, 0.017, 0.009),
-              armor, hand, 0.76, 0)
-        for x, width in ((-0.021, 0.012), (-0.005, 0.013), (0.011, 0.012), (0.024, 0.010))
-    ], "KnuckleL", armor, hand)
-    pads.location = pad_origin
-    for vertex in pads.data.vertices:
-        vertex.co -= pad_origin
-
-
-def build_viewmodel():
-    reset()
-    original = ROOT.parent / "Assets" / "Models" / "ShooterRifle.fbx"
-    bpy.ops.import_scene.fbx(filepath=str(original))
-    root = bpy.data.objects["RifleRoot"]
-    source_parts = tuple(root.children)
-    handling = pivot("Handling", parent=root)
-    ceramic = material("ServiceSteel", (0.17, 0.19, 0.21), 0.65)
-    suit = material("ServiceFabric", (0.055, 0.071, 0.074), 0.06)
-    finishes = {
-        "GunBody": material("ServiceGraphite", (0.053, 0.061, 0.072), 0.65),
-        "GunMetal": ceramic,
-        "GunRubber": material("ServicePolymer", (0.025, 0.028, 0.032), 0.06),
-        "GunGlow": material("ServiceIndicatorGlow", (0.14, 0.62, 0.54), 0.2, 1.3),
-        "GunAmber": material("ServiceOpticGlow", (0.98, 0.59, 0.20), 0.2, 1.7),
-    }
-    mag_mesh = bpy.data.objects["Magazine"]
-    mag_rest = tuple(mag_mesh.location)
-    mag_mesh.name = "MagazineBody"
-    magazine = pivot("Magazine", mag_rest, handling)
-    for part in source_parts:
-        part.parent = handling
-        if part.type == "MESH":
-            for index, slot in enumerate(part.data.materials):
-                part.data.materials[index] = finishes.get(slot.name, ceramic)
-
-    # The imported parts share the rifle's original local coordinate space.
-    # Attach them to their animated controls without changing their rest pose.
-    for part in (mag_mesh, bpy.data.objects["MagazineBase"], bpy.data.objects["MagazineRib"]):
-        part.parent = magazine
-        part.location -= Vector(mag_rest)
-    # The metal rib becomes the illuminated strip on the captive power cell.
-    bpy.data.objects["MagazineRib"].data.materials[0] = finishes["GunGlow"]
-    for vertex in bpy.data.objects["MagazineRib"].data.vertices:
-        vertex.co.x *= 1.12
-        vertex.co.y *= 0.76
-        vertex.co.z *= 2.7
-
-    slide = bpy.data.objects["Slide"]
-    slide_handle = bpy.data.objects["SlideHandle"]
-    slide_handle.location = slide.matrix_basis.inverted() @ slide_handle.location
-    slide_handle.parent = slide
-
-    dot = bpy.data.objects["OpticDot"]
-    dot.scale *= 0.55
-    # The old front post sat in the optic's opening; keep the base and use the
-    # illuminated optic dot as the single sight reference.
-    bpy.data.objects.remove(bpy.data.objects["FrontSightPost"], do_unlink=True)
-    bpy.data.objects.remove(bpy.data.objects["OpticDotTick"], do_unlink=True)
-
-    for side, wrist_pos, sleeve_pos in (
-        ("R", (-0.024, 0.116, -0.167), (-0.085, 0.33, -0.225)),
-        ("L", (0.038, -0.257, -0.112), (0.088, 0.007, -0.237)),
-    ):
-        hand = pivot("Hand" + side, wrist_pos, handling)
-        if side == "L":
-            build_support_glove(hand, suit, ceramic)
-        else:
-            panel("GloveR", (0, -0.025, 0), (0.068, 0.101, 0.068), suit, hand, 0.92)
-            panel("KnuckleR", (0, -0.039, 0.033), (0.057, 0.063, 0.021), ceramic, hand)
-        sleeve_vec = Vector(sleeve_pos)-Vector(wrist_pos)
-        if side == "L":
-            sleeve_vec *= 0.65
-        sleeve_width, sleeve_depth = (0.074, 0.068) if side == "L" else (0.102, 0.094)
-        sleeve = panel("Sleeve" + side, sleeve_vec/2, (sleeve_width, sleeve_depth, sleeve_vec.length),
-                       suit, hand, 0.74)
-        sleeve.rotation_euler = sleeve_vec.to_track_quat("Z", "Y").to_euler()
-    hand_l = bpy.data.objects["HandL"]
-    joints = {obj.name: (obj, obj.location.copy()) for obj in (handling, magazine, hand_l)}
-    joints["Model"] = joints.pop("Handling")
-    timeline(joints, [
-        (0, 60, [(15, {"Model": (0.40, -0.35, 0.25)}, (0.002, 0, 0.002)),
-                 (45, {"Model": (-0.40, 0.35, -0.25)}, (-0.002, 0, -0.002))]),
-        (62, 92, [(7, {"Model": (-1.8, 1.1, 1.6)}, (0.008, 0, -0.014)),
-                  (22, {"Model": (1.6, -0.8, -1.1)}, (-0.008, 0, -0.011))]),
-        (94, 103, [(1, {"Model": (4, 0, 1)}, (0, 0.024, 0.004)),
-                   (4, {"Model": (-1, 0, 0)}, (0, 0.008, -0.003))]),
-        (105, 125, [(2, {"Model": (8, -1, 3)}, (0.004, 0.055, 0.012)),
-                    (8, {"Model": (2, 0, -2)}, (0, 0.018, -0.009))]),
-        (127, 172, [(7, {"Model": (-2, -7, 8), "HandL": (-14, 5, 16)}, (0.020, -0.049, 0.052)),
-                    (13, {"Model": (-3, -16, 19), "HandL": (-53, 4, 5)}, (0.046, -0.113, 0.128)),
-                    (21, {"Model": (-3, -19, 22), "HandL": (-53, 4, 5)}, (0.052, -0.132, 0.149)),
-                    (28, {"Model": (0, -14, 18), "HandL": (-53, 4, 5)}, (0.042, -0.105, 0.116)),
-                    (34, {"Model": (-1, -9, 11), "HandL": (-25, 8, 20)}, (0.026, -0.062, 0.074)),
-                    (39, {"Model": (0, -4, 5), "HandL": (-8, 4, 8)}, (0.010, -0.026, 0.032))]),
-        (174, 246, [(12, {"Model": (-8, 9, 7), "HandL": (-15, 3, -10)}, (0.045, -0.025, 0.065)),
-                    (24, {"Model": (-8, 17, 10), "HandL": (-37, 8, -20)}, (0.089, -0.048, 0.128)),
-                    (39, {"Model": (-8, 17, 10), "HandL": (-37, 8, -20)}, (0.089, -0.048, 0.128)),
-                    (47, {"Model": (-4, 13, 8), "HandL": (-35, 8, -17)}, (0.076, -0.041, 0.114)),
-                    (59, {"Model": (-3, 6, 4), "HandL": (-12, 3, -5)}, (0.040, -0.021, 0.060))]),
-        (248, 260, [(2, {"Model": (-19, 0, 20)}, (0.06, 0.06, -0.02)),
-                    (5, {"Model": (12, 4, -31)}, (-0.13, -0.08, 0.03))]),
-        (262, 279, [(3, {"Model": (7, 0, -7)}, (-0.018, 0.046, -0.027)),
-                    (9, {"Model": (-3, 0, 3)}, (0.008, 0.020, -0.012))]),
-        (281, 341, [(12, {"Model": (-14, -10, 17)}, (0.03, 0.14, -0.10)),
-                    (60, {"Model": (-53, -20, 33)}, (0.05, 0.17, -0.32))]),
-        (343, 409, [(13, {"Model": (-4, -22, -14)}, (0.09, -0.13, 0.08)),
-                    (27, {"Model": (-4, -39, -24)}, (0.14, -0.19, 0.105)),
-                    (43, {"Model": (1, -31, -19)}, (0.12, -0.17, 0.095)),
-                    (55, {"Model": (1, -14, -8)}, (0.06, -0.085, 0.050))]),
-    ])
-    # Draw the captive cell partway out, pause, then drive it home.
-    cell_path = [(13, (0, 0, 0)), (19, (0, 0, -0.088)),
-                 (22, (0, 0, -0.090)), (27, (0, 0, 0))]
-    position_keys(magazine, 127, cell_path)
-    grasp = Vector(mag_rest) + Vector((0.064, 0.014, -0.067)) - hand_l.location
-    hand_path = [(0, (0, 0, 0)), (7, (0.046, 0.128, -0.048))]
-    hand_path.extend((time, tuple(grasp + Vector(offset))) for time, offset in cell_path)
-    hand_path.extend([(34, (0.076, 0.151, -0.039)), (39, (0.027, 0.059, -0.023)),
-                      (45, (0, 0, 0))])
-    position_keys(hand_l, 127, hand_path)
-
-    # The second grip braces the underbarrel housing, presses in, then lets go.
-    position_keys(hand_l, 174, [
-        (0, (0, 0, 0)), (12, (0.030, 0.037, -0.033)), (24, (0.018, 0.030, -0.023)),
-        (39, (0.018, 0.030, -0.023)), (47, (0.009, 0.021, -0.012)),
-        (59, (0.027, 0.030, -0.027)), (72, (0, 0, 0)),
-    ])
-
-    # Keep the cuff attached as the hand turns, with the forearm trailing the reach.
-    scene = bpy.context.scene
-    sleeve = bpy.data.objects["SleeveL"]
-    wrist_rest = hand_l.location.copy()
-    sleeve_rest_rotation = sleeve.rotation_euler.to_quaternion()
-    forearm = sleeve.location * 2
-    poses = []
-    for start, end in ((127, 172), (174, 246)):
-        for frame in range(start, end + 1):
-            scene.frame_set(frame)
-            wrist_rotation = hand_l.rotation_euler.to_quaternion()
-            elbow_vector = forearm - (hand_l.location - wrist_rest) * 0.22
-            direction_change = forearm.rotation_difference(elbow_vector)
-            inverse_wrist = wrist_rotation.inverted()
-            poses.append((frame, inverse_wrist @ (elbow_vector / 2),
-                          (inverse_wrist @ direction_change @ sleeve_rest_rotation).to_euler(),
-                          elbow_vector.length / forearm.length))
-    for frame, location, rotation, length_scale in poses:
-        sleeve.location = location
-        sleeve.rotation_euler = rotation
-        sleeve.scale.z = length_scale
-        for channel in ("location", "rotation_euler", "scale"):
-            sleeve.keyframe_insert(channel, frame=frame)
+def export_viewmodel():
+    # Run in the authored file so rig names and the Scene animation take stay stable.
+    bpy.context.scene.use_preview_range = False
     bpy.context.scene.frame_set(0)
-    save("PlayerView")
-    export("PlayerView", True)
-
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.export_scene.fbx(
+        filepath=str(OUTPUT / "PlayerView.fbx"), use_selection=True,
+        object_types={"EMPTY", "MESH", "ARMATURE"}, apply_scale_options="FBX_SCALE_UNITS",
+        add_leaf_bones=False, bake_anim_use_all_actions=False, bake_anim_use_nla_strips=False,
+        bake_anim_simplify_factor=0.04, path_mode="COPY", embed_textures=True,
+    )
 
 
 def build_arena_kit():
@@ -776,9 +577,14 @@ def build_secondary_models():
         export(name)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and "--export-viewmodel" in sys.argv:
+    export_viewmodel()
+elif __name__ == "__main__":
     build_actors()
-    build_viewmodel()
+    subprocess.run([
+        bpy.app.binary_path, "--background", str(ROOT / "PlayerView.blend"),
+        "--python-exit-code", "1", "--python", __file__, "--", "--export-viewmodel",
+    ], check=True)
     build_arena_kit()
     build_pickup("AmmoCache", (0.30, 0.82, 1.0), False)
     build_pickup("HealthCache", (0.26, 1.0, 0.54), True)

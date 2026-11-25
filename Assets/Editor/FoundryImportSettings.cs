@@ -19,6 +19,9 @@ namespace Shooter.EditorTools
                     continue;
                 }
 
+                if (path == FoundryAssets.Folder + "/PlayerView.fbx")
+                    continue;
+
                 ModelImporter importer = AssetImporter.GetAtPath(path) as ModelImporter;
                 if (importer == null)
                 {
