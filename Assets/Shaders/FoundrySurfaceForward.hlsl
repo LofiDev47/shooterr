@@ -62,11 +62,31 @@ void GetTread(float2 positionXZ, out half mask, out half relief)
     relief = mask * (0.07 + bevel * (lightSide - 0.6) * 0.8);
 }
 
+float WearCell(float2 cell)
+{
+    float3 hash = frac(cell.xyx * float3(0.1031, 0.1137, 0.1379));
+    hash += dot(hash, hash.yzx + 33.33);
+    return frac((hash.x + hash.y) * hash.z);
+}
+
+float SampleWear(float3 positionWS)
+{
+    float2 samplePosition = float2(
+        dot(positionWS, float3(3.1, 3.9, 1.3)),
+        dot(positionWS, float3(-1.8, 2.2, 3.4)));
+    float2 cell = floor(samplePosition);
+    float2 blend = smoothstep(0.0, 1.0, frac(samplePosition));
+    float lower = lerp(WearCell(cell), WearCell(cell + float2(1, 0)), blend.x);
+    float upper = lerp(WearCell(cell + float2(0, 1)), WearCell(cell + float2(1, 1)), blend.x);
+    float2 footprint = fwidth(samplePosition);
+    float fade = 1.0 - smoothstep(0.4, 1.4, max(footprint.x, footprint.y));
+    return (lerp(lower, upper, blend.y) * 2.0 - 1.0) * fade;
+}
+
 SurfaceData FoundrySurface(float3 positionWS, half3 normalWS)
 {
-    float broadWear = sin(dot(positionWS, float3(4.1, 7.7, 3.2)))
-        * sin(dot(positionWS, float3(-6.3, 2.7, 5.8)));
-    float grainPhase = dot(positionWS, float3(27.0, 108.0, 43.0));
+    float broadWear = SampleWear(positionWS);
+    float grainPhase = dot(positionWS, float3(27.0, 108.0, 43.0)) + broadWear * 4.0;
     float detailFade = 1.0 - smoothstep(0.45, 2.6, fwidth(grainPhase));
     float grain = sin(grainPhase) * detailFade;
 
@@ -81,7 +101,7 @@ SurfaceData FoundrySurface(float3 positionWS, half3 normalWS)
     }
 
     SurfaceData surface = (SurfaceData)0;
-    surface.albedo = _BaseColor.rgb * (1.0h + (broadWear * 0.5h + grain * 0.14h) * _WearStrength + treadRelief);
+    surface.albedo = _BaseColor.rgb * (1.0h + (broadWear * 0.36h + grain * 0.09h) * _WearStrength + treadRelief);
     surface.metallic = _Metallic;
     surface.smoothness = saturate(_Smoothness + (broadWear * 0.24h + grain * 0.1h) * _WearStrength
         + treadMask * 0.16h);
