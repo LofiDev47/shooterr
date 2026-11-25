@@ -658,16 +658,17 @@ namespace Shooter.Weapons
                 return false;
             }
 
-            meleeReadyAt = now + meleeCooldown;
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            meleeReadyAt = now + meleeCooldown * (upgrades != null ? upgrades.MeleeCooldownMultiplier : 1f);
             meleeSwingStartedAt = now;
             PlayViewAction("Melee", meleeSwingDuration);
             AudioManager.Instance?.PlayMeleeSwing(transform.position);
 
             Vector3 origin = aimCamera != null ? aimCamera.transform.position : transform.position;
             Vector3 forward = aimCamera != null ? aimCamera.transform.forward : transform.forward;
-            UpgradeManager upgrades = UpgradeManager.Instance;
-            float range = meleeRange;
-            float appliedDamage = meleeDamage * (upgrades != null ? upgrades.EffectiveDamageMultiplier : 1f);
+            float range = meleeRange * (upgrades != null ? upgrades.MeleeRangeMultiplier : 1f);
+            float appliedDamage = meleeDamage *
+                (upgrades != null ? upgrades.EffectiveDamageMultiplier * upgrades.MeleeDamageMultiplier : 1f);
 
             Collider[] candidates = Physics.OverlapSphere(
                 origin + forward * (range * 0.5f),
@@ -705,6 +706,12 @@ namespace Shooter.Weapons
 
                 Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (range * 0.5f));
                 float dealt = DealWeaponHit(target, appliedDamage, hitPoint, upgrades);
+                if (upgrades != null && upgrades.MeleeKillsRefreshCooldown &&
+                    dealt > 0f && target is EnemyHealth { IsDead: true })
+                {
+                    meleeReadyAt = now;
+                }
+
                 hud?.ShowHitMarker(false);
                 hud?.ShowDamageNumber(hitPoint, dealt, false, false);
                 AudioManager.Instance?.PlayEnemyHit(hitPoint);

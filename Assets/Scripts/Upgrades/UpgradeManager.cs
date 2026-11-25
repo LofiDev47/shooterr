@@ -142,6 +142,10 @@ namespace Shooter.Upgrades
         private float explosionRadius;
         private float explosionDamageFraction;
 
+        private int meleeDamageRank;
+        private int meleeReachRank;
+        private int meleeRecoveryRank;
+
         private float critWindowEnd;         // last time Crit() fired
         private float baseCritChance;
         private int consecutiveCrits;
@@ -198,6 +202,10 @@ namespace Shooter.Upgrades
         public float BulletVelocityMultiplier => bulletVelocityMultiplier;
         public float ExplosionRadius => explosionRadius;
         public float ExplosionDamageFraction => explosionDamageFraction;
+        public float MeleeDamageMultiplier => 1f + 0.40f * meleeDamageRank;
+        public float MeleeRangeMultiplier => 1f + 0.25f * meleeReachRank;
+        public float MeleeCooldownMultiplier => 1f - 0.20f * meleeRecoveryRank;
+        public bool MeleeKillsRefreshCooldown { get; private set; }
 
         /// <summary>Base crit chance (before Chain Crits extends it dynamically).</summary>
         public float BaseCritChance => baseCritChance;
@@ -450,6 +458,10 @@ namespace Shooter.Upgrades
             bulletVelocityMultiplier = 1f;
             explosionRadius = 0f;
             explosionDamageFraction = 0f;
+            meleeDamageRank = 0;
+            meleeReachRank = 0;
+            meleeRecoveryRank = 0;
+            MeleeKillsRefreshCooldown = false;
             siegeBreaker = false;
             trophyHunter = false;
             IncendiaryHits = false;
@@ -982,6 +994,43 @@ namespace Shooter.Upgrades
                     Description = "Mount an underbarrel energy shotgun with four charges. Uses the Shotgun binding.",
                     CanOffer = manager => !manager.ShotgunUnlocked,
                     Apply = manager => manager.UnlockShotgun(),
+                },
+                new AugmentDef
+                {
+                    Id = "Heavy Bash",
+                    Rarity = AugmentRarity.Standard,
+                    Title = "Heavy Bash",
+                    Description = "+40% base melee damage. Stacks up to 3 times.",
+                    CanOffer = manager => manager.meleeDamageRank < 3,
+                    Apply = manager => manager.meleeDamageRank++,
+                },
+                new AugmentDef
+                {
+                    Id = "Extended Reach",
+                    Rarity = AugmentRarity.Standard,
+                    Title = "Extended Reach",
+                    Description = "+25% base melee range. Stacks up to 2 times.",
+                    CanOffer = manager => manager.meleeReachRank < 2,
+                    Apply = manager => manager.meleeReachRank++,
+                },
+                new AugmentDef
+                {
+                    Id = "Quick Recovery",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Quick Recovery",
+                    Description = "-20% base melee cooldown. Stacks up to 2 times.",
+                    CanOffer = manager => manager.meleeRecoveryRank < 2,
+                    Apply = manager => manager.meleeRecoveryRank++,
+                },
+                new AugmentDef
+                {
+                    Id = "Follow Through",
+                    Rarity = AugmentRarity.Master,
+                    Title = "Follow Through",
+                    Description = "A melee kill refreshes your melee cooldown.",
+                    CanOffer = manager => !manager.MeleeKillsRefreshCooldown &&
+                        (manager.meleeDamageRank + manager.meleeReachRank + manager.meleeRecoveryRank) > 0,
+                    Apply = manager => manager.MeleeKillsRefreshCooldown = true,
                 },
                 new AugmentDef
                 {

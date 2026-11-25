@@ -36,6 +36,7 @@ namespace Shooter.EditorTools
             TestAugmentMultipliersAndCaps();
             TestAugmentAirJumps();
             TestBaseTraversalAndMelee();
+            TestMeleeAugments();
             TestSlipstream();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
@@ -273,7 +274,7 @@ namespace Shooter.EditorTools
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
             var pool = (AugmentDef[])poolMethod.Invoke(null, null);
             Check(!System.Array.Exists(pool, card => card.Id == "Traversal Harness" || card.Id == "Brawler Kit"),
-                "base traversal and melee perks are absent from the augment pool");
+                "the old traversal and melee unlock cards stay out of the augment pool");
 
             SettingsManager.BindingDef[] bindings = SettingsManager.AllBindings;
             Check(System.Array.Exists(bindings, binding => binding.Id == SettingsManager.ActionDash &&
@@ -282,6 +283,74 @@ namespace Shooter.EditorTools
                   binding.DefaultKey == Key.F), "melee defaults to F");
             Check(!System.Array.Exists(bindings, binding => binding.Id == "Inspect"),
                 "weapon inspect has no input binding");
+        }
+
+        private static void TestMeleeAugments()
+        {
+            var root = new GameObject("MeleeAugmentTestRoot");
+            root.transform.position = new Vector3(100f, 10f, 100f);
+            var instanceProperty = typeof(UpgradeManager).GetProperty("Instance");
+            object previousInstance = instanceProperty.GetValue(null);
+            var upgrades = root.AddComponent<UpgradeManager>();
+            instanceProperty.SetValue(null, upgrades);
+
+            try
+            {
+                var poolMethod = typeof(UpgradeManager).GetMethod("BuildPool",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                var pool = (AugmentDef[])poolMethod.Invoke(null, null);
+                AugmentDef damage = System.Array.Find(pool, card => card.Id == "Heavy Bash");
+                AugmentDef reach = System.Array.Find(pool, card => card.Id == "Extended Reach");
+                AugmentDef recovery = System.Array.Find(pool, card => card.Id == "Quick Recovery");
+                AugmentDef followThrough = System.Array.Find(pool, card => card.Id == "Follow Through");
+                Check(!followThrough.CanOffer(upgrades), "Follow Through requires a melee upgrade");
+                damage.Apply(upgrades);
+                Check(followThrough.CanOffer(upgrades), "the first melee upgrade unlocks Follow Through offers");
+                Check(damage.CanOffer(upgrades) && reach.CanOffer(upgrades) && recovery.CanOffer(upgrades),
+                    "melee stat cards can be offered before reaching their caps");
+                damage.Apply(upgrades);
+                damage.Apply(upgrades);
+                reach.Apply(upgrades);
+                reach.Apply(upgrades);
+                recovery.Apply(upgrades);
+                recovery.Apply(upgrades);
+                Check(!damage.CanOffer(upgrades) && !reach.CanOffer(upgrades) && !recovery.CanOffer(upgrades),
+                    "melee stat cards stop appearing at their stack caps");
+                followThrough.Apply(upgrades);
+                Check(!followThrough.CanOffer(upgrades), "Follow Through can only be picked once");
+
+                var weapon = root.AddComponent<Weapon>();
+                var target = new GameObject("MeleeAugmentTarget");
+                target.transform.SetParent(root.transform, false);
+                target.transform.localPosition = Vector3.forward * 4f;
+                target.AddComponent<BoxCollider>();
+                var enemy = target.AddComponent<EnemyHealth>();
+                enemy.Initialize(4f);
+                Physics.SyncTransforms();
+
+                Check(weapon.TryMelee() && Mathf.Abs(enemy.CurrentHealth - (240f - 71.5f * 2.2f)) < 0.001f,
+                    "stacked melee damage reaches a target outside the baseline range");
+                Check(Mathf.Abs(weapon.MeleeCooldownRemaining - 0.54f) < 0.001f && !weapon.TryMelee(),
+                    "stacked recovery shortens cooldown and Follow Through requires a kill");
+
+                var readyAt = typeof(Weapon).GetField("meleeReadyAt",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                readyAt.SetValue(weapon, Time.time);
+                Check(weapon.TryMelee() && enemy.IsDead && weapon.MeleeCooldownRemaining <= 0f,
+                    "a killing melee hit refreshes the cooldown");
+                Check(weapon.TryMelee() && weapon.MeleeCooldownRemaining > 0f,
+                    "the cooldown refresh allows one immediate swing, and a miss starts a new cooldown");
+
+                upgrades.ResetAugments();
+                Check(upgrades.MeleeDamageMultiplier == 1f && upgrades.MeleeRangeMultiplier == 1f &&
+                      upgrades.MeleeCooldownMultiplier == 1f && !upgrades.MeleeKillsRefreshCooldown,
+                    "reset restores baseline melee stats and clears Follow Through");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                instanceProperty.SetValue(null, previousInstance);
+            }
         }
 
         private static void TestSlipstream()
