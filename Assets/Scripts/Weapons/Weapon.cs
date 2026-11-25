@@ -63,13 +63,15 @@ namespace Shooter.Weapons
         [SerializeField] private float ricochetDamageMultiplier = 0.7f;
 
         [Header("Melee")]
-        [SerializeField] private float meleeRange = 3.12f;
-        [SerializeField] private float meleeDamage = 71.5f;
-        [SerializeField] private float meleeCooldown = 0.9f;
+        [SerializeField] private float meleeRange = 2.75f;
+        [SerializeField] private float meleeDamage = 52f;
+        [SerializeField] private float meleeCooldown = 1.05f;
         [Tooltip("Dot-product threshold for the melee cone (1 = dead ahead).")]
         [Range(-1f, 1f)]
         [SerializeField] private float meleeArcDot = 0.3f;
-        [SerializeField] private float meleeSwingDuration = 0.24f;
+        [SerializeField] private float meleeSwingDuration = 0.20f;
+        [SerializeField] private float meleeImpactShake = 0.55f;
+        [SerializeField] private float meleeImpactPitch = 1.2f;
         public GameObject punchModel;
         private Animation punchAnimation;
 
@@ -736,6 +738,14 @@ namespace Shooter.Weapons
 
                 Vector3 hitPoint = candidate.ClosestPoint(origin + forward * (range * 0.5f));
                 float dealt = DealWeaponHit(target, appliedDamage, hitPoint, upgrades);
+                if (dealt > 0f)
+                {
+                    kickbackVelocity += 0.55f;
+                    player?.AddRecoil(meleeImpactPitch, Random.Range(-0.35f, 0.35f));
+                    player?.AddShake(meleeImpactShake);
+                    FoundryEffects.Spawn(FoundryEffect.Impact, hitPoint,
+                        Quaternion.LookRotation(hitPoint - origin), 0.22f, 0.16f);
+                }
                 if (upgrades != null && upgrades.MeleeKillsRefreshCooldown &&
                     dealt > 0f && target is EnemyHealth { IsDead: true })
                 {

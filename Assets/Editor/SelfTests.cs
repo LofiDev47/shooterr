@@ -328,9 +328,9 @@ namespace Shooter.EditorTools
                 enemy.Initialize(4f);
                 Physics.SyncTransforms();
 
-                Check(weapon.TryMelee() && Mathf.Abs(enemy.CurrentHealth - (240f - 71.5f * 2.2f)) < 0.001f,
+                Check(weapon.TryMelee() && Mathf.Abs(enemy.CurrentHealth - (240f - 52f * 2.2f)) < 0.001f,
                     "stacked melee damage reaches a target outside the baseline range");
-                Check(Mathf.Abs(weapon.MeleeCooldownRemaining - 0.54f) < 0.001f && !weapon.TryMelee(),
+                Check(Mathf.Abs(weapon.MeleeCooldownRemaining - 0.63f) < 0.001f && !weapon.TryMelee(),
                     "stacked recovery shortens cooldown and Follow Through requires a kill");
 
                 var readyAt = typeof(Weapon).GetField("meleeReadyAt",
