@@ -17,9 +17,21 @@ All notable changes to **Signal Foundry**, the Shooter visual overhaul.
   scene for builds; the original Arena scene, prefabs and assets are retained.
 - Added Foundry FBX import handling and per-clip slicing of the actor models.
 - Wired in the arena props and pickups, the effects and the HUD sprites.
+- Added a five-shader Foundry family (`Shooter/Foundry Armor`, `Alloy`, `Glow`,
+  `Signal`, `Surface`) and moved every lit material onto it: diamond-plate tread
+  with real normal relief and a distance LOD on floors, world-space panel seams,
+  wear, machined alloy with fresnel, and pulsing emissive signals. Unlit effect
+  materials stay unlit.
+- `FoundryShaderMigration` (`Shooter ▸ Migrate Materials To Foundry Shaders`) is
+  idempotent and re-runs the move; new palette/FBX materials are created directly
+  on the Foundry family so a clean rebuild keeps the look.
 
 ### Verified
 - All 31 FBXs re-imported in Blender. Reviewed the Warden and first-person poses.
 - Unity 6000.6.10f1 generated the scene and built the Windows player with no errors.
 - Self-tests passed 189/189, scene validation passed 179/179, and the Warden
   play-mode simulation passed 36/36. The Windows player passed a startup smoke test.
+- Shader pass (Unity 6000.6.8f1): all five Foundry shaders compile with no errors;
+  self-tests 212/212, scene validation 183/183, Linux player built and smoke-tested
+  for 30 s with no exceptions. In-engine A/B renders confirm the tread, seams,
+  wear and alloy response are visible from the player's eye.

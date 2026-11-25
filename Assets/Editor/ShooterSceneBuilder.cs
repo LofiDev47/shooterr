@@ -185,7 +185,14 @@ namespace Shooter.EditorTools
             if (existing != null)
                 return existing;
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            // Palette materials start on the Foundry shader family so a clean rebuild
+            // keeps the procedural surface look instead of falling back to flat URP Lit.
+            Shader shader = Shader.Find(FoundryShaderMigration.ShaderNameFor(name));
+
+            if (shader == null)
+            {
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+            }
 
             if (shader == null)
             {

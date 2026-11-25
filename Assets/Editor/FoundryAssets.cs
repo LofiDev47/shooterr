@@ -111,7 +111,7 @@ namespace Shooter.EditorTools
             if (material != null)
                 return material;
 
-            material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            material = new Material(Shader.Find(FoundryShaderMigration.ShaderNameFor(source.name)));
             Color color = source.HasProperty("_Color") ? source.color : Color.gray;
             material.SetColor("_BaseColor", color);
             material.SetFloat("_Smoothness", 0.43f);
