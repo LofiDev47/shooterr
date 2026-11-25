@@ -150,6 +150,7 @@ namespace Shooter.Upgrades
 
         private Weapon weapon;
         private int airJumpsUsed;
+        private bool slipstream;
         private bool siegeBreaker;
         private bool trophyHunter;
         public bool IncendiaryHits { get; private set; }
@@ -174,6 +175,8 @@ namespace Shooter.Upgrades
         public float SpreadMultiplier => spreadMultiplier;
         public float RecoilMultiplier => recoilMultiplier;
         public float SpeedMultiplier => speedMultiplier;
+        public float DashSpeedMultiplier => slipstream ? 1.10f : 1f;
+        public float DashDurationMultiplier => slipstream ? 1.15f : 1f;
         public float JumpMultiplier => jumpMultiplier;
         public float SlideSpeedMultiplier => slideSpeedMultiplier;
         public float SlideCooldownMultiplier => slideCooldownMultiplier;
@@ -405,6 +408,7 @@ namespace Shooter.Upgrades
             spreadMultiplier = 1f;
             recoilMultiplier = 1f;
             speedMultiplier = 1f;
+            slipstream = false;
             jumpMultiplier = 1f;
             slideSpeedMultiplier = 1f;
             slideCooldownMultiplier = 1f;
@@ -1149,6 +1153,15 @@ namespace Shooter.Upgrades
                     Title = "Energy Recovery",
                     Description = "Kills return 10% of a full power cell to reserve energy",
                     Apply = manager => manager.AddAmmoPerKillFraction(0.1f),
+                },
+                new AugmentDef
+                {
+                    Id = "Slipstream",
+                    Rarity = AugmentRarity.Advanced,
+                    Title = "Slipstream",
+                    Description = "Air dash 10% faster and for 15% longer",
+                    CanOffer = manager => !manager.slipstream,
+                    Apply = manager => manager.slipstream = true,
                 },
                 new AugmentDef
                 {

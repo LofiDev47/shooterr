@@ -36,6 +36,7 @@ namespace Shooter.EditorTools
             TestAugmentMultipliersAndCaps();
             TestAugmentAirJumps();
             TestBaseTraversalAndMelee();
+            TestSlipstream();
             TestAugmentsOnPlayerHealth();
             TestWeaponStateMagazineClamp();
             TestWeaponStateRebuildTiming();
@@ -281,6 +282,48 @@ namespace Shooter.EditorTools
                   binding.DefaultKey == Key.F), "melee defaults to F");
             Check(!System.Array.Exists(bindings, binding => binding.Id == "Inspect"),
                 "weapon inspect has no input binding");
+        }
+
+        private static void TestSlipstream()
+        {
+            var root = new GameObject("SlipstreamTestRoot");
+            var upgrades = root.AddComponent<UpgradeManager>();
+            var player = root.AddComponent<PlayerController>();
+            const System.Reflection.BindingFlags privateInstance =
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            var poolMethod = typeof(UpgradeManager).GetMethod("BuildPool",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var pool = (AugmentDef[])poolMethod.Invoke(null, null);
+            AugmentDef slipstream = System.Array.Find(pool, card => card.Id == "Slipstream");
+            var instanceProperty = typeof(UpgradeManager).GetProperty("Instance");
+            object previousInstance = instanceProperty.GetValue(null);
+            instanceProperty.SetValue(null, upgrades);
+
+            var startDash = typeof(PlayerController).GetMethod("StartDash", privateInstance);
+            var dashEnd = typeof(PlayerController).GetField("dashEndTime", privateInstance);
+            var cooldownEnd = typeof(PlayerController).GetField("dashCooldownEnd", privateInstance);
+            object[] dashInput = { Vector2.up };
+            startDash.Invoke(player, dashInput);
+            float baseSpeed = player.Velocity.magnitude;
+            float baseDuration = (float)dashEnd.GetValue(player) - Time.time;
+            float baseCooldown = (float)cooldownEnd.GetValue(player) - Time.time;
+
+            Check(slipstream.CanOffer(upgrades), "Slipstream is available at the start of a run");
+            slipstream.Apply(upgrades);
+            startDash.Invoke(player, dashInput);
+            Check(Mathf.Approximately(player.Velocity.magnitude, baseSpeed * 1.10f), "Slipstream raises dash speed by 10%");
+            Check(Mathf.Approximately((float)dashEnd.GetValue(player) - Time.time, baseDuration * 1.15f),
+                "Slipstream extends dash duration by 15%");
+            Check(Mathf.Approximately((float)cooldownEnd.GetValue(player) - Time.time, baseCooldown),
+                "Slipstream preserves the dash cooldown");
+            Check(!slipstream.CanOffer(upgrades), "Slipstream can only be taken once per run");
+
+            upgrades.ResetAugments();
+            Check(slipstream.CanOffer(upgrades) && upgrades.DashSpeedMultiplier == 1f &&
+                  upgrades.DashDurationMultiplier == 1f, "Slipstream resets between runs");
+
+            instanceProperty.SetValue(null, previousInstance);
+            Object.DestroyImmediate(root);
         }
 
         private static void TestAugmentsOnPlayerHealth()

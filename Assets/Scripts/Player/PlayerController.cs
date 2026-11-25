@@ -560,11 +560,13 @@ namespace Shooter.Player
 
             dir.Normalize();
 
-            float speedScale = UpgradeManager.Instance != null ? UpgradeManager.Instance.SpeedMultiplier : 1f;
+            UpgradeManager upgrades = UpgradeManager.Instance;
+            float speedScale = (upgrades?.SpeedMultiplier ?? 1f) * (upgrades?.DashSpeedMultiplier ?? 1f);
+            float durationScale = upgrades?.DashDurationMultiplier ?? 1f;
             planarVelocity = dir * (dashSpeed * speedScale);
             verticalVelocity = Mathf.Max(verticalVelocity, dashVerticalBoost);
             isDashing = true;
-            dashEndTime = Time.time + dashDuration;
+            dashEndTime = Time.time + dashDuration * durationScale;
             dashCooldownEnd = Time.time + dashCooldown;
 
             dashUsedInAir = true;
