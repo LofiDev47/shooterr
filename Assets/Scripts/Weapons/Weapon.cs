@@ -26,7 +26,7 @@ namespace Shooter.Weapons
         [Header("Firing")]
         [Tooltip("Seconds between shots. 0.11 is roughly 9 rounds per second.")]
         [SerializeField] private float fireInterval = 0.11f;
-        [SerializeField] private float reloadDuration = 1.5f;
+        [SerializeField] private float reloadDuration = 0.85f;
         [SerializeField] private float damage = 24f;
         [SerializeField] private float range = 150f;
         [Tooltip("Cone half-angle in degrees applied to each shot.")]

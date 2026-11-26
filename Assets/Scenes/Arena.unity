@@ -22650,7 +22650,7 @@ MonoBehaviour:
   reserveAmmo: 150
   maxReserve: 300
   fireInterval: 0.11
-  reloadDuration: 1.5
+  reloadDuration: 0.85
   damage: 24
   range: 150
   spreadDegrees: 0.9
